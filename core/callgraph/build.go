@@ -29,6 +29,7 @@ func BuildGo(root string) *Graph {
 		funcs:       map[string]*Func{},
 		callers:     map[string][]string{},
 		intoPackage: map[string][]string{},
+		intoSymbol:  map[string][]string{},
 		limits:      map[reach.Limitation]bool{},
 		root:        root,
 		module:      modulePath(root),
@@ -99,6 +100,10 @@ func BuildGo(root string) *Graph {
 	for pkg, cs := range g.intoPackage {
 		sort.Strings(cs)
 		g.intoPackage[pkg] = cs
+	}
+	for sym, cs := range g.intoSymbol {
+		sort.Strings(cs)
+		g.intoSymbol[sym] = cs
 	}
 	for _, f := range g.funcs {
 		sort.Strings(f.Calls)
@@ -278,6 +283,8 @@ func (g *Graph) resolveCall(caller *Func, call *ast.CallExpr, dir, pkg string, i
 			// reaches for it is exactly the question a dependency advisory
 			// poses, so the caller is recorded against the import path.
 			g.intoPackage[importPath] = appendUnique(g.intoPackage[importPath], caller.Key)
+			sk := symbolKey(importPath, fn.Sel.Name)
+			g.intoSymbol[sk] = appendUnique(g.intoSymbol[sk], caller.Key)
 			g.external++
 			return
 		}

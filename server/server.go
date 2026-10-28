@@ -22,11 +22,14 @@ import (
 	"github.com/nox-hq/nox/core/badge"
 	"github.com/nox-hq/nox/core/baseline"
 	"github.com/nox-hq/nox/core/catalog"
+	"github.com/nox-hq/nox/core/change"
 	"github.com/nox-hq/nox/core/detail"
 	"github.com/nox-hq/nox/core/diff"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
+	"github.com/nox-hq/nox/core/fix/osvcheck"
 	"github.com/nox-hq/nox/core/git"
+	"github.com/nox-hq/nox/core/remediate"
 	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/report/sbom"
 	"github.com/nox-hq/nox/core/vex"
@@ -50,6 +53,10 @@ type scanInput struct {
 	// ai, data, supply-chain), as --only/--skip do on the command line.
 	Only []string `json:"only,omitempty"`
 	Skip []string `json:"skip,omitempty"`
+	// Previous is the findings.json of an earlier run (with the ai.inventory.json
+	// beside it). When given, the result also says what changed since it. When
+	// not, an earlier scan of the same path in this session is the comparison.
+	Previous string `json:"previous,omitempty"`
 }
 type getFindingsInput struct {
 	Format string `json:"format,omitempty"`
@@ -84,6 +91,8 @@ type diffInput struct {
 	Path string `json:"path"`
 	Base string `json:"base,omitempty"`
 	Head string `json:"head,omitempty"`
+	// Offline makes both scans use no network (no dependency advisory lookups).
+	Offline bool `json:"offline,omitempty"`
 }
 type badgeInput struct {
 	Label string `json:"label,omitempty"`
@@ -229,21 +238,26 @@ func (s *Server) registerTools(srv *mcp.Server) {
 			"Optional only/skip narrow it to scopes (secrets, code, deps, iac, ai, data, supply-chain); " +
 			"scopes left out do not run, and the findings report says which those were").
 		ReadOnly().
-		Handler(s.handleScan)
+		OpenWorld().
+		OutputSchema(scanOutput{}).
+		Handler(s.handleScanStructured)
 
 	srv.Tool("get_findings").
 		Description("Get security findings from the last scan").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handleGetFindings)
 
 	srv.Tool("get_sbom").
 		Description("Get software bill of materials from the last scan").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handleGetSBOM)
 
 	srv.Tool("get_finding_detail").
 		Description("Get detailed information about a finding including source context and remediation").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(detail.FindingDetail{}).
 		Handler(s.handleGetFindingDetail)
 
@@ -253,89 +267,110 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	srv.Tool("analysis_capabilities").
 		Description("What this installation can establish and what THIS scan actually established, per analysis capability. Call it before summarising a scan: a capability that is provided but answered nothing was available and never used, which is not a clean result — it means the question was not asked. Degradations tell you a check broke; this tells you a question was never put.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(capabilityOutput{}).
 		Handler(s.handleAnalysisCapabilities)
 
 	srv.Tool("why").
 		Description("Answer eight questions about a finding: what was observed, why it matters, what supports it, what argues against it, what was NOT evaluated, the potential impact, whether it affects this application, and what to do. Deterministic — derived from what the scan established, not written by a model. Pass a fingerprint (full or prefix) or a rule ID; omit to explain every active finding.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(whyOutput{}).
 		Handler(s.handleWhy)
 
 	srv.Tool("summary").
 		Description("Aggregate overview of the last scan: active/total/suppressed counts and breakdowns by severity, confidence, and rule family, plus dependency and AI-component totals. Call this first to size up a scan before paging through individual findings.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(summaryOutput{}).
 		Handler(s.handleSummary)
 
 	srv.Tool("list_findings").
 		Description("List findings with optional severity, rule, and file filters. Paginated: pass limit (default 50, max 500) and offset to page through a large result set. Returns an envelope {total, offset, limit, returned, has_more, findings} so you know how many findings exist and whether more pages remain.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(listFindingsOutput{}).
 		Handler(s.handleListFindings)
 
 	srv.Tool("get_finding_by_fingerprint").
 		Description("Look up a single finding by fingerprint (full or 12-char prefix) and report its current status (new / baselined / suppressed / vex_*). Use this when you already hold a fingerprint (from a prior scan or baseline entry) and just need to know whether it is still active. Returns {found:false, fingerprint} if no match.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(fingerprintLookupOutput{}).
 		Handler(s.handleFindingByFingerprint)
 
 	srv.Tool("baseline_status").
 		Description("Show baseline statistics: total entries, expired count, per-severity breakdown").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(baselineStatusOutput{}).
 		Handler(s.handleBaselineStatus)
 
+	// The two baseline tools write .nox/baseline.json. They only add entries
+	// (nothing is deleted or overwritten) and adding the same fingerprint again
+	// changes nothing, so they are not destructive and are idempotent; they are
+	// still not read-only, and suppressing a finding is a decision a person
+	// should be asked about.
 	srv.Tool("baseline_add").
 		Description("Add a finding to the baseline by fingerprint").
+		Annotations(additiveLocalWrite).
 		Handler(s.handleBaselineAdd)
 
 	srv.Tool("baseline_add_many").
 		Description("Batch-suppress multiple findings by fingerprint in a single call. Saves the baseline once and updates the cached scan results so list_findings/badge reflect the new state without a re-scan.").
+		Annotations(additiveLocalWrite).
 		Handler(s.handleBaselineAddMany)
 
 	srv.Tool("diff").
 		Description("Scan only changed files between two git refs and return findings").
 		ReadOnly().
+		OpenWorld().
 		OutputSchema(diff.Result{}).
 		Handler(s.handleDiff)
 
 	srv.Tool("badge").
 		Description("Generate a security grade SVG badge from the last scan").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handleBadge)
 
 	srv.Tool("version").
 		Description("Return nox version, commit, and build date").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(versionOutput{}).
 		Handler(s.handleVersion)
 
 	srv.Tool("rules").
 		Description("List all security rules with ID, description, severity, CWE, and remediation").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(rulesOutput{}).
 		Handler(s.handleRules)
 
 	srv.Tool("protect_status").
 		Description("Check whether the nox pre-commit hook is installed in a git repository").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handleProtectStatus)
 
 	srv.Tool("annotate").
 		Description("Build a GitHub PR review payload from findings for posting via the GitHub API").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handleAnnotate)
 
 	srv.Tool("vex_status").
 		Description("Load a VEX document and show a summary of vulnerability statuses").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(vexStatusOutput{}).
 		Handler(s.handleVEXStatus)
 
 	srv.Tool("fix_plan").
-		Description("Plan dependency upgrade actions from VULN-001 findings with fixed_in metadata. Read-only — returns the upgrade plan as a list; never mutates the workspace. Operators apply via the nox fix CLI subcommand.").
+		Description("Plan the fixes for the last scan: every issue classified as safe to apply, needs review, or needs information (with what is needed), plus the dependency upgrade actions. Read-only — never mutates the workspace. A person applies it with nox fix apply, which then re-runs the checks and reports what was verified.").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(fixPlanResponse{}).
 		Handler(s.handleFixPlan)
 
@@ -343,24 +378,33 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	// not registered — see the rationale at the top of server/attack.go.
 	s.registerAttackTools(srv)
 
+	// Technical evidence for ISO/IEC 27001, derived from the cached scan.
+	s.registerComplianceTools(srv)
+	s.registerThreatModelTools(srv)
+	s.registerAdvisoryTools(srv)
+
 	srv.Tool("agent_graph").
 		Description("Render the detected agent capability lattice as Mermaid (default) or Graphviz dot. Drop into a markdown file or render with dot to audit which tools each agent can call.").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handleAgentGraph)
 
 	srv.Tool("plugin_install").
 		Description("Install a nox plugin by name (e.g. nox/ai-eval). Resolves the plugin against configured registries, fetches the platform binary, verifies the digest, and registers it in local state. Network call; not read-only. REQUIRES `confirmed: true` — the MCP host MUST collect operator consent before forwarding this call. A plugin install runs new code on the operator's machine.").
+		Annotations(pluginInstallHints).
 		Handler(s.handlePluginInstall)
 
 	srv.Tool("data_sensitivity_report").
 		Description("Summarize PII and sensitive data findings from the scan (DATA-* rules)").
 		ReadOnly().
+		ClosedWorld().
 		OutputSchema(report.DataSensitivityReport{}).
 		Handler(s.handleDataSensitivityReport)
 
 	srv.Tool("dashboard").
 		Description("Generate an interactive HTML security dashboard from scan results").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handleDashboard)
 
 	s.registerPluginTools(srv)
@@ -374,11 +418,13 @@ func (s *Server) registerPluginTools(srv *mcp.Server) {
 	srv.Tool("plugin.list").
 		Description("List registered plugins and their capabilities").
 		ReadOnly().
+		ClosedWorld().
 		Handler(s.handlePluginList)
 
 	srv.Tool("plugin.call_tool").
 		Description("Invoke a tool provided by a registered plugin").
 		ReadOnly().
+		OpenWorld().
 		Handler(s.handlePluginCallTool)
 
 	// plugin.read_resource is deliberately NOT registered. Plugins declare their
@@ -522,7 +568,54 @@ func (s *Server) isPathAllowed(path string) error {
 
 // --- Tool handlers ---
 
+// scanOutput is the structured form of the scan tool's result.
+type scanOutput struct {
+	// Summary is the one-line scan result.
+	Summary string `json:"summary"`
+	// Change is what changed since the earlier state, from the same core code
+	// as `nox scan --previous` and `nox diff`. Absent when there was no earlier
+	// state to compare against.
+	Change *change.Delta `json:"change,omitempty"`
+}
+
+// handleScan is the scan tool as text: the summary, and when there is an
+// earlier state, what changed since it.
 func (s *Server) handleScan(_ context.Context, input scanInput) (string, error) {
+	msg, delta := s.scanProject(input)
+	if delta != nil {
+		msg += "\n" + change.Text(*delta, change.DefaultLimit)
+	}
+	return msg, nil
+}
+
+// handleScanStructured is the registered scan tool: the same text, plus the
+// change summary as structured content so an agent need not parse prose.
+func (s *Server) handleScanStructured(ctx context.Context, input scanInput) (mcp.StructuredResult, error) {
+	msg, delta := s.scanProject(input)
+	if strings.HasPrefix(msg, "Error: ") {
+		return mcp.StructuredResult{
+			Content: []mcp.Content{mcp.NewTextContent(msg)},
+			IsError: true,
+		}, nil
+	}
+	text := msg
+	if delta != nil {
+		text += "\n" + change.Text(*delta, change.DefaultLimit)
+	}
+	data, err := json.Marshal(scanOutput{Summary: msg, Change: delta})
+	if err != nil {
+		return toolError("marshalling result: " + err.Error()), nil
+	}
+	var sc map[string]any
+	if err := json.Unmarshal(data, &sc); err != nil {
+		return toolError("structuring result: " + err.Error()), nil
+	}
+	return mcp.StructuredResult{Content: []mcp.Content{mcp.NewTextContent(text)}, StructuredContent: sc}, nil
+}
+
+// scanProject runs the scan. The returned delta is nil when no earlier state
+// was available; an "Error: ..." message comes with a nil delta.
+func (s *Server) scanProject(input scanInput) (string, *change.Delta) {
 	if input.Path == "" {
 		return "Error: missing required argument: path", nil
 	}
@@ -541,6 +634,11 @@ func (s *Server) handleScan(_ context.Context, input scanInput) (string, error) 
 	if err != nil {
 		return "Error: " + err.Error(), nil
 	}
+	// The earlier state is read before the scan replaces the cache.
+	prev, havePrev, perr := s.previousState(input)
+	if perr != nil {
+		return "Error: " + perr.Error(), nil
+	}
 	result, err := nox.RunScanWithOptions(input.Path, nox.ScanOptions{RecordReasoning: true, Scopes: scopes})
 	if err != nil {
 		return "Error: scan failed: " + err.Error(), nil
@@ -548,9 +646,15 @@ func (s *Server) handleScan(_ context.Context, input scanInput) (string, error) 
 
 	s.setCache(input.Path, result)
 
+	var delta *change.Delta
+	if havePrev {
+		d := change.Compare(prev, change.FromScan(result, "this scan"))
+		delta = &d
+	}
+
 	findingCount := len(result.Findings.Findings())
 	pkgCount := len(result.Inventory.Packages())
-	aiCount := len(result.AIInventory.Components)
+	aiSummary := result.AIInventory.Summary()
 
 	if !result.Scope.Full() {
 		var ran, skipped []string
@@ -561,10 +665,37 @@ func (s *Server) handleScan(_ context.Context, input scanInput) (string, error) 
 			skipped = append(skipped, string(sc))
 		}
 		return fmt.Sprintf("Scan complete: %d findings. Scanned: %s. Not scanned: %s, so no result about them is an all-clear.",
-			findingCount, strings.Join(ran, ", "), strings.Join(skipped, ", ")), nil
+			findingCount, strings.Join(ran, ", "), strings.Join(skipped, ", ")), delta
 	}
-	return fmt.Sprintf("Scan complete: %d findings, %d dependencies, %d AI components",
-		findingCount, pkgCount, aiCount), nil
+	return fmt.Sprintf("Scan complete: %d findings, %d dependencies, %s",
+		findingCount, pkgCount, aiSummary), delta
+}
+
+// previousState is the state a scan is compared with: the findings.json the
+// caller named, else an earlier scan of the same path in this session. havePrev
+// is false when there is neither, and nothing is then called new.
+func (s *Server) previousState(input scanInput) (state change.State, havePrev bool, err error) {
+	if input.Previous != "" {
+		if err := s.isPathAllowed(input.Previous); err != nil {
+			return change.State{}, false, err
+		}
+		st, lerr := change.LoadPrevious(input.Previous, "the previous run")
+		if lerr != nil {
+			if os.IsNotExist(lerr) {
+				return change.State{}, false, nil
+			}
+			return change.State{}, false, fmt.Errorf("previous %s: %w", input.Previous, lerr)
+		}
+		return st, true, nil
+	}
+	abs, aerr := filepath.Abs(input.Path)
+	if aerr != nil {
+		abs = input.Path
+	}
+	if pc := s.getCache(abs); pc != nil {
+		return change.FromScan(pc.result, "the previous scan in this session"), true, nil
+	}
+	return change.State{}, false, nil
 }
 
 func (s *Server) handleGetFindings(_ context.Context, input getFindingsInput) (string, error) {
@@ -637,8 +768,7 @@ func (s *Server) handleGetSBOM(_ context.Context, input getSBOMInput) (string, e
 		r := sbom.NewSPDXReporter(s.version)
 		data, err = r.Generate(pc.result.Inventory)
 	default:
-		r := sbom.NewCycloneDXReporter(s.version)
-		data, err = r.Generate(pc.result.Inventory)
+		data, err = s.cycloneDX(pc.result).Generate(pc.result.Inventory)
 	}
 
 	if err != nil {
@@ -679,6 +809,13 @@ func (s *Server) handleGetFindingDetail(_ context.Context, input getFindingDetai
 // severity, confidence, and rule family, plus dependency / AI-component totals.
 // This is the cheap "what am I looking at?" call an agent (or human) makes
 // before deciding whether to page through individual findings.
+// cycloneDX builds the CycloneDX reporter for a cached scan, with the scan's
+// AI inventory so the ML-BOM carries the models the scan detected. Every
+// CycloneDX surface goes through here so none of them can drop the models.
+func (s *Server) cycloneDX(result *nox.ScanResult) *sbom.CycloneDXReporter {
+	return sbom.NewCycloneDXReporter(s.version).WithAIInventory(result.AIInventory)
+}
+
 func (s *Server) handleSummary(_ context.Context, _ emptyInput) (mcp.StructuredResult, error) {
 	pc := s.getCache("")
 	if pc == nil {
@@ -706,7 +843,7 @@ func (s *Server) handleSummary(_ context.Context, _ emptyInput) (mcp.StructuredR
 		ByConfidence:   byConfidence,
 		ByFamily:       byFamily,
 		Dependencies:   len(pc.result.Inventory.Packages()),
-		AIComponents:   len(pc.result.AIInventory.Components),
+		AIComponents:   pc.result.AIInventory.ComponentCount(),
 	})
 }
 
@@ -967,10 +1104,7 @@ func (s *Server) handleBaselineAddMany(_ context.Context, input baselineAddManyI
 	items := pc.result.Findings.Findings()
 
 	// Build a lookup so the loop is O(N + M) instead of O(N*M).
-	byFP := make(map[string]int, len(items))
-	for i := range items {
-		byFP[items[i].Fingerprint] = i
-	}
+	byFP := findings.IndexByFingerprint(items)
 
 	resp := baselineAddManyResponse{Path: blPath}
 	for _, fp := range input.Fingerprints {
@@ -1025,8 +1159,9 @@ func (s *Server) handleDiff(_ context.Context, input diffInput) (mcp.StructuredR
 	}
 
 	result, err := diff.Run(input.Path, diff.Options{
-		Base: base,
-		Head: head,
+		Base:    base,
+		Head:    head,
+		Offline: input.Offline,
 	})
 	if err != nil {
 		return toolError("diff failed: " + err.Error()), nil
@@ -1342,8 +1477,7 @@ func (s *Server) handleResourceCDX(_ context.Context, uri string, _ map[string]s
 		return nil, fmt.Errorf("no scan results available")
 	}
 
-	r := sbom.NewCycloneDXReporter(s.version)
-	data, err := r.Generate(pc.result.Inventory)
+	data, err := s.cycloneDX(pc.result).Generate(pc.result.Inventory)
 	if err != nil {
 		return nil, fmt.Errorf("generating CycloneDX SBOM: %w", err)
 	}
@@ -1503,8 +1637,7 @@ func (s *Server) handleProjectResourceCDX(_ context.Context, uri string, params 
 		return nil, fmt.Errorf("no scan results for project %q", path)
 	}
 
-	r := sbom.NewCycloneDXReporter(s.version)
-	data, err := r.Generate(pc.result.Inventory)
+	data, err := s.cycloneDX(pc.result).Generate(pc.result.Inventory)
 	if err != nil {
 		return nil, fmt.Errorf("generating CycloneDX SBOM: %w", err)
 	}
@@ -1666,6 +1799,13 @@ type fixPlanResponse struct {
 	MajorSkipped int         `json:"major_skipped"`
 	VulnCount    int         `json:"vuln_count"`
 	Note         string      `json:"note,omitempty"`
+	// Plan is the same classified plan `nox fix plan` prints: every issue the
+	// assessment lists, as safe to apply, needs review, or needs information.
+	// Actions above stays for clients written against the dependency-only plan.
+	Plan remediate.Plan `json:"plan"`
+	// Text is Plan rendered as `nox fix plan` renders it, so an agent relaying
+	// it to a person says what the CLI would say.
+	Text string `json:"text"`
 }
 
 func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.StructuredResult, error) {
@@ -1678,10 +1818,17 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 	// so the actions an agent is shown here are exactly the ones the CLI would
 	// run — including the guards against downgrades, prereleases, and
 	// unsupported ecosystems that this handler used to lack.
-	plan := fix.PlanUpgrades(pc.result.Findings.ActiveFindings(), fix.Options{IncludeMajor: input.IncludeMajor})
+	// The scan's own offline signal decides: a scan that made no advisory
+	// lookups (--offline, scan.osv.disabled, no deps scope) must not have its
+	// plan phone OSV either. Then the target is only what the findings name.
+	var targets fix.Checker
+	if !pc.result.AdvisoryLookupSkipped {
+		targets = osvcheck.New("")
+	}
+	plan := fix.PlanUpgrades(pc.result.Findings.ActiveFindings(), fix.Options{IncludeMajor: input.IncludeMajor, Checker: targets})
 
 	resp := fixPlanResponse{
-		Note:         "Plan only. Apply with: nox fix --input findings.json",
+		Note:         "Plan only; this server never changes the workspace. A person applies it with: nox fix apply",
 		Actions:      []fixAction{},
 		Skipped:      plan.Skipped,
 		MajorSkipped: plan.MajorSkipped,
@@ -1697,6 +1844,21 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 			Command:   a.Command(),
 		})
 	}
+
+	// One plan for everything the assessment lists, built by the same code the
+	// CLI uses. Nothing in it is applied here.
+	resp.Plan = remediate.Build(remediate.Input{
+		Findings: pc.result.Findings.ActiveFindings(),
+		Rules:    pc.result.Rules,
+		Root:     pc.basePath,
+		Targets:  targets,
+	})
+	if targets == nil {
+		resp.Note += ". Offline: targets were not verified against all advisories; an advisory introduced after the installed version may still affect them"
+	}
+	var text strings.Builder
+	_ = remediate.RenderPlan(&text, resp.Plan)
+	resp.Text = text.String()
 
 	switch {
 	case len(resp.Actions) > 0:

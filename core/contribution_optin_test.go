@@ -5,11 +5,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/intel"
 )
 
 // contributionProbe returns a server that counts observation submissions, and
@@ -29,6 +31,10 @@ func contributionProbe(t *testing.T) (*httptest.Server, *atomic.Int32, *ScanConf
 	cfg.Scan.Intelligence.Endpoint = srv.URL
 	cfg.Scan.Intelligence.Contribute = true
 	cfg.Scan.Intelligence.ReporterSaltPath = filepath.Join(t.TempDir(), "salt")
+	// The operator accepted the current terms on this machine.
+	if err := intel.RecordConsent(cfg.Scan.Intelligence.ReporterSaltPath, "2026-10-25T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
 	return srv, &posts, cfg
 }
 
@@ -114,6 +120,10 @@ func TestContribute_FailureIsRecordedNotPropagated(t *testing.T) {
 	cfg.Scan.Intelligence.Endpoint = srv.URL
 	cfg.Scan.Intelligence.Contribute = true
 	cfg.Scan.Intelligence.ReporterSaltPath = filepath.Join(t.TempDir(), "salt")
+	// Consent is recorded, so the 500 is what degrades - not a missing acceptance.
+	if err := intel.RecordConsent(cfg.Scan.Intelligence.ReporterSaltPath, "2026-10-25T00:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
 
 	deg := &degrade.Degradations{}
 	contributeObservations(context.Background(), cfg,
@@ -121,7 +131,7 @@ func TestContribute_FailureIsRecordedNotPropagated(t *testing.T) {
 
 	var found bool
 	for _, d := range deg.Items() {
-		if d.Kind == degrade.IntelContribution {
+		if d.Kind == degrade.IntelContribution && strings.Contains(d.Detail, "observations were not accepted") {
 			found = true
 		}
 	}

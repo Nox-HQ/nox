@@ -75,6 +75,10 @@ type Package struct {
 	Version   string
 	Ecosystem string // "npm", "go", "pypi", "rubygems", "cargo", "maven", "gradle", "nuget"
 	License   string // SPDX identifier (e.g., "MIT", "Apache-2.0", "GPL-3.0")
+	// Spec is the declared version range when Version is its lower bound rather
+	// than a resolved or pinned version. Empty for lockfile entries and exact
+	// pins. A finding against such a package says so.
+	Spec string
 }
 
 // Vulnerability describes a known security issue for a package.
@@ -370,6 +374,26 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 	return rs
 }
 
+// isInstalledDependencyPath reports whether path sits inside an installed
+// dependency tree: a node_modules directory below the scan root.
+//
+// A lockfile there (combined-stream publishes a yarn.lock) is that package's
+// own development pin, not a statement of what this project resolved; the
+// project's own lockfile already names every installed package. Reading it as a
+// project manifest attributed a dependency's advisories to the user, and made
+// them appear whenever a package manager had just populated the directory. Only
+// manifests are exempt: the directory is still scanned for secrets and code.
+func pathDir(p string) string { return filepath.ToSlash(filepath.Dir(p)) }
+
+func isInstalledDependencyPath(path string) bool {
+	for _, seg := range strings.Split(filepath.ToSlash(path), "/") {
+		if seg == "node_modules" {
+			return true
+		}
+	}
+	return false
+}
+
 // supportedLockfiles maps well-known lockfile basenames to their parser
 // functions.
 var supportedLockfiles = map[string]func([]byte) ([]Package, error){
@@ -430,18 +454,25 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	srcImports := &sourceImports{}
 	for _, art := range artifacts {
 		if art.Type == discovery.Source {
-			srcImports.paths = append(srcImports.paths, art.AbsPath)
+			srcImports.add(art.AbsPath, art.Path)
 		}
 	}
 
+	npmLocks := newManifestDedupe()
+
 	for _, art := range artifacts {
-		if art.Type != discovery.Lockfile {
+		if art.Type != discovery.Lockfile || isInstalledDependencyPath(art.Path) {
 			continue
 		}
 
 		content, err := os.ReadFile(art.AbsPath)
 		if err != nil {
 			return nil, nil, fmt.Errorf("reading lockfile %s: %w", art.Path, err)
+		}
+		if npmLockfiles[filepath.Base(art.Path)] {
+			// Recorded before parsing so a lockfile that fails to parse still
+			// counts as present; see manifestDedupe.record.
+			npmLocks.record(pathDir(art.Path), nil)
 		}
 
 		var pkgs []Package
@@ -476,9 +507,49 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			continue
 		}
 
+		if npmLockfiles[filepath.Base(art.Path)] {
+			npmLocks.record(pathDir(art.Path), pkgs)
+		}
 		for _, p := range pkgs {
 			inventory.Add(p)
 			sources = append(sources, pkgSource{lockfilePath: art.Path})
+		}
+	}
+
+	// package.json declares dependencies even when no lockfile resolves them,
+	// which is the usual shape of a project an AI assistant just generated.
+	// Reading only lockfiles reported such a project as having none. A lockfile
+	// stays authoritative: the manifest contributes only names it does not
+	// resolve, and everything when there is no lockfile at all.
+	for _, art := range artifacts {
+		if filepath.Base(art.Path) != "package.json" || isInstalledDependencyPath(art.Path) {
+			continue
+		}
+		content, err := os.ReadFile(art.AbsPath)
+		if err != nil {
+			a.degradations.AddAdvisory(degrade.Lockfile,
+				fmt.Sprintf("%s could not be read: %v", art.Path, err),
+				"dependencies declared in this file were NOT scanned for vulnerabilities")
+			continue
+		}
+		mpkgs, unresolved, err := parsePackageJSONManifest(content)
+		if err != nil {
+			a.degradations.AddAdvisory(degrade.Lockfile,
+				fmt.Sprintf("%s was not parsed: %v", art.Path, err),
+				"dependencies declared in this file were NOT scanned for vulnerabilities")
+			continue
+		}
+		locked, governed := npmLocks.governing(pathDir(art.Path))
+		for _, p := range mpkgs {
+			if _, ok := locked[p.Name]; ok {
+				continue
+			}
+			inventory.Add(p)
+			sources = append(sources, pkgSource{lockfilePath: art.Path})
+		}
+		if !governed && len(mpkgs)+len(unresolved) > 0 {
+			detail, impact := manifestDegradation(art.Path, len(mpkgs), unresolved)
+			a.degradations.AddAdvisory(degrade.Lockfile, detail, impact)
 		}
 	}
 
@@ -578,7 +649,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	// Detect licenses from manifest files alongside lockfiles.
 	// This is best-effort: failures are silently ignored.
 	for _, art := range artifacts {
-		if art.Type != discovery.Lockfile {
+		if art.Type != discovery.Lockfile || isInstalledDependencyPath(art.Path) {
 			continue
 		}
 		basePath := filepath.Dir(art.AbsPath)
@@ -694,17 +765,28 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 			for pkgIdx, osvVulns := range vulnMap {
 				pkg := pkgs[pkgIdx]
+				osvVulns, absorbed := collapseSameAs(osvVulns)
 				var domainVulns []Vulnerability
 
-				for _, ov := range osvVulns {
+				// emit builds the finding for one record. It is also run for
+				// the records a survivor absorbed, into a scratch set, to learn
+				// the fingerprint each one's finding had before the merge: the
+				// survivor answers to those too (AliasFingerprints), so a
+				// baseline written when the duplicates were separate findings
+				// still matches. Exactly the old finding, not a guess from ids:
+				// a different advisory or version has a different message and
+				// so a different fingerprint.
+				emit := func(ov osvVuln, into *findings.FindingSet, aliasFPs []string) {
 					sev := mapOSVSeverity(ov.Severity, ov.DatabaseSpecific)
-					domainVulns = append(domainVulns, Vulnerability{
-						ID:       ov.ID,
-						Summary:  ov.Summary,
-						Severity: sev,
-						Aliases:  ov.Aliases,
-						Details:  ov.Details,
-					})
+					if into == fs {
+						domainVulns = append(domainVulns, Vulnerability{
+							ID:       ov.ID,
+							Summary:  ov.Summary,
+							Severity: sev,
+							Aliases:  ov.Aliases,
+							Details:  ov.Details,
+						})
+					}
 
 					lockfilePath := ""
 					if pkgIdx < len(sources) {
@@ -737,6 +819,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 							meta["intel_confidence"] = string(intel.Evidence.Confidence())
 						}
 					}
+					addProvenanceMetadata(meta, &ov)
 					if fix := fixedVersion(&ov, pkg.Name, pkg.Ecosystem, pkg.Version); fix != "" {
 						meta["fixed_in"] = fix
 						meta["remediation_action"] = "upgrade"
@@ -748,6 +831,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// silent disappearance is indistinguishable from a scanner
 					// that simply missed it.
 					message := fmt.Sprintf("Known vulnerability %s in %s@%s: %s", ov.ID, pkg.Name, pkg.Version, ov.Summary)
+					if pkg.Spec != "" {
+						// The version is a range's lower bound, not an install.
+						meta["declared_spec"] = pkg.Spec
+						meta["version_source"] = "manifest_range_lower_bound"
+						message += fmt.Sprintf(" [declared range %s, no lockfile: checked at its lower bound %s]", pkg.Spec, pkg.Version)
+					}
 
 					// A record with no published advisory is a projection, and
 					// says so wherever it is rendered. It is also demoted out of
@@ -773,6 +862,11 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// because "we could not tell" and "we did not look" are the
 					// answers a reader most needs and least often gets.
 					verdict := applicabilityFor(pkg, &ov, linkedGoPkgs, linkedGoKnown, srcImports, goGraph, goModDir)
+					if pkg.Ecosystem == "go" {
+						verdict = raiseOnListedSymbol(verdict, meta, goGraph, &ov, pkg.Name)
+					} else {
+						verdict = raiseOnJSListedSymbol(verdict, meta, srcImports, &ov, pkg)
+					}
 					meta["applicability"] = string(verdict.Outcome)
 					meta["applicability_reached"] = string(verdict.Reached)
 					if verdict.StoppedAt != "" {
@@ -813,19 +907,43 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// what was not. "not reachable" alone invites the reader to
 					// supply the more comfortable reading; the ladder says how
 					// far nox got and where it stopped.
-					message += " — " + verdict.Describe()
+					if meta["affected_symbol_evidence"] == "source_reference" {
+						// Describe speaks of calls from an entry point, which a
+						// source reference is not. Say what was established.
+						message += " — " + sourceReferenceSentence(meta)
+					} else {
+						message += " — " + verdict.Describe()
+					}
 
-					fs.Add(findings.Finding{
+					// A range's lower bound is what the manifest permits, not
+					// what was installed, so the match is weaker than a lock entry.
+					confidence := findings.ConfidenceHigh
+					if pkg.Spec != "" {
+						confidence = findings.ConfidenceMedium
+					}
+					into.Add(findings.Finding{
 						RuleID:     "VULN-001",
 						Severity:   sev,
-						Confidence: findings.ConfidenceHigh,
+						Confidence: confidence,
 						Location: findings.Location{
 							FilePath:  lockfilePath,
 							StartLine: 1,
 						},
-						Message:  message,
-						Metadata: meta,
+						Message:           message,
+						Metadata:          meta,
+						AliasFingerprints: aliasFPs,
 					})
+				}
+				for _, ov := range osvVulns {
+					var fps []string
+					for _, ab := range absorbed[ov.ID] {
+						scratch := findings.NewFindingSet()
+						emit(ab, scratch, nil)
+						for _, f := range scratch.Findings() {
+							fps = append(fps, f.Fingerprint)
+						}
+					}
+					emit(ov, fs, dedupStrings(fps))
 				}
 
 				inventory.SetVulnerabilities(pkgIdx, domainVulns)

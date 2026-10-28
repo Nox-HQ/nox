@@ -496,10 +496,12 @@ func TestEcosystemToOSV(t *testing.T) {
 func TestScanArtifacts_WithOSV(t *testing.T) {
 	// Mock OSV server returning a vulnerability for lodash.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Detail lookups (/v1/vulns/{id}) carry no body and are answered 404;
-		// hydration fails open, leaving the batch result as the test expects.
-		if strings.HasPrefix(r.URL.Path, "/v1/vulns/") {
-			http.Error(w, "not found", http.StatusNotFound)
+		// Detail lookups (/v1/vulns/{id}) are answered with a bare record, so
+		// hydration succeeds and leaves the batch result as the test expects.
+		// A 404 here would be a missing detail, which the scan reports as an
+		// advisory_detail degradation.
+		if id, ok := strings.CutPrefix(r.URL.Path, "/v1/vulns/"); ok {
+			_, _ = w.Write([]byte(`{"id":"` + id + `"}`))
 			return
 		}
 		var req osvBatchRequest
@@ -658,10 +660,12 @@ func TestScanArtifacts_OSVDisabled(t *testing.T) {
 
 func TestScanArtifacts_VulnerabilityMetadata(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Detail lookups (/v1/vulns/{id}) carry no body and are answered 404;
-		// hydration fails open, leaving the batch result as the test expects.
-		if strings.HasPrefix(r.URL.Path, "/v1/vulns/") {
-			http.Error(w, "not found", http.StatusNotFound)
+		// Detail lookups (/v1/vulns/{id}) are answered with a bare record, so
+		// hydration succeeds and leaves the batch result as the test expects.
+		// A 404 here would be a missing detail, which the scan reports as an
+		// advisory_detail degradation.
+		if id, ok := strings.CutPrefix(r.URL.Path, "/v1/vulns/"); ok {
+			_, _ = w.Write([]byte(`{"id":"` + id + `"}`))
 			return
 		}
 		var req osvBatchRequest

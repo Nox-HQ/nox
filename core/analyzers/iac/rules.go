@@ -382,7 +382,14 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-028", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:     `(?im)^[ \t]*-\s*(SYS_ADMIN|SYS_PTRACE|NET_RAW|SYS_MODULE|DAC_OVERRIDE)\s*$`,
+			// The block form (`- SYS_ADMIN` on its own line) was the only
+			// spelling this saw. `capabilities: {add: [SYS_ADMIN]}` is the same
+			// grant written as a flow sequence, and it read as no grant at
+			// all: a container could trade `drop: [ALL]` for SYS_ADMIN and the
+			// diff showed a clean scan on both sides. The flow branch is
+			// bounded to the brackets of an `add:` list, so `drop: [SYS_ADMIN]`
+			// - which removes the capability - does not match.
+			pattern:     `(?im)^[ \t]*-\s*(SYS_ADMIN|SYS_PTRACE|NET_RAW|SYS_MODULE|DAC_OVERRIDE)\s*$|\badd\s*:\s*\[(?:[^\]\n]*,)?\s*["']?(SYS_ADMIN|SYS_PTRACE|NET_RAW|SYS_MODULE|DAC_OVERRIDE)["']?\s*[,\]]`,
 			description: "Container adds dangerous Linux capability",
 			cwe:         "CWE-250", keywords: []string{"sys_admin", "sys_ptrace", "net_raw"},
 			filePatterns: []string{"*.yaml", "*.yml"},
@@ -1714,6 +1721,14 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-135", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
+			// A seccomp profile set on the POD's securityContext is inherited by
+			// every container that sets none of its own, and this text form
+			// cannot see that: it asks of each `securityContext:` block
+			// whether THAT block mentions seccompProfile. The inheritance is
+			// answered by dropSeccompInheritedFromPod (seccomp_inherit.go),
+			// which parses the document, and not here, so that the rule's
+			// firing domain and finding locations - and with them every
+			// baseline and waiver written against it - are unchanged.
 			absenceAnchor:   `(?i)securityContext\s*:`,
 			absenceProperty: `(?i)seccompProfile`,
 			absenceSpan:     "yaml-block",
@@ -1854,12 +1869,22 @@ func builtinBaseIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-144", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)envFrom\s*:\s*\n\s*-\s*secretRef|env\s*:\s*\n\s*-[^}]*valueFrom\s*:\s*\n\s*secretKeyRef`,
-			description: "Kubernetes secret mounted as environment variable",
-			cwe:         "CWE-532", keywords: []string{"secretRef", "secretKeyRef"},
+			// The second branch of this pattern reported
+			// `valueFrom: {secretKeyRef: ...}` - a single named key of a Secret,
+			// which is the documented way to hand a container ONE credential
+			// and the form the "literal value in env" rules (IAC-502) tell
+			// people to move TO. A rule that fires on the remedy of another
+			// rule makes the pair contradict each other, and it fired on
+			// every correctly hardened Deployment. What is a real
+			// over-exposure is `envFrom: secretRef`: every key of the Secret,
+			// including ones this container never asked for, lands in its
+			// environment (and in crash dumps and `/proc/<pid>/environ`).
+			pattern:     `(?i)envFrom\s*:\s*\n\s*-\s*secretRef|envFrom\s*:\s*\[[^\]]*\bsecretRef\b`,
+			description: "Kubernetes container loads an entire Secret into its environment (envFrom secretRef)",
+			cwe:         "CWE-532", keywords: []string{"secretRef"},
 			filePatterns: []string{"*.yaml", "*.yml"},
 			tags:         []string{"iac", "kubernetes", "secrets"},
-			remediation:  "Mount secrets as files using volume mounts instead of environment variables. Environment variables may be logged, visible in /proc, or exposed through debug endpoints.",
+			remediation:  "Reference only the keys the container needs with env[].valueFrom.secretKeyRef, or mount the Secret as files with a volume. envFrom secretRef exposes every key of the Secret to the process, where it may be logged, visible in /proc, or exposed through debug endpoints.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/532.html"},
 		},
 		{

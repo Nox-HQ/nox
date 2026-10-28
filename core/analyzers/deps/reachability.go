@@ -3,6 +3,7 @@ package deps
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nox-hq/nox-core/evidence"
+	"github.com/nox-hq/nox-core/vulnsource"
 	"github.com/nox-hq/nox/core/applicability"
 	"github.com/nox-hq/nox/core/callgraph"
 	"github.com/nox-hq/nox/core/capability"
@@ -234,7 +236,27 @@ const maxImportScanBytes = 1 << 20
 // read until the first finding actually asks.
 type sourceImports struct {
 	paths []string
+	// rel maps each path to the artifact's path inside the scanned tree, which
+	// is what a finding may show: the absolute path is the machine's.
+	rel   map[string]string
 	index *depimports.Index
+}
+
+// add registers one source file by its absolute path and its path in the tree.
+func (s *sourceImports) add(abs, rel string) {
+	if s.rel == nil {
+		s.rel = map[string]string{}
+	}
+	s.paths = append(s.paths, abs)
+	s.rel[abs] = rel
+}
+
+// site names where a use was found, relative to the scan root.
+func (s *sourceImports) site(file string, line int) string {
+	if r, ok := s.rel[file]; ok {
+		file = r
+	}
+	return fmt.Sprintf("%s:%d", file, line)
 }
 
 // get builds the index on first use and returns it.
@@ -328,4 +350,201 @@ func goCallReachable(g *callgraph.Graph, root string, affected []string) (path [
 		return nil, false
 	}
 	return best, true
+}
+
+// symbolHit is a call path from this module to a function an advisory lists.
+type symbolHit struct {
+	importPath, symbol string
+	// fromAdvisory is true when the advisory's own publisher listed the symbol
+	// (OSV imports[].symbols), false when only NOX Intelligence's patch
+	// analysis did.
+	fromAdvisory bool
+	path         []string
+}
+
+// goListedSymbolHit looks for a concrete call path from this module to a
+// function the advisory lists as affected, by the publisher or by nox_symbols.
+//
+// It can only raise. A listed symbol is a hint with a precision of roughly
+// 0.3 to 0.5 and partial recall, so "no listed symbol is called" is not
+// evidence of anything, and the caller must treat a false result as "nothing
+// found", never as a reason to lower a finding. Only package-level functions
+// can be found: a method call's receiver type is not known from syntax.
+func goListedSymbolHit(g *callgraph.Graph, ov *osvVuln, module string) (symbolHit, bool) {
+	if g == nil {
+		return symbolHit{}, false
+	}
+	paths := map[string]struct{}{}
+	for _, aff := range ov.Affected {
+		if aff.Package.Name != module {
+			continue
+		}
+		for _, im := range aff.EcosystemSpecific.Imports {
+			if im.Path != "" {
+				paths[im.Path] = struct{}{}
+			}
+		}
+	}
+	for _, as := range ov.Symbols {
+		if as.Package != module || as.Status != vulnsource.SymbolStatusOK {
+			continue
+		}
+		for _, im := range as.Imports {
+			paths[im.Path] = struct{}{}
+		}
+		for _, cs := range as.Symbols {
+			if cs.Package != "" {
+				paths[cs.Package] = struct{}{}
+			}
+		}
+	}
+	ordered := make([]string, 0, len(paths))
+	for p := range paths {
+		ordered = append(ordered, p)
+	}
+	sort.Strings(ordered)
+
+	advisorySet := func(importPath string) map[string]bool {
+		out := map[string]bool{}
+		for _, aff := range ov.Affected {
+			if aff.Package.Name != module {
+				continue
+			}
+			for _, im := range aff.EcosystemSpecific.Imports {
+				if im.Path == importPath {
+					for _, s := range im.Symbols {
+						out[s] = true
+					}
+				}
+			}
+		}
+		return out
+	}
+
+	var best symbolHit
+	found := false
+	for _, importPath := range ordered {
+		fromAdvisory := advisorySet(importPath)
+		for _, sym := range ov.ListedSymbols(module, importPath) {
+			for _, caller := range g.CallersOfSymbol(importPath, sym) {
+				p, kind := g.PathToFunc(caller)
+				// Only a concrete entry, as in goCallReachable.
+				if kind != callgraph.EntryConcrete {
+					continue
+				}
+				if !found || len(p) < len(best.path) {
+					best = symbolHit{importPath: importPath, symbol: sym, fromAdvisory: fromAdvisory[sym], path: p}
+					found = true
+				}
+			}
+		}
+	}
+	return best, found
+}
+
+// raiseOnListedSymbol records a call path to a symbol the advisory lists and,
+// when the climb had not already reached a call path, raises it to one.
+//
+// Raise-only, by construction: it returns the verdict unchanged when no listed
+// symbol is called, and it never touches a NotImpacting verdict, which rests on
+// the publisher's own statement of which packages are affected.
+func raiseOnListedSymbol(v applicability.Verdict, meta map[string]string, g *callgraph.Graph, ov *osvVuln, module string) applicability.Verdict {
+	hit, ok := goListedSymbolHit(g, ov, module)
+	if !ok {
+		return v
+	}
+	meta["affected_symbol_reached"] = hit.importPath + "." + hit.symbol
+	if hit.fromAdvisory {
+		meta["affected_symbol_basis"] = "advisory"
+	} else {
+		meta["affected_symbol_basis"] = "nox_symbols"
+	}
+	if v.Outcome == applicability.NotImpacting {
+		return v
+	}
+	if v.Outcome == applicability.Impacting && !applicability.CallReachable.Above(v.Reached) {
+		return v // already at or above a call path
+	}
+	return applicability.Established(applicability.CallReachable, hit.path)
+}
+
+// jsListedSymbolHit looks for a project source file that references an export
+// NOX Intelligence's analysis of the fix lists as changed.
+//
+// Only symbols the service could place on a public import specifier carry a
+// Package (`nodemailer`, `nodemailer/lib/addressparser`); an internal helper
+// has none and cannot be matched, so it is never searched for. As with Go, this
+// can only raise: a project that does not reference a listed export has shown
+// nothing, because a binding can be passed on, re-exported or used through a
+// dependency.
+func jsListedSymbolHit(src *sourceImports, ov *osvVuln, module string) (spec, symbol string, use depimports.JSUse, ok bool) {
+	if src == nil {
+		return "", "", depimports.JSUse{}, false
+	}
+	type cand struct{ spec, name string }
+	var cands []cand
+	for _, as := range ov.Symbols {
+		if as.Package != module || as.Status != vulnsource.SymbolStatusOK {
+			continue
+		}
+		for _, cs := range as.Symbols {
+			if cs.Name == "" || cs.Package == "" {
+				continue
+			}
+			if cs.Package != module && !strings.HasPrefix(cs.Package, module+"/") {
+				continue // another package's specifier never matches this one
+			}
+			cands = append(cands, cand{cs.Package, cs.Name})
+		}
+	}
+	if len(cands) == 0 {
+		return "", "", depimports.JSUse{}, false
+	}
+	sort.Slice(cands, func(i, j int) bool {
+		if cands[i].spec != cands[j].spec {
+			return cands[i].spec < cands[j].spec
+		}
+		return cands[i].name < cands[j].name
+	})
+	ix := src.get()
+	if !ix.Known("npm") {
+		return "", "", depimports.JSUse{}, false
+	}
+	for _, c := range cands {
+		if u, found := ix.JSSymbolUse(c.spec, c.name); found {
+			return c.spec, c.name, u, true
+		}
+	}
+	return "", "", depimports.JSUse{}, false
+}
+
+// raiseOnJSListedSymbol is raiseOnListedSymbol for npm. The evidence is weaker
+// than Go's and is labelled so: a reference in non-test project source, not a
+// call path from an entry point, because nox has no JavaScript call graph.
+// affected_symbol_evidence says which, and the printed sentence repeats it.
+func raiseOnJSListedSymbol(v applicability.Verdict, meta map[string]string, src *sourceImports, ov *osvVuln, pkg Package) applicability.Verdict {
+	if !strings.EqualFold(pkg.Ecosystem, "npm") || v.Outcome == applicability.NotImpacting {
+		return v
+	}
+	spec, name, use, ok := jsListedSymbolHit(src, ov, pkg.Name)
+	if !ok {
+		return v
+	}
+	where := src.site(use.File, use.Line)
+	meta["affected_symbol_reached"] = spec + "." + name
+	meta["affected_symbol_basis"] = "nox_symbols"
+	meta["affected_symbol_evidence"] = "source_reference"
+	meta["affected_symbol_site"] = where
+	if v.Outcome == applicability.Impacting && !applicability.CallReachable.Above(v.Reached) {
+		return v
+	}
+	return applicability.Established(applicability.CallReachable, []string{where + " references " + spec + "." + name})
+}
+
+// sourceReferenceSentence states a JavaScript symbol hit without borrowing the
+// Go call-path wording: a reference is not a path from an entry point.
+func sourceReferenceSentence(meta map[string]string) string {
+	return fmt.Sprintf("project source references %s (%s), an export the analysis of the fix lists as changed; "+
+		"whether execution reaches it was not established, and neither was %q",
+		meta["affected_symbol_reached"], meta["affected_symbol_site"], applicability.AttackerReachable)
 }

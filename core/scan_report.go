@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core/report"
 	htmlreport "github.com/nox-hq/nox/core/report/html"
 	"github.com/nox-hq/nox/core/report/sarif"
@@ -30,11 +31,39 @@ func (r *ScanResult) JSONReporter(version string) *report.JSONReporter {
 	rep.SASTLanguages = r.SASTProfile
 	rep.Scope = r.Scope.report()
 	rep.Degradations = report.DegradationsFrom(r.Degradations)
+	switch {
+	case r.AdvisoryLookupSkipped:
+		rep.AdvisoryLookup = report.AdvisoryLookupSkipped
+	case r.advisoryLookupIncomplete():
+		rep.AdvisoryLookup = report.AdvisoryLookupIncomplete
+	}
 	rep.Enrichments = r.Enrichments
 	rep.Capabilities = report.CapabilitiesFrom(r.Capabilities, r.Coverage)
 	rep.CompetenceProfiles = r.CompetenceProfiles
 	rep.StageAccounting = stageAccountingFor(r)
+	rep.Leads = r.ReportLeads()
+	rep.LeadChecks = r.LeadChecks
+	rep.Routes = r.ReportRoutes()
+	rep.Infrastructure = r.Infrastructure
 	return rep
+}
+
+// ReportLeads converts the scan's leads into their findings.json form. It is
+// the one conversion, so the artifact, the change summary and the MCP tools
+// describe a lead identically. Nil when the scan produced none.
+func (r *ScanResult) ReportLeads() []report.Lead {
+	if r == nil || len(r.Leads) == 0 {
+		return nil
+	}
+	out := make([]report.Lead, 0, len(r.Leads))
+	for _, l := range r.Leads {
+		out = append(out, report.Lead{
+			Category: l.Category, RuleID: l.RuleID, Route: l.Route,
+			FilePath: l.FilePath, Line: l.Line, Statement: l.Statement, Test: l.Test,
+			IDSource: l.IDSource,
+		})
+	}
+	return out
 }
 
 // stageAccountingFor converts the scan's stage counts into their report form.
@@ -88,4 +117,26 @@ func (r *ScanResult) HTMLReporter(version string) *htmlreport.Reporter {
 		rep.NotScanned = sc.NotScanned
 	}
 	return rep
+}
+
+// ReportRoutes converts the routes the authorization reader found into their
+// findings.json form. Nil when the scan read none.
+func (r *ScanResult) ReportRoutes() []report.Route {
+	if r == nil || len(r.Routes) == 0 {
+		return nil
+	}
+	return r.Routes
+}
+
+// advisoryLookupIncomplete reports whether the vulnerability source said it
+// answered some package only in part. It is derived from the degradations, the
+// one place that statement is recorded, so the artifact and the change summary
+// cannot disagree about it.
+func (r *ScanResult) advisoryLookupIncomplete() bool {
+	for _, d := range r.Degradations {
+		if d.Kind == degrade.IntelIncomplete {
+			return true
+		}
+	}
+	return false
 }

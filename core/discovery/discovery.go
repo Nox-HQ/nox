@@ -333,6 +333,10 @@ func isAgentConfig(name, normalised string) bool {
 		(containsSegment(normalised, ".claude") || containsSegment(normalised, ".cursor")) {
 		return true
 	}
+	// Zed keeps its MCP servers (context_servers) in the project settings file.
+	if name == "settings.json" && containsSegment(normalised, ".zed") {
+		return true
+	}
 	return false
 }
 
@@ -360,6 +364,44 @@ func dirContainsAnyIncluded(relDir string, include map[string]bool) bool {
 	prefix := relDir + "/"
 	for p := range include {
 		if p == relDir || strings.HasPrefix(p, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsLinkedWorktree reports whether dir is the root of a linked git worktree
+// (`git worktree add`): its `.git` is a FILE reading `gitdir: <repo>/.git/
+// worktrees/<name>`. A submodule also has a `.git` file, but it points into
+// `.git/modules/`, so it is not matched; a nested clone has a `.git` directory
+// and is not matched either.
+//
+// Why this matters: a worktree is a second checkout of a repository, and
+// agent tooling parks them under directories the parent .gitignores
+// (`.claude/worktrees/<name>/`). `git ls-files --recurse-submodules` lists the
+// files of any gitlink registered in .gitmodules, so a worktree that was ever
+// `git add`ed made every file in it look TRACKED — and the tracked-file
+// override then scanned all of them, duplicating every finding of the real
+// tree under a path no waiver can stay ahead of (#830).
+//
+// Nested repositories (`.git` directory) need no such rule: their files are
+// never in the parent's index, so the parent's .gitignore already prunes them.
+// A true submodule is tracked by the parent on purpose and is still scanned.
+func IsLinkedWorktree(dir string) bool {
+	b, err := os.ReadFile(filepath.Join(dir, ".git")) //nolint:gosec // caller-supplied scan tree
+	if err != nil {
+		return false // absent, or a directory (a nested clone)
+	}
+	line, _, _ := strings.Cut(strings.TrimSpace(string(b)), "\n")
+	target, ok := strings.CutPrefix(line, "gitdir:")
+	if !ok {
+		return false
+	}
+	parts := strings.Split(filepath.ToSlash(strings.TrimSpace(target)), "/")
+	for i := 1; i < len(parts); i++ {
+		// `<repo>/.git/worktrees/<name>`, or `<repo>.git/worktrees/<name>` for
+		// a bare repository.
+		if parts[i] == "worktrees" && strings.HasSuffix(parts[i-1], ".git") {
 			return true
 		}
 	}
@@ -580,7 +622,11 @@ func (w *Walker) Walk() ([]Artifact, error) {
 					// file. git never ignores a tracked file, so we must
 					// descend to reach one (e.g. a repo that .gitignores
 					// `mobile/` but commits sources into it).
-					if !dirContainsAnyTracked(relSlash, w.TrackedPaths) {
+					//
+					// A linked worktree is the exception: whatever the index
+					// says is tracked beneath it belongs to that worktree's
+					// checkout, not to this repository (see IsLinkedWorktree).
+					if !dirContainsAnyTracked(relSlash, w.TrackedPaths) || IsLinkedWorktree(path) {
 						return filepath.SkipDir
 					}
 				} else if !w.TrackedPaths[relSlash] {

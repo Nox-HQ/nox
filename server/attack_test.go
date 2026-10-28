@@ -123,3 +123,40 @@ func readSourceFile(t *testing.T, name string) string {
 	}
 	return string(data)
 }
+
+// An authorization lead reaches MCP attack_plan through the same core plan as
+// the CLI: the tool must surface the BOLA hypothesis and its test procedure.
+func TestHandleAttackPlan_AuthzLeadBecomesBOLAHypothesis(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "server.js", ""+
+		"const express = require('express');\n"+
+		"const db = require('./db');\n"+
+		"const requireAuth = require('./auth');\n"+
+		"const app = express();\n"+
+		"app.get('/invoices/:id', requireAuth, async (req, res) => {\n"+
+		"  const r = await db.query('SELECT * FROM invoices WHERE id = $1', [req.params.id]);\n"+
+		"  res.json(r.rows[0]);\n"+
+		"});\n")
+
+	s := New("0.1.0", nil)
+	if _, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+	out, err := s.handleAttackPlan(context.Background(), attackPlanInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var resp attackPlanOutput
+	if err := json.Unmarshal([]byte(textOf(out)), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, h := range resp.Hypotheses {
+		if h.ScenarioID == "AUTHZ-BOLA" {
+			if h.TestProcedure == nil || h.TestProcedure.ObjectParameter != "id" || h.Exploitability != "PLAUSIBLE" {
+				t.Errorf("BOLA hypothesis incomplete: %+v", h)
+			}
+			return
+		}
+	}
+	t.Errorf("no AUTHZ-BOLA hypothesis in %+v", resp.Hypotheses)
+}

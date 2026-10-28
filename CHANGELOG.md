@@ -5,6 +5,1048 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.55.2] - 2026-10-28
+
+The remediate action (`actions/remediate`) and its Marketplace copy, `nox-hq/nox-remediate-action`, are one action again, published from here on every release. The CLI is unchanged from 1.55.1.
+
+### Fixed
+
+- `actions/remediate` and `nox-hq/nox-remediate-action` had drifted apart since July. The published action lacked `findings-file`, so `nox advisories --prepare-findings` could not drive it, and still installed nox through the v1.38.2 install action. This copy lacked `upgrade-actions`, and with `--actions` it reported no updates when only action pins needed upgrading: the package pass prints `nox fix: no eligible upgrades found.` above the action plans, and that line was the signal. Work is now detected by `plan:` lines. Both copies now hold the union. Checked with the released 1.55.1 binary on a fixture: package-only, package and action, and action-only plans each report updates correctly, `findings-file` is honoured, and the script runs under bash 3.2 and 5 (#924).
+
+### Changed
+
+- `nox-hq/nox-remediate-action` is now released in step with nox. After each nox release its `sync` workflow copies `actions/remediate` at that release's commit, pins the install action to the same commit, runs a self-test against a fixture, then tags the same version (`vX.Y.Z`) and moves `v1`. Edit the action here; the published repository is a copy. Its versions jump from v1.0.3 to the nox version and stay in v1.
+
+## [1.55.1] - 2026-10-28
+
+nox-core v0.11.2: PyPI advisory ranges are ordered under PEP 440. Dogfooded against NOX Intelligence with the same pin.
+
+### Changed
+
+- nox-core v0.11.2. PEP 440 spells a prerelease without a separator (`1.11a1`), and the shared version comparator read that segment as 0, so a PyPI range starting at a prerelease covered every earlier minor release. NOX Intelligence applied GHSA-337x-4q8g-prc5 (django 1.11a1 to 1.11.18) and 11 other advisories to django 1.4.0 from its mirror; v0.24.6 fixes that with this version. In the CLI the comparator chooses the "fixed in" version when an advisory names one fix per release branch: PyPI bounds are now ordered under PEP 440 there too, and outside PyPI a bound that can only be read by zeroing a lettered segment is no longer trusted. Measured on 2,589 real (PyPI package, version, advisory) hits from live OSV, no reported fix version changes; this is the same rule the service now uses, not a behaviour change you should see.
+
+## [1.55.0] - 2026-10-27
+
+A severity gate can no longer pass on a finding whose severity was never fetched, a worktree under an ignored directory is no longer scanned twice, and constrained required plugins are no longer reported as skipped. Dogfooded against NOX Intelligence main (93/93, including a real CLI scan answered from the mirror with the same 42 dependency findings as the live baseline).
+
+### Changed
+
+- nox-core v0.11.1. It changes only `Record.Decide`, the version-list matching NOX Intelligence uses to answer from its OSV mirror (PyPI lists now compare under PEP 440, so `1.4` equals `1.4.0`; a near-equal entry elsewhere is undecidable and goes to live OSV). The CLI does not call it; no scan result changes.
+
+### Fixed
+
+- A severity gate (`fail_on: high`, `nox ci`) now fails when an advisory's details could not be fetched from either source, where it used to pass silently. Dependency scans find advisories in one request and fetch each one's severity, summary and affected ranges in a second; when that second request failed, the finding kept a default severity and could sit below the gate unnoticed. nox-core v0.11.0 retries the detail fetch twice on a transport error, a 5xx or a 429, fills a record one source could not hydrate from the same advisory on the other (NOX Intelligence or OSV.dev), and only when neither can supply it reports a blocking `advisory_detail` degradation naming the advisories. The finding itself is always reported; only its severity is in doubt. The scan summary, `nox fix` verification and the ISO 27001 report (`nox compliance`) treat the new kind like `osv_lookup`: the dependency check did not fully complete.
+- A linked git worktree under a directory the repository `.gitignore`s (`.claude/worktrees/<name>/`) is no longer scanned when the parent's index names it. `git ls-files --recurse-submodules` expands a gitlink registered in `.gitmodules` into the worktree's files, which the tracked-file override then treated as tracked, so every finding of the real tree was reported twice under a path no waiver could stay ahead of. Linked worktrees (`.git` file pointing into `.git/worktrees/`) are now pruned under an ignored directory; submodules the parent tracks are still scanned. `nox fix --actions` also stops rewriting `action.yml` files inside nested worktrees. The behaviour for nested repositories is documented in `docs/usage.md` (#830).
+- The `[degraded] N installed plugin(s) are not listed in plugins.required and did not run` advisory no longer lists plugins you did require. An entry with a version constraint (`nox/reachability@^0.9.0`) was compared to the installed name (`nox/reachability`) as a raw string, so every constrained plugin was reported as skipped while it ran, and the count was inflated to match. The list and count now hold only installed plugins that are not required (#829).
+
+## [1.54.0] - 2026-10-27
+
+Dependency scans get faster answers from NOX Intelligence without giving up verification. A verified
+scan now tells the service it can tell a lagging corpus from a withheld advisory, so the service may
+answer from its local OSV corpus instead of calling OSV live on every lookup; anything the corpus
+lacks because it changed after the last sync is restored from OSV.dev without an alarm, and anything
+older is still reported as suppression. Releases now publish a Homebrew cask and pin GoReleaser.
+
+### Changed
+
+- Releases now publish a Homebrew **cask** (`Casks/nox.rb`) instead of a formula, ending the GoReleaser `brews` deprecation warning, and pin GoReleaser to exactly v2.19.0 rather than the floating `~> v2` so a release can no longer change behaviour because GoReleaser did. The cask strips the macOS quarantine attribute after install because the binaries are not Apple-notarized. The manual `Publish Homebrew Formula` workflow is now `Publish Homebrew Cask` and renders the same cask GoReleaser emits. `brew install felixgeelhaar/tap/nox` is unchanged. The old `Formula/nox.rb` in the tap is left in place until the first cask release has been verified.
+- Dependency scans now declare `X-Nox-Client-Capabilities: mirror-lag` to NOX Intelligence automatically, with no configuration. It is sent only to the intelligence service (never OSV.dev) and only when verification against OSV is on (`scan.intelligence.verify_against_osv`, the default): the header means "I verify against a reference and restore what a lagging corpus lacks", so with verification off nothing would restore an advisory published since the service's last sync and such scans keep getting live answers. nox-core v0.10.0 can tell a mirror's sync lag from withholding: a reference advisory changed after the mirror's `mirror_synced_at` is restored without raising `intel_suppression`, while anything older, or any missing record with no usable sync time, is still reported as suppression. This lets the service answer from its local OSV corpus.
+
+## [1.53.0] - 2026-10-26
+
+Every check nox runs now answers a question it used to get wrong or leave to you. A package.json
+without a lockfile is read instead of scanning as "0 dependencies, no issues" (the most common shape
+of an AI-built app); fix targets clear every advisory instead of stopping at a version that is itself
+vulnerable; an authorization lead becomes a two-account BOLA test plan; optional checks are turned on
+by what they check (`nox enable api-abuse`), never by plugin name; npm fixes can merge on evidence
+that the project references the vulnerable export; generated CI pins nox by commit SHA; and attack
+evidence from your own CI can be contributed to NOX Intelligence, attributed to your organisation,
+under separate terms (attack-2026-10). Version comparison now uses every segment and OSV's explicit
+version lists (nox-core v0.9.1).
+
+### Added
+
+- `nox attack plan` (and the MCP `attack_plan` tool, which shares the same core
+  plan) now turns object-level authorization leads and AUTHZ-001 findings into
+  `AUTHZ-BOLA` hypotheses: the route, the parameter that names the object, the
+  missing-ownership-check reasoning, and a two-account test procedure with the
+  secure and vulnerable responses stated up front. Leads in `findings.json` now
+  carry `id_source`. The scenario is plan-only: `nox attack run` reports it as
+  not executed and never scores it PREVENTED or CONFIRMED.
+
+- npm: nox now answers whether project source references an export that NOX
+  Intelligence's analysis of the fix lists as changed (`core/depimports`
+  `JSSymbolUse`). It reads every ordinary import idiom: ESM named, aliased,
+  default, namespace and mixed clauses (multi-line, `export`-less, TypeScript
+  `import x = require()`), CommonJS whole-module, destructured, renamed,
+  member-bound and inline `require('m').f()`, bracket access, destructuring a
+  whole-module binding, and dynamic `import()`. Comments, strings, `import type`,
+  relative and `node:` specifiers, same-named properties of other objects,
+  object keys, shadowing declarations and test, spec, mock and fixture paths do
+  not count. A hit raises the finding to `call_reachable` with the file and line
+  as the witness, so the default `advisories.remediate` gate can now merge an npm
+  fix. The evidence is a reference, not a call path from an entry point, and the
+  finding and the advisory reason say so (`affected_symbol_evidence:
+  source_reference`). It only raises: no hit leaves the verdict exactly where it
+  was, and it never produces `not_impacting`.
+
+- `nox attack run|replay --contribute --candidate <fingerprint>` sends each executed run's allowlisted evidence (nox-core `RunReport`: no target, route, payload or response; a one-way trace digest) to NOX Intelligence as reporter-scoped evidence. It needs `NOX_INTEL_TOKEN`, separately accepted attack terms (`nox intel consent attack`) and refuses before any attack fires. Runs that were not executed, had an unsound control or never reached the target are skipped, not reported as prevented. `nox intel allowlist attack` prints the fields; `nox intel forget --attested` erases your organisation's contributions.
+- `scan.intelligence.attested: true` sends scan observations as your organisation (`NOX_INTEL_TOKEN`). Anonymous contributions are stored but no longer count as independent sources, because a reporter id is self-asserted; attested ones count once per organisation. With no token nothing is sent and the scan says so.
+- `nox enable <check>... | all` turns on optional checks by what they check, not by plugin name, and writes `.nox.yaml` for you (comments and layout kept; the result is read back the way a scan reads it and undone if it does not round-trip). `nox enable --list` shows each check and whether it is on. The assessment now offers that one command with the exact checks instead of asking you to edit `plugins.required`. Nothing is enabled by default: `docs/plugin-defaults.md` measured every installed optional check and none meets the precision bar. Network-needing checks stay opt-in and say so; live checks are refused (use `nox attack plan`).
+
+### Fixed
+
+- A JavaScript call-reachable finding (`affected_symbol_site`) recorded the absolute path of the source file on the machine that ran the scan (`/Users/.../src/use.js:4`) in findings.json, SARIF and the assessment text. It is now the path inside the scanned tree (`src/use.js:4`), so output no longer differs between checkouts of the same commit.
+
+- The `nox scan` assessment named an upgrade target that could itself still be affected: it said `Upgrade axios 0.21.1 -> 0.33.0` while `nox fix plan` (and the MCP `fix_plan` tool) said `0.34.0`, because 0.33.0 carries two advisories the installed version does not. The assessment now asks the advisory database about its targets, as `nox fix` does, so the two agree. `--offline`, `--no-osv` and `scan.osv.disabled` still make no request and the plan is built from the findings alone.
+
+- Version comparison read only three numeric segments, so `6.6.0.7` and `6.6.0.3` compared equal and four-part
+  versions (NuGet, Maven) could be judged not affected. nox-core v0.9.0 compares every segment and adds OSV's
+  explicit `versions` lists, which decide affectedness before ranges.
+
+- `nox install-ci` pinned `nox-hq/nox` to the release tag, which nox's own IAC-013 flags HIGH on the workflow it had just written. It now writes the release commit SHA with the version as a trailing comment (`@<sha> # v1.52.0`), taken from the commit embedded at build time, so there is no network lookup. A build that records no commit refuses and asks for `--nox-ref <sha>`; an explicit tag still works but warns.
+
+- `nox intel evidence --upload` now sends the `evidence_kind` (and `control_sound`
+  when the run executed) that NOX Intelligence derives a verdict from. The
+  service no longer trusts the uploaded `exploitability`, so without a kind every
+  run, however well earned, was recorded as INCONCLUSIVE. `dynamic_exploit` is
+  sent only for a deterministic oracle whose violation reproduced; a model's
+  judgment is `semantic`; a deterministic run that did not reproduce is
+  `heuristic`. Older releases upload as INCONCLUSIVE (the claim is kept).
+
+- A project with a `package.json` and no lockfile scanned as `0 dependencies` /
+  `dependencies (none found)` / `No issues found in what was checked`, although
+  requirements.txt and go.mod without lockfiles were read. `package.json`
+  `dependencies`, `optionalDependencies` and `devDependencies` are now
+  inventoried and looked up. Exact versions are checked as written; a range
+  (`^`, `~`, `>=`, `1.x`, `||`) is checked at its lower bound, as requirements.txt
+  already does, and its findings carry `declared_spec`, medium confidence and a
+  message saying so. git/URL/`file:`/`workspace:` specs, dist-tags, `*` and
+  upper-bound-only ranges are never guessed: they are listed under "Not checked".
+  `peerDependencies` are not read. A lockfile in the same directory or an
+  ancestor stays authoritative (deduplicated by name), and `node_modules`
+  manifests are ignored. The assessment now says "No lockfile is committed beside
+  a package.json" and recommends committing one, and reads
+  "declared, but none could be resolved" instead of "none found" when nothing
+  could be resolved.
+- Fix planning chose a target that was itself still vulnerable. It took the highest fix named by the advisories affecting the *installed* version, but an advisory introduced later does not affect the installed version and does affect the target: axios 0.21.1 planned to 0.33.0, which two advisories (fixed in 0.34.0) still cover, and only re-verification noticed. With the advisory database reachable, `nox fix`, `nox fix plan`, the assessment and the MCP `fix_plan` tool now ask what each candidate is still vulnerable to and move to the lowest version that clears them all. When only a major bump clears them, the move stays held and names what would remain in policy and the version that clears it (needs `--include-major`); an unreachable database marks the move unverified instead of clear. Semver policy is unchanged.
+
+## [1.52.0] - 2026-10-25
+
+The NOX Intelligence feeds are verified and used by default. nox now ships the
+official feed public key (slopfeed-key-v1, raw-key fingerprint
+sha256:168327fe…51fa08), so the slopsquat feed and the MCP advisory feed
+(MCP-026) are consulted when intelligence is enabled and the scan is online. A
+project's own pinned key still wins; a served key that differs from the built-in
+one is reported with both fingerprints and never accepted; offline scans make no
+request and say why the feeds were not checked. Tests are now hermetic: no test
+reaches a non-loopback host or reads the real ~/.nox.
+
+### Added
+
+- The official NOX Intelligence feed key (`slopfeed-key-v1`, fingerprint
+  `sha256:168327fe999925cd025ddeaf1d1cde605dfd0641395cf021da3259c8b451fa08`) is built into nox, so the predictive slopsquat feed (`SLOP-002`) and the
+  MCP advisory feed (`MCP-026`) are verified and used by default whenever the scan
+  is online and `scan.intelligence` is not disabled. A configured
+  `signature_key_path` always overrides it; findings record which key verified
+  them in `metadata.feed_key`. A feed that fails verification is a blocking
+  degradation, never trusted. If the service signs with a different key than the
+  built-in one, nox reports both fingerprints and says to upgrade or pin the new
+  key after review; it never accepts it silently. Opt out per feed with
+  `scan.slop.disabled` / `scan.mcp_feed.disabled`. Offline and
+  intelligence-disabled scans make no request and say the feeds were not checked.
+
+## [1.51.0] - 2026-10-25
+
+Affected-symbol intelligence, MCP advisories and wider route coverage.
+Advisory relevance can rise to "a call path reaches it" from OSV's own Go symbol
+lists and NOX Intelligence's patch-diff symbols, which can never lower it.
+NOX Intelligence's signed MCP advisory feed is checked against configured MCP
+servers (MCP-026), and MCP configs are read in each client's own format
+(VS Code, Zed). NestJS controllers and DRF `@action` routes join the route
+table behind AUTHN-001, WEBHOOK-001 and `nox model`, which now names the reader
+that found each route. Requires nox-core v0.7.0.
+
+### Added
+
+- **Affected symbols can raise an advisory's relevance, never lower it.** NOX
+  Intelligence's `nox_symbols` (and OSV's own `imports[].symbols`) list the
+  functions an advisory or its fix concerns. When the Go call graph finds a
+  concrete call path from this module to a listed package-level function, the
+  finding's relevance rises to "a call path reaches it" and the sentence names
+  the symbol and where it came from (the advisory, or nox's analysis of the
+  fix, which is a hint about where the fix landed and not proof). A listed
+  symbol that nothing calls changes nothing: precision of the lists is about
+  0.3 to 0.5, so absence is not evidence, and a publisher's statement that the
+  build does not link the affected package is not overridden. Methods and
+  non-Go ecosystems are not matched (nox has no call graph for them). Needs
+  nox-core with `nox_symbols` decoding.
+- **MCP advisory feed consumer (`MCP-026`).** NOX Intelligence's signed feed of
+  public advisories for MCP packages is joined with the MCP servers a scan finds:
+  "an advisory affects this MCP server package" when an exact pinned version
+  lies inside an interval the advisory publishes, with the feed's basis shown
+  (a package classified by advisory text only is low confidence). A server
+  launched through `npx`/`uvx` with no pinned version cannot be range-matched and
+  is reported at info severity as exactly that. The feed is verified against a
+  pinned public key (`scan.mcp_feed.signature_key_path`) with the slopsquat
+  feed's discipline and fails closed; it is cached and works offline from the
+  verified cache. A feed the service has not published, a missing key, or an
+  offline scan with no cache is a `mcp_feed` degradation saying the servers were
+  not checked, never "no advisories". See `docs/mcp-advisory-feed.md`. The
+  package-runner parsing MCP-025 uses moved to `core/mcpconfig` so both read a
+  launch the same way.
+- **MCP configs are read by the client that owns them.** `.vscode/mcp.json`
+  keeps its servers under `servers`, not `mcpServers`, so VS Code's project
+  config showed up as one opaque component with no servers, no tool matrix, no
+  pin and no shadow check. The key is now chosen from the path (VS Code
+  `servers`, Zed `.zed/settings.json` `context_servers`, everyone else
+  `mcpServers`), never from the content: a `servers` object in unrelated JSON is
+  not an MCP config. Zed's `command: {path, args}` form is read too.
+- **NestJS controllers and DRF `@action` routes join the route table.** NestJS
+  `@Controller`/verb decorators (path forms, global prefix, URI versioning) are
+  read, with `@UseGuards`, `APP_GUARD`, `useGlobalGuards` and `@Public`-style
+  decorators counted as authentication, scoped per application directory; a
+  controller outside any guarded scope is silent rather than a lead. DRF
+  `@action` routes are routes of their own (`url_path`, `detail`), and an
+  action's `permission_classes` no longer stands in for the viewset's. Measured
+  on brocoders/nestjs-boilerplate, the nest samples, the realworld app,
+  readthedocs and netbox: no new false leads.
+
+### Fixed
+
+- **`nox model` names NestJS and DRF action routes, and its entry-point limit
+  matches the readers.** NestJS routes are "read by the NestJS reader", DRF
+  `@action` routes by the Django reader, and the limit text no longer says
+  Next.js, Django or NestJS are not enumerated.
+- **`nox model` names the reader that actually found a route.** Every JavaScript
+  route was "read by the authorization reader (Express)" and every Python route
+  "(Flask or FastAPI)", so Next.js and Django routes carried the wrong name. A
+  route now carries its reader (`reader` in `findings.json` routes: Express or
+  Fastify, Flask, FastAPI, Next.js, Django) and the model's evidence says so.
+
+## [1.50.0] - 2026-10-25
+
+The intelligence and trust release. Contribution to NOX Intelligence now
+requires accepting versioned terms on the machine (`nox intel consent`), and
+`nox intel forget` erases a reporter and rotates its secret; existing
+installations with `scan.intelligence.contribute: true` pause until consent is
+given. Scans keep working through an OSV outage on the service's mirror and say
+so, report partial intelligence answers as incomplete rather than clean, and merge
+one vulnerability published under two ids into one finding (baselines keep
+matching). The default scan reports routes with no visible authentication
+(AUTHN-001 leads; Express, Fastify, Flask, FastAPI, Next.js, Django) and webhooks
+accepted without signature verification (WEBHOOK-001), and its headline counts
+what needs attention. `nox fix` no longer runs package install scripts and keeps
+the project's version specifiers; MCP rug-pull pins are a committed project file
+instead of hidden machine state.
+
+### Added
+
+- **`nox intel forget` rotates the reporter salt** once the service confirms
+  erasure, so consenting again is a new, unlinkable reporter instead of the
+  erased one.
+- **A scan keeps working through an OSV outage, and says how it was answered.**
+  The NOX Intelligence source now sends `X-Nox-Accept-Degraded: mirror` (never
+  to OSV.dev), so during an OSV outage the service answers from its mirror
+  instead of failing with 503. That answer is a blocking `intel_incomplete`
+  degradation and a specific limit in the assessment ("Answered from NOX
+  Intelligence's mirror; live OSV unavailable"). `findings.json` advisory
+  metadata gains `advisory_source`, `advisory_via` (live, mirror, candidate)
+  and, for a mirror, `advisory_mirror_synced_at`; a live retrieval time is
+  deliberately not written, so the file stays identical between runs. Records
+  the service marks `nox_same_as` (one vulnerability under two ids) are one
+  finding that keeps every id in `aliases`, at the highest severity of the
+  group. Note: the `vuln_id` of such a finding can differ from the earlier
+  per-record findings, so a baseline entry for the dropped id reads as fixed.
+  Requires nox-core v0.6.0.
+
+- **Next.js and Django routes join the route table.** Next.js route handlers
+  (`app/**/route.ts`, `pages/api/**`) and Django (`urls.py` with `include()`
+  prefixes, function and class views, DRF routers and viewsets) are read into
+  the table `nox model`, AUTHN-001 and WEBHOOK-001 use. Authentication is read
+  from `getServerSession`/`auth()`/`currentUser()`, auth wrappers on the export,
+  `login_required`, the Django mixins, `permission_classes`, a project-wide DRF
+  `DEFAULT_PERMISSION_CLASSES`, `LoginRequiredMiddleware`, and from what a
+  dispatcher view calls. Declared public (`AllowAny`, `authentication_classes
+  = []`, `@login_not_required`, `IsAuthenticatedOrReadOnly` for reads), a custom
+  auth middleware or `middleware.ts` it cannot evaluate, and a view it cannot
+  find are never leads. AUTHZ-001's object-level analysis does not run over
+  these handlers, and "Checks completed" now says so. NestJS is still not read.
+- **`nox advisories` as an MCP tool** (`advisories`, read-only). It serves the
+  decision `nox advisories` computes; the rendering and the "scan incomplete"
+  rule moved into `core/advisory`, so the CLI and the tool cannot disagree.
+- **Registry freshness.** `nox plugin search` and `info` warn when the installed
+  plugin is newer than the index's highest version, and when the index's
+  `generated_at` is more than 14 days old. LATEST is now the highest version in
+  the index, labelled as such (it was the last one listed).
+- `nox scan --help` documents `SOURCE_DATE_EPOCH`, and a test pins two scans
+  with it set to byte-identical `findings.json`, SARIF, both SBOMs,
+  `ai.inventory.json` and the HTML report.
+
+- **Contribution is consented to, versioned, and erasable.** `nox scan` now
+  contributes (when `scan.intelligence.contribute: true`) only on a machine
+  that has accepted the contribution terms: `nox intel consent show` prints
+  them, `nox intel consent accept` records the accepted version in
+  `~/.nox/intel-consent.json` (per installation, beside the reporter salt; a
+  committed `.nox.yaml` cannot consent for whoever scans it). Observations are
+  sent as contribution schema 2 with `consent_version` and a `deletion_verifier`
+  (SHA-256 of a key derived from the private salt and never sent).
+  `nox intel forget` posts the key to `/v1/reporters/erase`, prints the counts
+  the service reports, and withdraws consent locally; if the service cannot be
+  reached or refuses, nothing changes locally. `nox intel preview` prints the
+  terms and the exact fields. **Behaviour change:** an existing installation
+  with `contribute: true` stops contributing until it runs
+  `nox intel consent accept`; each scan says so, as a non-blocking degradation,
+  and does the same when the terms version changes. With contribution off no
+  request is made and nothing is said. The terms text (version `2026-10`) is
+  pending owner review.
+- **The default scan now says when a route has no visible authentication.**
+  `nox model` already printed "no authentication middleware visible" for
+  `GET /api/admin/users` and `DELETE /api/users/:id`; the scan assessment said
+  nothing. Both now read one route table, so they cannot disagree: a route that
+  reads or changes something an anonymous caller should not reach (an
+  administrative path, a record fetched by id, or any DELETE, PUT or PATCH) and
+  has no authentication in front of it or inside it is a lead under
+  "Additional verification recommended", in `findings.json` `leads`, and in the
+  `scan --previous` / `nox diff` delta ("New leads"). `AUTHN-001` makes each
+  one a finding (`scan.rules.enable: [AUTHN-001]`, opt-in like AUTHZ-001, CWE-306);
+  without it a lead never reaches the findings array, SARIF, the exit code or a
+  fingerprint. Express, Fastify, Flask and FastAPI, as AUTHZ-001 reads them.
+  Authentication means middleware on the route, its router, a matching prefix or
+  the mount; an auth decorator, dependency or `before_request` gate; or a handler
+  that reads the caller's identity or answers 401. A handler that does that is now
+  recorded in the route table as authenticated ("an inline check on the caller's
+  identity"), so `nox model` stops calling it "none visible". Public-by-design paths
+  (login, health, docs, callbacks, webhooks), feeds, tests, examples, browser code
+  and routes under an application-wide guard this reader cannot attribute (a
+  FastAPI `add_middleware`, an Express router mounted where nox cannot resolve it
+  beneath an app-wide `app.use(auth)`) are not leads. A route registered with a
+  single access-control argument (`app.get('/api/Users', security.isAuthorized())`,
+  `.put(security.denyAll())`) is a guard, not an endpoint.
+- **WEBHOOK-001: webhook payload accepted without signature verification.** A
+  POST route that receives a Stripe, GitHub or Slack webhook (the provider in the
+  path, its header, or its event types in the handler) and neither the handler,
+  the functions it calls, nor the middleware in front of it verifies the
+  signature is a high-severity, medium-confidence finding: Stripe
+  `constructEvent` / `construct_event`, GitHub `X-Hub-Signature-256` with an HMAC,
+  Slack's signing secret. A commented-out verification does not count. A handler
+  nox cannot read is not reported. Reports by default (it is not opt-in); a
+  gateway that verifies before the app is waived with `nox:ignore`.
+- The assessment's checks line now says what was read: "authorization and
+  authentication (Express, Fastify, Flask, FastAPI routes; leads only) and webhook
+  signatures (Stripe, GitHub and Slack receivers in those routes)".
+
+### Changed
+
+- **The AI inventory binds an endpoint to the client that uses it.** The first
+  `base_url` in a file was recorded against every model call in it. The endpoint
+  now comes from the construction of the client the call is made on, and is
+  omitted when that cannot be established.
+- **`nox agent-graph` names MCP servers.** Each configured server was a box
+  called `mcp_client` with a bare `*`. It now shows the server name, its
+  transport (stdio or remote), and the capabilities its launch configuration
+  shows (a shell interpreter, a filesystem or fetch server, a remote URL).
+- **MCP tool annotations are complete.** Every tool declares `readOnlyHint` and
+  `openWorldHint`; `baseline_add` and `baseline_add_many` are additive and
+  idempotent, `plugin_install` is destructive and open-world. `docs/usage.md`
+  no longer says every tool is read-only.
+- **The assessment headline counts what needs attention.** "23 issues need
+  attention" counted a privileged container and a missing `LABEL maintainer`
+  alike. An issue needs attention when a finding in it is critical or high
+  severity (the line `nox ci-gate` draws) or medium severity with high
+  confidence; everything else is a lower-priority observation, shown as its own
+  line ("Plus 16 lower-priority observations (24 findings)") and listed under
+  `--verbose`. Nothing leaves `findings.json` or SARIF. `nox fix plan` carries
+  the same count and a `needs_attention` flag per item.
+- **`nox fix plan` says what is missing.** Fifteen of nineteen "needs
+  information" items shared one sentence. Each now names the specific
+  information (the CPU and memory limits, the probe endpoint, the maintainer
+  contact, the image tag to pin, the signing secret...) and how to supply it,
+  by rule, then by rule family. Dependencies say whether there is no fixed
+  version, the ecosystem is one `nox fix` does not drive, or the fixed version
+  could not be shown to be newer.
+
+- A default scan that looked dependencies up now prints one `[network]` line: how
+  many dependencies (ecosystem, name, version) were sent to the intelligence
+  service and the OSV reference, that no source or paths were, and how to opt out
+  (`scan.intelligence.disabled`, `--offline`).
+
+### Fixed
+
+- **A baseline written before duplicate advisory ids were merged still accepts
+  the merged finding.** When one vulnerability arrived as two records (a Go
+  advisory and its GitHub advisory) they used to be two findings, so a baseline
+  could hold an entry for either; now the pair is one finding, and an entry for
+  the one that was folded away no longer matched, which would have turned CI red
+  for an unchanged dependency. The merged finding now also answers to the
+  fingerprint each absorbed record's finding had (exactly the old message, not a
+  guess from ids), so a different advisory or another version of the package
+  still does not match. When it matches that way the finding carries
+  `baseline_match: alias_fingerprint` and `baseline_entry`, and `baseline
+  update` no longer prunes the entry that is doing the matching. VEX already
+  matches by vuln id and aliases, and `nox:ignore` is by rule on a line, so
+  neither changed.
+
+
+- **Python SQL injection through `sqlite3.connect(...).execute(...)` was missed.**
+  The catalog names Python's SQL sinks by receiver (`cursor.execute`,
+  `connection.execute`); `sqlite3.connect("x.db").cursor().execute(q)` matched and
+  `sqlite3.connect("x.db").execute(q)`, which has no local to bind, did not,
+  whatever the string was built with (`%`, `+`, an f-string). The inline connection
+  is now a connection.
+- `nox model` no longer attaches a webhook or missing-authentication finding to
+  a model or data store that happens to share the route's file, and counts an
+  authentication lead once, not twice.
+- Flask converters (`<int:id>`, `<path:p>`, `<uuid:u>`, `<int(min=1):id>`) were
+  reported as a miss against the built binary; they were not (measured, and now
+  pinned by a test for every converter form).
+- **MCP-015 (rug-pull detection) no longer keeps its pin in hidden machine
+  state.** The pin lived in `~/.nox/cache/mcp-pins`, was written by the scan
+  itself, and was overwritten when it reported a change: after editing a server's
+  args, three scans gave 1, 0, 0 hits, and a fresh CI runner (no `~/.nox`) could
+  never report anything. The pin is now `.nox/mcp-pins.json`, a reviewable file
+  you commit (like `.nox/baseline.json`), written only by the new
+  `nox mcp pin`. A scan reads it, reports a changed server (high) or one that was
+  never pinned (medium) on every run until you re-pin, and never edits it. With
+  MCP servers but no pin file the scan reports an MCP degradation saying MCP-015
+  cannot run, instead of staying silent. The old `~/.nox/cache/mcp-pins` cache is
+  ignored (and named once in that degradation if it exists). Same project, same
+  output.
+- **The `nox install-ci` workflow no longer loses a disclosure when the Actions
+  cache is evicted.** The issue step ran only when a previous run was restored,
+  so after the cache expired (seven days unused) the next run counted as a first
+  run, reported nothing, and a new advisory was swallowed. The step now reports
+  every current advisory that no existing issue, open or closed, already lists
+  (each issue carries a hidden `nox-advisory` marker per advisory), so a missing
+  cache costs a repeat of nothing and a miss of nothing. With no previous run
+  nothing is still acted on (no pull request). The step's shell is now executed
+  by tests against the real `nox advisories`; it has not been run on GitHub.
+- **`ai.inventory.json` and `nox model` attributed the wrong credential to a
+  model.** The credential was the first `*_KEY`/`*_SECRET`/`*_TOKEN` environment
+  variable anywhere in the file, truncated: `gpt-4o` showed `STRIPE_SECRET` while
+  the client was built from `OPENAI_API_KEY`. It now follows the client the call
+  is made on to its constructor (`apiKey: process.env.X`, `api_key=os.environ["X"]`,
+  `option.WithAPIKey(os.Getenv("X"))`, or one assignment away) and is omitted
+  when that cannot be established (client built by a helper, two clients with
+  different keys, an SDK reading its default variable implicitly).
+- **`nox fix` no longer runs the install scripts of the packages it upgrades.**
+  It ran plain `npm install pkg@version`, which executes the new version's
+  preinstall, install and postinstall scripts: arbitrary code from a version
+  nox had just chosen, in a tool that promises never to execute untrusted code.
+  npm, pnpm, yarn (classic and Berry, the latter through
+  `YARN_ENABLE_SCRIPTS=false`) and bun now run with scripts off. The other
+  managers were audited the same way: pip installs wheels only
+  (`--only-binary :all:`, since building a source distribution runs setup code),
+  bundler runs `bundle lock --update --conservative` instead of `bundle update`
+  (which compiled native extensions), composer runs with `--no-scripts
+  --no-plugins`, and `dotnet add package` runs with `--no-restore`. Go and Cargo
+  only resolve and are unchanged. `nox fix` now prints which steps were skipped
+  and what to run after reviewing the packages.
+- **`nox fix` keeps the version specifier the project wrote.** An exact pin
+  (`"lodash": "4.17.15"`) was rewritten to a caret range (`^4.18.0`), widening
+  what any later install may resolve. Exact stays exact, caret stays caret and
+  tilde stays tilde, for npm and yarn (`--save-exact`, `--save-prefix`,
+  `--exact`/`--tilde`/`--caret`); pnpm and bun already keep the style.
+- **`nox advisories` no longer permits auto-merge on linkage alone.** The default
+  remediate gate was `min_relevance: symbol_used`, which for every ecosystem
+  except Go is as far as the applicability ladder gets: the package is linked,
+  nothing shows it is called. Severity alone therefore decided "Auto-merge
+  permitted: true". The default is now `call_reachable`; a repository that wants
+  to merge on linkage sets `advisories.remediate.min_relevance: symbol_used`
+  itself.
+- **`nox advisories` says relevance in plain words.** Text and markdown output
+  printed `relevance=symbol_used` beside "whether anything calls it was not
+  established". They now print "linked, not shown to be called", "a call path
+  reaches it", "not determined" or "shown not to affect this build", and the
+  merge-gate reason names the setting that governs it. JSON and `.nox.yaml` keep
+  the identifiers.
+- **The advisories pull request and `nox fix plan` agree on the target
+  version.** The pull request was planned over the advisories that cleared the
+  gates only, so a gate that dropped one could lower the target (lodash 4.17.21
+  against `fix plan`'s 4.18.0). It is now planned over every active advisory,
+  the way `nox fix` does, and the findings handed to `nox fix` include all the
+  advisories that move fixes.
+- **An incomplete NOX Intelligence answer is no longer read as "no
+  vulnerabilities".** When the service marks a package's answer `incomplete`
+  or `unsupported` (`nox_coverage`, nox-intelligence v0.19.1), the scan records a
+  blocking `intel_incomplete` degradation naming the packages, sets
+  `meta.advisory_lookup` to `incomplete`, and `nox diff` does not compare that
+  scan's advisories against a full one. Records the reference restores for a
+  package the service reported as partial are not counted as `intel_suppression`.
+  A plain OSV.dev response carries no coverage statement and raises nothing.
+  Requires nox-core v0.5.0.
+
+## [1.49.0] - 2026-10-25
+
+The first-run experience and continuous understanding from the product vision
+(docs/vision.md, sections 15 and 17). `nox scan .` gives an assessment in plain
+language; `nox fix plan`/`apply`/`verify` prepare, apply and re-check fixes;
+`nox install-ci` and `nox advisories` handle newly disclosed advisories by a
+configured policy; `nox compliance iso27001` and `nox model` produce evidence and
+a threat model from what the scan already knows. `nox scan --previous` and
+`nox diff` now say what changed: new and resolved findings, new authorization
+leads, capabilities an AI agent gained, and infrastructure settings that got
+weaker. Breaking: `nox diff --json` is an object, and `nox diff` exits 1 when
+something is new or worse.
+
+### Added
+
+- **A change to infrastructure now names the security assumption it
+  invalidated.** `findings.json` records the deployment resources a scan read
+  from Terraform, CloudFormation, Kubernetes, Compose and Dockerfiles under a new
+  `infrastructure` key, with the security-relevant properties of each, hardened
+  resources included (an S3 bucket's public access block, ACL and default
+  encryption; an RDS instance's `publicly_accessible` and `storage_encrypted`; a
+  security group open to the internet; a workload's privileged, hostNetwork,
+  runAsNonRoot, runAsUser, capabilities, seccomp, read-only root filesystem and
+  image pinning; an Ingress's TLS coverage and ssl-redirect; where each
+  credential-named environment variable gets its value; a Dockerfile's final
+  USER and base image pin). A resource is identified by kind, namespace, name and
+  file, never a line. `nox scan --previous`, `nox diff` and the MCP `scan` and
+  `diff` tools gain an "Infrastructure assumptions weakened/strengthened"
+  section (structured: `change.infrastructure`) listing, per resource, the
+  properties that moved: `aws_s3_bucket.uploads (deploy/tf/main.tf): public
+  access block - was all true, now all false`. The findings list is unchanged;
+  the section is a hint like authorization leads and is not counted as a
+  regression. An earlier `findings.json` without the key cannot be compared, and
+  the comparison says so. The inventory is context, not findings: it reaches no
+  gate, exit code, SARIF output or fingerprint, and the key is absent when no
+  resource was read.
+- **`nox model` builds deployment elements from that inventory, not from
+  findings alone** (schema `1.1.0`). A hardened bucket, database, ingress,
+  workload or security group is an element, so `nox model --previous` after the
+  same resource is weakened reports its properties moving and its STRIDE cells
+  changing instead of a "new data store", "new ingress" or "new network rule"
+  that existed all along. A resource added in a new file is still new. Elements
+  carry `properties`; the delta carries `properties_changed`. A previous model
+  that predates the inventory is not compared for deployment elements, with a
+  caveat.
+- **`nox model`, and an MCP tool `threat_model`: a threat model from scan
+  evidence.** Reads the scan outputs you already have (`findings.json`, an SBOM,
+  `ai.inventory.json`) and writes `model.md` and `model.json`: the elements nox
+  can evidence (Express routes with the authentication middleware visible on
+  each, AI agents and their tool capabilities, MCP servers and their launch
+  commands, models, data stores and external services from the dependency set,
+  the ingress, workload, bucket, database and open-network-rule surface from
+  infrastructure findings), the data flows and trust boundaries between them
+  ("model output -> shell", "untrusted input -> LLM prompt", "internet -> exposed
+  deployment resource"), a STRIDE table citing the evidence per element and
+  category, questions for the team derived from the gaps, a Mermaid data-flow
+  diagram, and an explicit list of what nox cannot see. A cell with no evidence
+  says "nox has no evidence either way"; nothing is called secure, handled or
+  mitigated, and a test bans those words from every rendering. It never scans and
+  reads no clock: the same inputs give byte-identical output, with the SHA-256 of
+  each input recorded. `nox model --previous model.json` reports new and removed
+  elements, flows and trust boundaries and the STRIDE cells whose evidence
+  changed, and says when a comparison cannot be made (an input missing from one
+  side) instead of reading as "nothing changed". One implementation,
+  `core/threatmodel`; see `docs/threat-model.md`.
+- **`findings.json` records the routes the authorization reader found**, under a
+  new `routes` key (method, path, `file:line`, and the authentication and
+  authorization middleware visible on the route). They are context for a system
+  model, not findings: they reach no gate, exit code, SARIF output or fingerprint,
+  and the key is absent when no Express routes were read.
+
+- **Possible IDOR leads (AUTHZ-001) now cover Fastify, Flask and FastAPI.** The
+  Express reader's proposition (an authenticated route loads a record by a
+  caller-supplied id and nothing visible relates the record to the caller) is
+  now applied to the same shape in three more frameworks, with the same lead,
+  the same counterexample classes and the same evidence standard. Fastify:
+  `fastify.get(path, { preHandler }, handler)`, `fastify.route({ method, url,
+  onRequest, handler })`, plugins mounted with `register(plugin, { prefix })`,
+  `addHook('onRequest', auth)`, `request.jwtVerify()`, and TypeScript
+  (`get<{ Params }>`, `request.params as { id: string }`). Flask: `@app.route`
+  and `@app.get`, Blueprints with `url_prefix` (nested, and overridden at
+  `register_blueprint`), `<int:id>` converters, `@login_required` /
+  `@jwt_required()` and `before_request` gates. FastAPI: `@app.get`,
+  `APIRouter(prefix=)` composed with `include_router(prefix=)` (a prefix held
+  in one settings constant is resolved), path and query parameters as function
+  arguments, and `Depends(get_current_user)` directly, through an `Annotated`
+  alias or as router-level `dependencies`, read as authentication and never as
+  ownership. Leads show the route as served (`GET /api/v1/items/{id}`). A
+  lookup scoped to the caller (`filter_by(id=i, user_id=current_user.id)`,
+  `select(...).where(... owner_id == user.id)`, SQL with an owner column), a
+  post-load comparison or 403/404 against the principal, a policy call, a role
+  read, or an authorization dependency or decorator keeps the route quiet.
+  "Checks completed" now reads "authorization (Express, Fastify, Flask, FastAPI
+  routes; leads only)". Still not read: NestJS, Next.js, Django,
+  Flask class-based views and Flask-RESTful, OpenAPI-first apps (connexion),
+  `@fastify/autoload` directory prefixes and `autohooks`, Starlette, Sanic,
+  Quart and aiohttp. Leads flow into `findings.json`, `scan --previous`,
+  `nox diff` and MCP exactly as the Express ones do.
+- **Nox now says what changed, not only what is wrong.** `nox scan --previous
+  <findings.json>` leads the assessment with a "Since the previous run:" section
+  (new issues, what is no longer present, severity regressions, agents that
+  gained or lost a tool or capability, new AI components, new authorization
+  leads) before the usual assessment; with no `--previous` the output is
+  byte-for-byte what it was. `nox diff --base X --head Y` is now a real delta: it
+  scans the merge-base and the head from the object database (nothing is checked
+  out or touched) and compares them, so a one-line lockfile change lists only the
+  advisories it introduced, not the forty already there. The MCP `scan` tool
+  takes `previous` (or compares with the last scan of the same path in the
+  session) and the `scan` and `diff` tools return the same structured `change`.
+  One implementation, `core/change`, with documented identity: a dependency
+  advisory is manifest + package + advisory id or alias (an upgrade that leaves a
+  package still affected is neither resolved nor new), other findings are the
+  line-independent fingerprint (a line move is neither), a lead is route + file,
+  an agent capability is agent + server + tool + capability. A comparison that
+  cannot be made (an earlier run that did not record leads or the AI inventory,
+  an incomplete or differently scoped run) is said so, never reported as "nothing
+  changed". `findings.json` records the authorization leads under their own
+  `leads` and `lead_checks` keys, never among the findings.
+
+- **`nox install-ci` pull requests now run your required checks.** A pull
+  request opened with `GITHUB_TOKEN` triggers no workflows, so a remediation PR's
+  checks never ran and its auto-merge never completed. The generated workflow
+  now opens it as a GitHub App (secrets `NOX_APP_ID`, `NOX_APP_PRIVATE_KEY`, a
+  short-lived token from `actions/create-github-app-token` scoped to contents,
+  pull-requests and issues write), else as the `NOX_TOKEN` fine-grained token,
+  else with `GITHUB_TOKEN`, which warns that CI will not run and does not enable
+  auto-merge. Setup is in `docs/advisory-policy.md`.
+- **A newly disclosed advisory gets exactly the response you configured.**
+  `nox install-ci` writes one workflow that scans pull requests and, on a daily
+  schedule, scans the merged code and works out which dependency advisories are
+  new since the previous scheduled run. `nox advisories` decides what to do
+  about each, from the `.nox.yaml` `advisories` block: `report` (the default:
+  job summary, SARIF, an issue), `prepare` (also a remediation pull request
+  carrying only the new advisories' upgrades, through `actions/remediate`) or
+  `remediate` (also permits `gh pr merge --auto`, only when every advisory in
+  that pull request passes the stricter gate and the package move is within
+  `max_bump`; GitHub's required checks decide whether it merges, and nothing
+  bypasses them). Gates are `min_severity` and `min_relevance`
+  (`undetermined`, `symbol_used`, `call_reachable`). Undetermined relevance is
+  treated as possibly affecting the application and the reason says so; only a
+  refuted `not_impacting` advisory is held at report. A waived or baselined
+  advisory is never new; with no previous run, or a scan whose lookup failed,
+  nothing is acted on and `nox advisories` says so. The decision is a pure
+  function in `core/advisory`. `actions/remediate` gains a `findings-file`
+  input, and `remediate.sh` no longer fails on bash 3.2 when no extra arguments
+  are set. See `docs/advisory-policy.md`.
+
+- **`nox compliance iso27001`, and an MCP tool `compliance_iso27001`.** Reads
+  the outputs of a scan already run (`findings.json`, an SBOM,
+  `ai.inventory.json`) and writes `iso27001.md` for a reviewer and
+  `iso27001.json` for tooling: for 16 ISO/IEC 27001:2022 Annex A controls, what
+  the scan shows with counts, rule IDs, source file and SHA-256, the gaps in
+  this run, what that evidence can never show, and a 25-item checklist of the
+  organizational evidence a repository cannot hold (risk assessment, ISMS
+  scope, access reviews, incident records, supplier agreements). It never
+  states that a control is met: statuses describe the evidence
+  (`supporting_evidence`, `open_issues`, `limited_evidence`, `not_evidenced`),
+  and a test rejects any status or word that claims more. An empty result only
+  counts when the outputs show something was there to check, a scan without a
+  recorded advisory lookup is not read as "no known vulnerabilities", and
+  waived findings keep a control at limited. Deterministic, offline, no scan;
+  the same outputs give the same bytes. See `docs/compliance-iso27001.md`.
+
+- **`nox fix plan | apply | verify`: "can you fix these?" answered, and checked.**
+  `plan` takes every issue the assessment listed (same numbering) and says
+  which are safe to apply, which need review and why (a major upgrade, a
+  settings change that alters a deployed system), and which nox cannot fix and
+  exactly what each needs (a published fix, a decision about a prompt
+  boundary, a two-account test). `apply` makes the safe set (`--include-major`
+  and `--include-review` widen it), then re-runs the checks that produced the
+  targeted findings and reports each change as verified fixed, still present,
+  new finding introduced, could not verify, or not applied. "Fixed" is claimed
+  only when the check ran to completion and no longer reports the finding; an
+  upgrade to a release the advisory still affects is reported as still
+  present even though every fingerprint changed, and an offline run reports
+  dependency changes as not verified rather than fixed. `verify` re-runs the
+  checks after a change made by hand. `--format json` for CI. Built in
+  `core/remediate` on `core/assess` and `core/fix`; the MCP `fix_plan` tool
+  returns the same plan (`plan`, `text`) and the LSP attaches each finding's
+  entry to its diagnostic. MCP stays read-only: applying is a command a person
+  runs. The bare `nox fix` flags, and the remediation workflow that uses them,
+  are unchanged. The assessment's next step now points at `nox fix plan`.
+- **`nox scan` ends with an assessment instead of counts.** Issues are grouped
+  by the action that resolves them: one line per upgrade the `nox fix` planner
+  would make ("Upgrade axios 1.7.4 -> 1.20.0: fixes 33 known
+  vulnerabilities"), one per vulnerable package with no fix, one per rule for
+  code findings with file:line, ranked by severity times confidence, top five
+  shown (`--verbose` lists all). It then states which checks ran and which did
+  not (and the one action that enables each), what the scan could not settle
+  (reachability of dependency vulnerabilities, exploitability), the runtime
+  tests `nox attack plan` would build, and the next commands. Built in
+  `core/assess` from the shared `core/fix` planner and `core/hypothesize`, so
+  other adapters can render the same account. The `[tip]` lines are replaced;
+  the advisory "installed plugins not listed in plugins.required" `[degraded]`
+  line moves behind `--verbose` when the assessment is shown. `[results]`,
+  `[families]` and blocking `[degraded]` lines are unchanged, and so are
+  findings.json, SARIF and the SBOMs: this is presentation only.
+
+- **Possible IDOR leads (AUTHZ-001) in the assessment.** nox now reads
+  Express and koa-router JavaScript/TypeScript for routes that require an
+  authenticated caller, look up a record by a caller-supplied id (route
+  parameter, query or body field), and show nothing that relates the record
+  to the caller (OWASP API1:2023, CWE-639). By default each such route is a
+  **lead, not a finding**: the assessment lists it under "Additional
+  verification recommended" ("Authorization: GET /api/invoices/:id
+  (src/routes/invoices.js:14) loads a record by a caller-supplied id with no
+  visible ownership check. Test it with two user accounts..."), top five with
+  the rest under `--verbose`, and "Checks completed" says "authorization
+  (Express routes; leads only)" rather than claiming the check. Leads never
+  reach findings.json, SARIF (results or rule catalogue), the exit code,
+  gates or fingerprints: default-mode outputs are byte-identical to before.
+  They are carried on `ScanResult.Leads` for every adapter.
+  `scan.rules.enable: [AUTHZ-001]` makes each one a medium/low finding instead,
+  with no duplicate lead. Routes, router and prefix `use()` middleware, mounts
+  across files, and handlers in other files are resolved; thirteen
+  counterexample classes clear a route (principal-scoped lookups, owner
+  fields, request-scoped clients, middleware context passed to the data layer,
+  comparisons with the principal, policy calls, 403s, role reads,
+  authorization or loader middleware, `router.param()`, row-level security).
+  Measured on 22 pinned open-source Express apps, every candidate read:
+  deliberately vulnerable apps 18 TP / 8 FP, recall 10 of 14 documented BOLA
+  instances; ordinary apps 12 object-level TP plus 5 missing admin checks and
+  0 FP, from only three apps. The FPs are all resources shared by design,
+  which source cannot tell apart, hence leads by default.
+
+### Changed
+
+- **`nox diff` reports a delta, and its `--json` shape changed.** It used to
+  print every finding in the files that differ between two refs; it now prints
+  what the head introduced, what it resolved and what got worse (`core/change`).
+  `--json` is an object (`findings`: the new findings in the old shape,
+  `changed_files`, `base`, `head`, `change`: the full delta) instead of a bare
+  array. Exit 1 now means the head made findings worse (a new finding or a raised
+  severity); it no longer means "a changed file has a finding". New flags
+  `--offline` and `--no-osv`. Authorization leads are recorded in `findings.json`
+  under `leads` and `lead_checks`; the `findings` array and SARIF are unchanged.
+- **The assessment describes what was not checked in capabilities, not plugins.**
+  `nox scan .` on an ordinary app used to say "Optional plugins are installed
+  but not enabled" and send the reader to pick from fifteen names. It now says
+  what would have been checked ("API abuse patterns (rate limiting, error detail)", "exposed
+  endpoints and admin or debug routes") and groups live testing (probing a
+  running app, inspecting a cluster, adversarial prompts) into one line that
+  points at `nox attack plan`. A plugin whose check core already performs
+  (container configuration, data-flow analysis), one measured to hurt
+  (reachability, pattern triage, pattern threat modelling) and one that only
+  annotates are no longer offered as gaps. Nothing is auto-enabled: all 15
+  installed plugins were run against six real trees and none earns it
+  (`docs/plugin-defaults.md`), and enabling by what happens to be installed
+  would make findings depend on the machine. The degradation is unchanged:
+  `findings.json` and `--verbose` still list every plugin that did not run,
+  and `--fail-on-degraded` behaves as before. Plugin knowledge is in
+  `core/plugincap`. Also: the `generated_report` degradation is worded as
+  "Reports nox wrote itself were not scanned" instead of leaking its kind.
+
+### Fixed
+
+- **IAC-504 reports one finding per resource, not one per switch.** A
+  `aws_s3_bucket_public_access_block` with all four flags `false` produced four
+  identical findings ("in 4 places"). It now produces one, which keeps the rule
+  ID, spans the flags, and names the ones that are off and the resource
+  (`aws_s3_bucket_public_access_block.invoices`; a module call or a tfvars file
+  is grouped by its block or file). Its identity follows the resource, so fixing
+  one switch or moving the block does not turn it into a different finding.
+  The rule was added in this release cycle, so no baseline, VEX statement or
+  alias needs an entry. The findings it folds away are recorded as refuted in
+  the stage accounting, with the reason.
+
+- **MCP `threat_model` takes a `previous` model.** The tool's input schema was
+  `{}`, so an agent could not ask what changed since an earlier model, though
+  `nox model --previous` could. It now accepts an optional `previous` (the
+  `model.json` of an earlier run), confined to the allowed workspace paths exactly
+  as the `scan` tool's `previous` is, and returns the same `changes` block. Both
+  surfaces call `threatmodel.BuildAgainst`, so they cannot compare differently. A
+  file that is missing or is not a nox threat model is an error, never an empty
+  comparison.
+
+- **`findings.json` `routes` now lists Flask and FastAPI routes, with their
+  authentication.** The route inventory held only JavaScript routes, so `nox
+  model` showed Python entry points only through authorization leads, with
+  "authentication middleware: not recorded". Every Flask and FastAPI route is
+  now listed, and `@login_required`, `@jwt_required()`, `Depends(get_current_user)`
+  (as a parameter or a `dependencies=[...]` entry) and router-level
+  `dependencies` on an `APIRouter` or `include_router` are recorded as the
+  route's `authn`, using the same classification the AUTHZ-001 lead logic
+  applies; role and permission dependencies are recorded as `authz`, never as
+  authentication. The threat model's limits no longer say Python and Fastify
+  routes are not enumerated.
+
+- **`nox compliance iso27001`: a literal credential in a manifest now opens
+  A.5.17.** A literal database password in a Kubernetes `env` block (IAC-502) or
+  a Compose list entry (IAC-503) left "Authentication information" at "checks
+  ran, nothing open", because the control read only secret scanning (`SEC-*`).
+  A.5.17 now also reads every rule that finds a credential value written into
+  configuration (IAC-022/047/130/190-192/221-223/225/235/236/254/271/343/351/
+  502/503, MCP-004, AI-042), and a test fails when a new CWE-798 rule is neither
+  mapped nor excluded with a reason. The rules added since the mapping was
+  written are placed too: IAC-504 on A.8.12, MCP-025 on A.5.21, AUTHZ-001 and
+  AI-AGENT-009 on A.8.28. The additions are silent when they find nothing, so a
+  repository without those files is not downgraded. Authorization leads are
+  named on A.8.28 as unconfirmed hints and still never counted as findings.
+
+- **`nox fix plan` no longer calls a transitive upgrade "safe to apply" when a
+  parent pins it.** body-parser, path-to-regexp and qs under express 4.21.2 were
+  listed under "Safe to apply, nothing here needs a decision", and `nox fix
+  apply` then could not move them ("a parent's version range excludes the fix").
+  The plan now reads the project's `package-lock.json`: each installed copy below
+  the fixed version is checked against the declared range of every package that
+  resolves to it (and against an existing `overrides` entry). If any range
+  excludes the fix, or the lockfile is one nox does not read (pnpm, yarn, bun) or
+  absent, the item is "needs review" (new kind `held_upgrade`) and names the
+  holding parents and the exact entry to add: `"overrides"` for npm and bun,
+  `"resolutions"` for yarn, `"pnpm": { "overrides" }` for pnpm. `nox fix apply`
+  never selects a held item, even with `--include-review`.
+
+- **`--previous` no longer lists every dependency advisory as new when one scan
+  was offline.** An offline scan reports no advisories because it did not look,
+  and comparing it with an online scan (`nox scan --previous <offline
+  findings.json>`, or the MCP `scan` tool) reported all of the online scan's
+  pre-existing advisories as new, and, the other way round, as resolved. A scan
+  that did not look its dependencies up (`--offline`, `--no-osv`, `osv.disabled`,
+  no dependency scope, or a failed OSV lookup) now has its advisories left out of
+  the comparison on both sides, with a caveat in either direction ("the previous
+  scan did not look up advisories (it was offline)..."). `--no-osv` previously
+  left no trace in `findings.json`; it now records `meta.advisory_lookup:
+  "skipped"`. `nox diff` scans both trees with the same flags and was not
+  affected in practice, but shares the guard.
+
+- **`nox fix verify` blamed the user for the dependency directory the fix
+  created.** `nox fix apply` runs `npm`, which creates `node_modules/`; the next
+  scan then read `node_modules/combined-stream/yarn.lock` (a lockfile that
+  package publishes for its own development) as this project's manifest and
+  reported "Also new ... VULN-002 at node_modules/combined-stream/yarn.lock:1".
+  That happens on any plain `nox scan` of a tree whose `node_modules/` is not
+  gitignored (measured: 3 packages in the inventory from nested lockfiles, with
+  the project's own lockfile already naming every installed package). A
+  lockfile inside `node_modules/` is no longer a project manifest, in the
+  dependency scan, SBOM and licence pass alike; the directory is still scanned
+  for secrets and code. Separately, `fix verify` now lists any new finding
+  under `node_modules`, `.venv` or `site-packages` apart from the rest, labelled
+  as inside a directory a tool generated and not attributed to the change
+  (`new_in_generated_dirs` in JSON).
+
+- **The project-scoped `.mcp.json` was inventoried as one opaque component.**
+  The AI inventory recognised an MCP configuration only when the file was named
+  exactly `mcp.json`, so the `.mcp.json` that Claude Code reads from the
+  repository root produced a single generic component, no servers and no tool
+  matrix, and everything built on the inventory (the AI-BOM, `nox attack plan`,
+  `nox model`) saw none of its servers. It is now read like `mcp.json` (and
+  `*.mcp.json`), and each server records its launch command and arguments (never
+  its `env` block).
+- **Configurations that got worse used to scan the same as, or better than, the
+  ones before them.** Measured on a hardened application and the same
+  application after a "just for debugging" commit: seven insecure changes
+  produced no finding, and two hardened settings produced noise.
+  - *MCP-002* matched home-directory prefixes only, so a filesystem server
+    rooted at `/` (or `C:\`, `/etc`, `/var`, `/root`, `${HOME}`) scanned clean
+    while `/Users/alice/project` was critical. The root must be a whole `args`
+    element, so `a/b` and URLs do not match.
+  - *MCP-003* now also reads the `env` block: `ALLOW_ALL=1`, `DANGEROUSLY_*`,
+    `UNSAFE_*`, `SKIP_PERMISSIONS` and the like, when switched on (`"0"` is the
+    safe spelling). A server merely named `shell` is still not evidence.
+  - *MCP-025* (new): an MCP server launched with `npx`/`pnpx`/`bunx`/`uvx`/`pipx`
+    and no exact package version (none, `@latest`, a range) fetches whatever the
+    registry serves at every launch. MCP-015 cannot see this: the definition's
+    hash does not change when the package behind it does.
+  - *IAC-502* (new): a credential-named environment variable (`PASSWORD`,
+    `SECRET`, `TOKEN`, `API_KEY`...) with a literal `value` in Kubernetes
+    manifests and Helm values, and *IAC-503* (new) for a Compose
+    `- NAME=literal` entry. Moving a Secret out of `valueFrom: secretKeyRef` was
+    invisible because every key-based rule (IAC-225, SEC-080) reads `name:
+    DB_PASSWORD` and `value: ...` as two unrelated scalars. Paths
+    (`DB_PASSWORD_FILE`), URLs, header names, identifiers, templates
+    (`{{ }}`, `${}`, `$()`), empty values and placeholders do not fire.
+  - *IAC-504* (new): Terraform `aws_s3_bucket_public_access_block` with any of
+    `block_public_acls`, `block_public_policy`, `ignore_public_acls`,
+    `restrict_public_buckets` set to `false` (IAC-052 is CloudFormation only).
+  - *IAC-302* and *IAC-028* read only `add:` followed by a block list whose FIRST
+    item was dangerous, so `capabilities: {add: [SYS_ADMIN]}` replacing
+    `drop: [ALL]` was silent. Flow-style lists and any list position now match;
+    `drop: [SYS_ADMIN]` and `add: [NET_BIND_SERVICE]` do not.
+  - *AI-AGENT-009* (new) and the `sql_exec` capability in
+    `ai.inventory.json`'s `tool_permission_matrix`: a function-calling tool whose
+    parameter is a SQL statement (`sql`, `sql_query`, ..., or `query` on a tool
+    described as SQL). The statement is the model's output, so a prompt
+    injection chooses it; a tool that takes an id and runs a fixed statement is
+    not flagged. The evidence is the parameter schema, not the tool's name.
+  - *IAC-135* (missing seccomp profile) fired on the container of a pod whose
+    pod-level `securityContext` sets `seccompProfile: RuntimeDefault`, which the
+    container inherits. A refiner now parses the document and drops the finding
+    when the workload's pod-level `securityContext` sets a profile; the rule's
+    firing domain and finding locations are unchanged, so baselines and waivers
+    written against it keep matching.
+  - *IAC-296* ("verify TLS termination") fired on every Ingress, including ones
+    with a `tls:` block. It keeps its ID and now makes a claim that can be
+    checked and that IAC-149 (no `tls:` at all) does not: an Ingress that HAS a
+    tls block serves a `spec.rules[].host` no `spec.tls[].hosts` entry covers
+    (a wildcard covers one label), or has a tls entry with no `secretName` and
+    no cert-manager/controller annotation providing a certificate. It never
+    fires with IAC-149, and a Helm template (`{{ }}`) is not evaluated.
+  - *IAC-144* reported `valueFrom: secretKeyRef`, the documented way to pass one
+    credential and the form IAC-502 tells people to move to. It now reports
+    `envFrom: secretRef`, which hands every key of the Secret to the process.
+
+- **Which duplicate survived dedup depended on analyzer completion order.**
+  `Deduplicate` kept the first finding it met for a fingerprint and position,
+  and the analyzers hand their results over in goroutine completion order, so
+  two findings that tied on that key but differed in severity, confidence,
+  message or metadata could swap between runs. `DeduplicateFlows` and
+  `SortDeterministic` had the same gap (ties were left to input order), and the
+  MCP `baseline_add_many` tool and the assessment's verification list picked
+  "the last finding with this fingerprint" from slice order. All now use one
+  total order over findings (`core/findings/order.go`): the survivor is the
+  minimum under it, and fingerprint lookups take the greatest, which is the
+  finding they already took from a sorted result. Fingerprints, locations and
+  per-rule counts are unchanged; `kubernetes/examples` scans byte-identical
+  before and after.
+- **The slopsquat feed could not be pinned with the key the docs say to
+  make.** `docs/slopsquat-feed.md` tells operators to pin the output of
+  `openssl pkey -pubout`, a PKIX `PUBLIC KEY`. `scan.slop.signature_key_path`
+  rejected it with "unexpected public key length: 44", so
+  `require_signature: true` could only be met with nox's own raw key form. Both
+  forms are now accepted. The feed format, digest, signing and the generator
+  moved to `github.com/nox-hq/nox-core/slopfeed` (v0.4.0), shared with the
+  service that will publish the feed; the CLI keeps only file, bundled and
+  remote loading, and `cmd/slopfeed` is now a thin command line over it with
+  the same flags and output.
+
+- **DATA-012 reported every passport.js application as leaking a passport
+  number.** The pattern was case-insensitive throughout, so its value class
+  `[A-Z0-9]{6,12}` matched any six-letter word: `const passport =
+  require('passport')` was a HIGH finding with `require` as the number. Only
+  the key is case-insensitive now; the value must be upper-case, end at a word
+  boundary and contain a digit (US, UK), or be a nine-character German serial
+  from the vowel-free PassV alphabet. The key must bind the value, directly or
+  as the number field of a passport object, and the JSON key forms that were
+  missed before now fire. DATA-010 (health record id) and DATA-011 (driver's
+  licence) shared the construction and the false positive (`patient_id =
+  request.args...`, `license_number = license.number`) and get the same value
+  check. Measured: DATA-012 6 -> 0 on hackathon-starter and 2 -> 0 on
+  node_passport_login (every drop a `require` line); no change on the other 25
+  corpus repositories; generated real-format values still fire.
+  hackathon-starter joins the rule-diff corpus as the witness.
+- **VULN-002 reported established packages as typosquats.** The ~240
+  hand-picked popular names per ecosystem were both the targets a typosquat
+  imitates and the only exemption, so any established package one edit from a
+  target was flagged: `openai` (openapi), `jws` (ws), `safer-buffer`
+  (safe-buffer), `gaxios`, `enquirer`, `psycopg`, `motor`, `boto` and more.
+  The roles are now split. Targets stay curated; the exemption is a pinned set
+  of established packages (npm: the 17,330 names in `npm-high-impact` 1.13.0,
+  MIT; PyPI: the top 10,000 of `hugovk/top-pypi-packages` 2026.10.1,
+  CC-BY-4.0), embedded and reproduced by
+  `scripts/gen-typosquat-exemptions.py`. The scan stays offline. A
+  known-malicious name (VULN-003) is never exempt. Measured on real lockfiles,
+  VULN-002 went 126 -> 0 on nestjs/nest v10.4.0, 19 -> 1 on npm/cli v10.9.0,
+  34 -> 8 on vercel/ai and 1 -> 0 on anthropic-sdk-python; historical
+  typosquats (`crossenv`, `mongose`, `colourama`, `python3-dateutil`, `djago`,
+  `diango`, `setup-tools`) still fire.
+
+- **`results.sarif` differed between identical scans.** The taint rule
+  catalog kept the first sink a map iteration reached for each rule ID, and
+  TAINT-005 is shared by code_injection and unsafe_deserialization sinks, so
+  its descriptor (description, CWE, tags, helpUri) changed from run to run
+  and was wrong for the other class every time. TAINT-003 (xss and ssti) had
+  the same construction. Each shared ID's descriptor now names every class
+  and CWE it reports (TAINT-005: CWE-94, CWE-95, CWE-134, CWE-502), and the
+  taint catalog's listings are sorted. Rule IDs and fingerprints are
+  unchanged, so no Code Scanning alert moves. `nox explain` classifies a
+  finding by its own CWE before the rule's. With `SOURCE_DATE_EPOCH` set,
+  every report a scan writes is byte-identical across runs of one tree.
+
+- **pnpm lockfiles produced phantom packages.** The line-based reader took
+  any indented key containing `@` or `/` for a package, so every
+  `peerDependenciesMeta` child became one: `'@angular/core':` turned into
+  `@angular` at version `core`, in the inventory, both SBOMs, OSV and intel
+  lookups, and the typosquat check. On vercel/ai (6c6c221) that was 353
+  phantom components and 8 bogus VULN-002 findings. `pnpm-lock.yaml` is now
+  decoded as YAML and only `packages:` keys are read, in the 5.x, 6.0 and 9.0
+  layouts and in two-document lockfiles. The same change recovers real
+  packages the old reader mangled: names containing `_` (`string_decoder`,
+  `@types/babel__core`), v5 hashed peer suffixes (`vite@4.0.4_<hash>`), and
+  git/tarball dependencies, whose version is in a `version:` field rather
+  than the key. Package counts now equal the lockfile's own on vercel/ai,
+  vuejs/core and trpc. VULN-001 is unchanged except on the v5.4 lockfile
+  (vuejs/core v3.2.47), where vite@4.0.4's 23 advisories had been reported
+  three times, once per peer-suffixed version string; they are reported once.
+
+- **A report nox wrote was scanned as source wherever it was kept.** Only the
+  current `--output` paths were excluded, so a renamed output directory, a
+  downloaded CI artifact or a committed `results.sarif` fed nox's own rule
+  descriptions back in: `cp -R out old-report` took a 44-finding scan to 48
+  (AI-009 and AI-038 matching the SARIF rule catalog), and an `--evidence-out`
+  file added 37 DATA-001 findings per copy. Discovery now recognises nox's
+  SARIF, findings/evidence JSON, CycloneDX, SPDX, attack-plan and HTML reports
+  by content (a prefix sniff for the producer marker, confirmed by decoding
+  the field it belongs in), under any name and in any directory, for the CLI,
+  MCP and LSP alike. Each skipped file is named in an advisory
+  `generated_report` degradation. Other tools' SARIF and SBOMs are still
+  scanned: a gitleaks or semgrep SARIF carries the credential it matched.
+
+- **A detected LLM model was invisible.** An app calling
+  `openai.chat.completions.create({model: "gpt-4o"})`, in JavaScript or
+  Python, printed `0 AI components` and wrote no `ai.inventory.json`, even with
+  `--format all`. nox detected the model, but every output counted only
+  inventory components and models are kept separately. The console, the MCP
+  `scan` and `summary` tools, the dashboard and the AI-assist context now share one
+  count, components plus distinct models:
+  `1 AI component (1 model: gpt-4o via openai)`. `sbom.cdx.json` (CLI and MCP)
+  lists the same models as CycloneDX `machine-learning-model` components.
+
+- **`ai.inventory.json` is written on every scan.** It has a new `checks` field
+  (schema 2.1.0) that names the AI checks that ran. An empty inventory with
+  checks means nox found nothing; one without checks means the AI scope did not
+  run.
+
+- **No phantom models.** With models now visible, two detector gaps would have
+  shown up in the AI-BOM. A model call quoted in a comment was inventoried
+  (nox's own source listed a model named `gpt-...`), and in a file where
+  "openai" appears only in a comment, an ORM's `model: "Invoice"` counted as an
+  ML model. Model extractors now skip comments. In ordinary source, a
+  `model: "X"` assignment counts only when X is a recognised model family. SDK
+  call sites and `from_pretrained` keep their own evidence.
+## [1.48.2] - 2026-10-24
+
+Fixes from the concrete-witness research (#814): secret rules now report what
+their format establishes, and a JWT in any RFC-valid layout has an owner.
+`nox fix --actions` no longer deletes the waiver on a pin it bumps.
+
+### Fixed
+
+- **`nox fix --actions` deleted waivers** (#836). Rewriting a pin replaced
+  its whole trailing comment with `# <tag>`, so a `# nox:ignore ...` after the
+  version was lost on every bump; remediation PR #835 lost three. The version
+  was also read from anywhere in the comment: `@v4 # nox:ignore IAC-001`
+  tracked "v1", and `# pinned for go1.26` held back a same-major upgrade as a
+  major jump. Only the comment's first word is the version now, and the rest
+  is kept.
+- **SEC-077 (age identity)** reports the spec's post-quantum
+  `AGE-SECRET-KEY-PQ-` identity and verifies the Bech32 checksum (#816).
+- **SEC-335 (Sourcegraph)** no longer reports any 40-hex value near the word
+  "sourcegraph"; a commit SHA or ETag was a high finding (#815).
+- **SEC-519 and the eleven sibling ARN rules** (SEC-414, 465, 466, 511-518)
+  require the service's full ARN, in every AWS partition. Their keyword was a
+  Terraform resource stem no ARN contains (#817, #822).
+- **SEC-251 (JWT)** no longer reports an unsigned (`alg: none`) or truncated
+  token as a credential (#820).
+- **SEC-371, the JWT owner,** runs wherever a JWT is. Its file keyword was
+  `jwt`, which a token does not contain (#819).
+- **A generic entropy finding** no longer wins ownership of a provider token
+  in dedup (#818).
+- **Trailing boundary groups** are context, not part of the reported span. In
+  135 rules the span included the consumed delimiter, so dedup missed overlaps
+  and one token was reported several times (#821).
+- **Supabase keys:** an anon key is reported as public by design, a
+  service_role key as critical (#825).
+- **SEC-952** reports a signed JWT whose JSON is RFC-valid but not compact
+  (spaced, pretty-printed), which no JWT rule matched (#826).
+- **SLOP-001** resolves `import z3` to the `z3-solver` distribution (#824).
+
+### Performance
+
+- **A file's secrets scan cost is linear in its findings** (#827). It grew
+  with findings x file size and findings x findings, so one crafted file in an
+  untrusted repository could stall a CI scan.
+
+On the release corpus (rule-diff against v1.48.1, 25 repositories) nothing
+drops. SEC-465, 513, 516 and 517 rise by 55 findings across podinfo,
+aws-cloudformation-templates and anthropic-sdk-python: ARNs in partitions the
+old literal prefix never matched.
+
 ## [1.48.1] - 2026-10-04
 
 Three secret rules that reported placeholders now report what their evidence

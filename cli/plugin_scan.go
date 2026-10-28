@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/plugincap"
 	"github.com/nox-hq/nox/plugin"
 	"github.com/nox-hq/nox/registry"
 )
@@ -62,7 +62,12 @@ func installedPluginBinaries(required []string) ([]installedPlugin, []core.Degra
 
 	isRequired := make(map[string]bool, len(required))
 	for _, name := range required {
-		isRequired[name] = true
+		// A required entry may carry a version constraint (`nox/foo@^0.2.0`);
+		// the installed state records the bare name, so compare on that. Keying
+		// the set by the raw entry listed every constrained plugin as
+		// "not listed in plugins.required" while it was running (#829).
+		bare, _ := parseNameVersion(strings.TrimSpace(name))
+		isRequired[bare] = true
 	}
 
 	// An installed plugin that nothing declared does not run — but it must not
@@ -88,11 +93,12 @@ func installedPluginBinaries(required []string) ([]installedPlugin, []core.Degra
 		}
 	}
 	if len(undeclared) > 0 {
-		sort.Strings(undeclared)
+		// The detail keeps the plugin names for findings.json and --verbose;
+		// the assessment reads them back through plugincap to say which
+		// capabilities were not checked without naming a plugin.
 		missing = append(missing, core.Degradation{
-			Kind: degrade.Plugin,
-			Detail: fmt.Sprintf("%d installed plugin(s) are not listed in plugins.required and did not run: %s",
-				len(undeclared), strings.Join(undeclared, ", ")),
+			Kind:   degrade.Plugin,
+			Detail: plugincap.UndeclaredDetail(undeclared),
 			Impact: "their findings are absent from this scan; add the ones you want to plugins.required in .nox.yaml",
 			// ADVISORY. This reports capability the operator declined, not
 			// something they rely on that failed — the opposite of every other

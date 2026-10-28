@@ -9,6 +9,8 @@ import (
 
 	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
 
+	"github.com/nox-hq/nox/core/advisory"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,6 +40,11 @@ type ScanConfig struct {
 	Cache      CacheSettings      `yaml:"cache"`
 	Plugins    PluginsConfig      `yaml:"plugins"`
 	Fix        FixSettings        `yaml:"fix"`
+
+	// Advisories decides what a scheduled run does about a newly disclosed
+	// dependency advisory: report, prepare a fix, or remediate. Read by
+	// `nox advisories`; the default is the least autonomous level.
+	Advisories advisory.Settings `yaml:"advisories"`
 
 	// PluginPolicy is the plugin sandbox policy. The scan engine never reads
 	// it — package plugin does, from this same file — but the schema lives
@@ -200,6 +207,7 @@ type ScanSettings struct {
 	OSV                  OSVConfig               `yaml:"osv"`
 	Intelligence         IntelligenceConfig      `yaml:"intelligence"`
 	Slop                 SlopConfig              `yaml:"slop"`
+	MCPFeed              MCPFeedConfig           `yaml:"mcp_feed"`
 	Entropy              EntropyConfig           `yaml:"entropy"`
 	GeneratedPaths       GeneratedPathsConfig    `yaml:"generated_paths"`
 	SAST                 SASTConfig              `yaml:"sast"`
@@ -534,16 +542,35 @@ type IntelligenceConfig struct {
 	// Querying and contributing are two decisions, and both are off by default.
 	Contribute bool `yaml:"contribute"`
 
+	// Attested sends contributions as your ORGANISATION (NOX_INTEL_TOKEN)
+	// instead of anonymously. Anonymous contributions are stored but never
+	// count as independent sources, because a reporter id is self-asserted;
+	// attested ones count once per organisation. The price is stated: the
+	// service can join an attested contribution to your organisation. Off by
+	// default, and it needs contribute: true as well. With no token set
+	// nothing is sent and the scan says so, rather than quietly falling back
+	// to a contribution that cannot count.
+	Attested bool `yaml:"attested"`
+
 	// ReporterSaltPath overrides where the private reporter salt is kept.
 	// Empty defaults to $HOME/.nox/reporter-salt. The salt never leaves the
 	// machine; only an HMAC derived from it does.
 	ReporterSaltPath string `yaml:"reporter_salt_path"`
 }
 
+// OSVBaseURLEnv names the environment variable that selects the reference
+// database when .nox.yaml does not (a self-hosted mirror, or a closed address in
+// hermetic test runs).
+const OSVBaseURLEnv = "NOX_OSV_BASE_URL"
+
 // ReferenceBaseURL is the OSV-compatible API scans use as the reference
-// database: BaseURL when set, otherwise the public OSV.dev endpoint.
+// database: scan.osv.base_url, then NOX_OSV_BASE_URL, otherwise the public
+// OSV.dev endpoint.
 func (c OSVConfig) ReferenceBaseURL() string {
 	if u := strings.TrimSpace(c.BaseURL); u != "" {
+		return strings.TrimRight(u, "/")
+	}
+	if u := strings.TrimSpace(os.Getenv(OSVBaseURLEnv)); u != "" {
 		return strings.TrimRight(u, "/")
 	}
 	return osvsource.DefaultBaseURL
@@ -582,14 +609,20 @@ func (c IntelligenceConfig) ResolvedEndpoint() string {
 }
 
 // SlopConfig enables the SLOP analyzer's predictive slopsquat dimension
-// (SLOP-002). It is off by default: with no Feed configured the analyzer keeps
-// exactly its reactive SLOP-001 behavior and adds no findings. The feed is a
-// versioned, content-addressed, offline data file — no network is touched at
-// scan time (only the out-of-band generator queries registries). See
+// (SLOP-002). With no Feed configured it consults NOX Intelligence's signed feed
+// when the service is enabled and the scan is online (or a verified cached copy
+// offline), verified under the key built into nox; Disabled restores exactly the
+// reactive SLOP-001 behavior. The feed is a versioned, content-addressed data
+// file; only the out-of-band generator queries registries. See
 // docs/slopsquat-feed.md.
 type SlopConfig struct {
-	// Feed selects the predictive blocklist. Empty (default) disables the
-	// predictive dimension entirely. Accepted values:
+	// Disabled opts out of the predictive dimension entirely, including the
+	// default feed. With NOX Intelligence enabled and the scan online, an empty
+	// Feed means the official signed feed, verified under the key built into
+	// nox (docs/slopsquat-feed.md).
+	Disabled bool `yaml:"disabled"`
+	// Feed selects the predictive blocklist. Empty (default) means the
+	// official NOX Intelligence feed (see Disabled). Accepted values:
 	//   - "bundled"          — the feed shipped in the nox binary
 	//   - an http(s):// URL  — a remotely published, signature-verified feed
 	//                          (fetched, verified, and cached locally; offline
@@ -613,8 +646,56 @@ type SlopConfig struct {
 	RequireSignature bool `yaml:"require_signature"`
 	// SignatureKeyPath points at a PEM-encoded Ed25519 public key used to verify
 	// the feed signature. Optional; when set, a present signature is verified
-	// against it (and a bad signature is always a hard failure).
+	// against it (and a bad signature is always a hard failure). For the default
+	// feed it overrides the key built into nox.
 	SignatureKeyPath string `yaml:"signature_key_path"`
+}
+
+// DefaultSlopFeedURL is the slopsquat feed NOX Intelligence publishes, or ""
+// when the intelligence service is disabled.
+func (c IntelligenceConfig) DefaultSlopFeedURL() string {
+	ep := c.ResolvedEndpoint()
+	if ep == "" {
+		return ""
+	}
+	return ep + "/v1/feeds/slopsquat"
+}
+
+// MCPFeedConfig selects the signed MCP / AI-component advisory feed NOX
+// Intelligence publishes (docs/mcp-advisory-feed.md). It is consulted only when
+// the scan has MCP servers launched from a package registry, only online or from
+// a verified cache, and only with a pinned public key: an advisory feed nobody
+// verified is a blocklist anyone on the path can edit.
+type MCPFeedConfig struct {
+	// Disabled turns the check off.
+	Disabled bool `yaml:"disabled"`
+	// URL is the feed. Empty means <intelligence endpoint>/v1/feeds/mcp, which
+	// is not used when the intelligence service is disabled.
+	URL string `yaml:"url"`
+	// SignatureKeyPath points at the PEM Ed25519 public key the feed must verify
+	// under (PKIX, or the raw "ED25519 PUBLIC KEY" form), relative to the scan
+	// root. Optional: unset means the official key built into nox
+	// (BuiltinFeedKeyID); set, it always wins. The service publishes its key at
+	// /v1/feeds/mcp.pub.pem, but nox never trusts a key the server hands it.
+	SignatureKeyPath string `yaml:"signature_key_path"`
+	// CacheDir overrides where verified feed bytes are cached. Empty means
+	// $HOME/.nox/cache/mcpfeed.
+	CacheDir string `yaml:"cache_dir"`
+	// Refresh is how long a cached feed is fresh ("24h", "7d"). Empty means 24h.
+	Refresh string `yaml:"refresh"`
+}
+
+// ResolvedURL is the feed location, or "" when there is none to use: the
+// intelligence service is disabled and no URL was set.
+func (c MCPFeedConfig) ResolvedURL(intel IntelligenceConfig) string {
+	if u := strings.TrimSpace(c.URL); u != "" {
+		return u
+	}
+	ep := intel.ResolvedEndpoint()
+	if ep == "" {
+		return ""
+	}
+	return ep + "/v1/feeds/mcp"
 }
 
 // RulesConfig allows disabling rules or overriding their severity.

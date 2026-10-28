@@ -18,11 +18,13 @@ import (
 
 	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox-core/evidence"
+	"github.com/nox-hq/nox-core/slopfeed"
 	"github.com/nox-hq/nox-core/vulnsource"
 	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
 	"github.com/nox-hq/nox/core/adjudicate"
 	"github.com/nox-hq/nox/core/analyzers/agentflow"
 	"github.com/nox-hq/nox/core/analyzers/ai"
+	"github.com/nox-hq/nox/core/analyzers/authz"
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/fileperms"
@@ -44,12 +46,14 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/git"
 	"github.com/nox-hq/nox/core/graph"
+	"github.com/nox-hq/nox/core/infra"
 	"github.com/nox-hq/nox/core/intel"
 	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/policy"
 	"github.com/nox-hq/nox/core/reach"
 	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/replay"
+	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/suppress"
 	taintengine "github.com/nox-hq/nox/core/taint/engine"
@@ -77,13 +81,18 @@ func filterArtifactsByType(artifacts []discovery.Artifact, excludeTypes []string
 
 // ScanResult holds the complete output of a scan pipeline run.
 type ScanResult struct {
-	Findings     *findings.FindingSet
-	Inventory    *deps.PackageInventory
-	AIInventory  *ai.Inventory
-	PolicyResult *policy.Result
-	Rules        *rules.RuleSet
-	Graphs       []graph.Graph         // relationship graphs from plugins
-	Enrichments  []findings.Enrichment // finding annotations from plugins
+	Findings    *findings.FindingSet
+	Inventory   *deps.PackageInventory
+	AIInventory *ai.Inventory
+	// Infrastructure is the deployment resources read from infrastructure as
+	// code, hardened ones included. Nil when the scan read none (or did not run
+	// the IaC checks). It is context for `nox model` and for change-over-time,
+	// never a finding.
+	Infrastructure *infra.Inventory
+	PolicyResult   *policy.Result
+	Rules          *rules.RuleSet
+	Graphs         []graph.Graph         // relationship graphs from plugins
+	Enrichments    []findings.Enrichment // finding annotations from plugins
 	// SASTProfile records the resolved per-language SAST depth applied to this
 	// scan (language name → deep|standard|off). It is the auditable answer to
 	// "what depth did this scan give each language?" and is copied into the
@@ -98,6 +107,12 @@ type ScanResult struct {
 	// slice means every configured check completed; a non-empty one means the
 	// findings are incomplete and "no findings" must not be read as "clean".
 	Degradations []Degradation
+
+	// AdvisoryLookupSkipped is true when this scan did not look its
+	// dependencies up in a vulnerability source (offline, --no-osv, osv.disabled
+	// or no dependency scope). Its advisories are then absent because it did not
+	// ask, and a comparison with a scan that did must not read that as a change.
+	AdvisoryLookupSkipped bool
 
 	// Capabilities is what this installation can establish at all, and
 	// Coverage is what each capability actually concluded about each subject.
@@ -167,6 +182,112 @@ type ScanResult struct {
 	// Empty on every committed corpus today, and structurally so rather than by
 	// luck — see adjudicate.Conflict for why, and for what makes it reachable.
 	Conflicts []adjudicate.Conflict
+
+	// Leads are things worth testing that this scan does not report as
+	// findings: today, the routes AUTHZ-001 holds when it is not enabled. A
+	// lead is not in Findings, so it reaches no machine output, exit code,
+	// gate or fingerprint; adapters present it (the CLI's assessment lists it
+	// under "Additional verification recommended").
+	Leads []Lead
+	// LeadChecks names each check that produces leads or opt-in findings and
+	// had something to read, in words that do not overclaim:
+	// "authorization and authentication (Express, Fastify, Flask, FastAPI, Next.js, NestJS and Django routes; ...; leads only)".
+	// Empty when, for example, the scan saw no such routes: it then says nothing about
+	// authorization.
+	LeadChecks []string
+	// Routes are the HTTP entry points the authorization reader found, with
+	// the access-control middleware it could see on each. Descriptive context
+	// for a system model; never a finding.
+	Routes []report.Route
+}
+
+// Lead is one thing a scan found worth verifying by hand or at runtime,
+// carried beside the findings rather than among them. Adapter-neutral: the
+// CLI, MCP and LSP read the same values.
+type Lead struct {
+	// Category is what kind of check the lead calls for: "authorization".
+	Category string
+	// RuleID is the rule whose proposition the lead meets, which enabling
+	// that rule would report as a finding instead.
+	RuleID string
+	// Route is the HTTP method and path, e.g. "GET /api/invoices/:id".
+	Route string
+	// FilePath and Line locate the code the lead is about.
+	FilePath string
+	Line     int
+	// Statement says what the scan observed.
+	Statement string
+	// Test says how to settle it.
+	Test string
+	// IDSource is where the caller-supplied identifier comes from: "path",
+	// "query", "body", or several joined by commas. Empty for leads that are
+	// not about an identifier.
+	IDSource string
+}
+
+// authzLeads converts the authorization analyzer's output into leads and the
+// coverage lines that go with them. Object-level authorization leads
+// (AUTHZ-001) and missing-authentication leads (AUTHN-001) come from one route
+// inventory, so `nox model` and the scan assessment cannot disagree about a
+// route.
+func authzLeads(a *authz.Analyzer) (leads []Lead, checks []string) {
+	if a.RoutesRead() == 0 {
+		return nil, nil
+	}
+	leads = make([]Lead, 0, len(a.Leads()))
+	for _, l := range a.Leads() {
+		lead := Lead{
+			Category:  authz.CategoryAuthorization,
+			RuleID:    authz.RuleID,
+			Route:     l.Method + " " + l.Path,
+			FilePath:  l.FilePath,
+			Line:      l.Line,
+			Statement: "loads a record by a caller-supplied id with no visible ownership check",
+			Test:      "Test it with two user accounts: request user A's record while signed in as user B.",
+			IDSource:  l.IDSource,
+		}
+		if l.Category != "" {
+			lead.Category, lead.RuleID, lead.Statement, lead.Test = l.Category, l.RuleID, l.Statement, l.Test
+		}
+		leads = append(leads, lead)
+	}
+	return leads, authzChecks(a)
+}
+
+// authzChecks names what the route reader covered, per claim: what it is
+// enabled to report as findings and what it only holds as leads. Webhook
+// signature verification is a finding, never a lead, so it carries no mode.
+func authzChecks(a *authz.Analyzer) []string {
+	const webhooks = " and webhook signatures (Stripe, GitHub and Slack receivers in those routes)"
+	objectLevel := "object-level checks: " + authz.ObjectLevelCoverage + " only"
+	if !a.Enabled() && !a.AuthnEnabled() {
+		return []string{"authorization and authentication (" + authz.Coverage + "; " + objectLevel + "; leads only)" + webhooks}
+	}
+	mode := func(on bool, id string) string {
+		if on {
+			return id + " enabled, possible issues only"
+		}
+		return "leads only"
+	}
+	return []string{"authorization (" + authz.Coverage + "; " + objectLevel + "; " + mode(a.Enabled(), authz.RuleID) +
+		") and authentication (" + mode(a.AuthnEnabled(), authz.AuthnRuleID) + ")" + webhooks}
+}
+
+// authzRoutes converts the authorization analyzer's route inventory into its
+// report form.
+func authzRoutes(a *authz.Analyzer) []report.Route {
+	rs := a.Routes()
+	if len(rs) == 0 {
+		return nil
+	}
+	out := make([]report.Route, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, report.Route{
+			Method: r.Method, Path: r.Path, FilePath: r.FilePath, Line: r.Line,
+			Authn: r.Authn, Authz: r.Authz, Reader: r.Reader,
+		})
+	}
+	return out
 }
 
 // EvidenceArtifact assembles the replayable record of what this scan
@@ -320,8 +441,9 @@ type ScanOptions struct {
 	// `.`, so the contaminating invocation is the obvious one.
 	//
 	// Empty means the caller writes nothing and nothing is excluded. Only the
-	// exact artifact paths under this directory are skipped: a findings.json
-	// somewhere else in the tree is a real file and is still scanned.
+	// exact artifact paths under this directory are skipped by path: a
+	// findings.json somewhere else in the tree is skipped only when its content
+	// says nox wrote it (see skipGeneratedReports), and is scanned otherwise.
 	OutputDir string
 }
 
@@ -419,8 +541,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}
 	}
 
+	// degradations collects checks that could not complete. Analyzers write to
+	// it concurrently; it is surfaced on ScanResult so "no findings" can be
+	// distinguished from "did not look". Created before discovery, which
+	// records the files it deliberately did not read.
+	degradations := &degrade.Degradations{}
+
 	// Stage 1: Discover artifacts.
-	artifacts, err := discoverArtifacts(target, cfg, opts)
+	artifacts, err := discoverArtifacts(target, cfg, opts, degradations)
 	if err != nil {
 		return nil, err
 	}
@@ -467,10 +595,6 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	dataAnalyzer := data.NewAnalyzer()
 	iacAnalyzer := iac.NewAnalyzer()
 	iacAnalyzer.RecordReasoningTo(reasons)
-	// degradations collects checks that could not complete. Analyzers write to
-	// it concurrently; it is surfaced on ScanResult so "no findings" can be
-	// distinguished from "did not look".
-	degradations := &degrade.Degradations{}
 	// Config nox parses but does not act on is a coverage question, so it rides
 	// the same channel as every other "did not look" signal. Reported here in
 	// core rather than printed by one adapter: an agent scanning over MCP has no
@@ -527,13 +651,31 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// scan a finding. It is also what makes a compiled-in default defensible:
 	// an unreachable service degrades to exactly the OSV scan nox ran before.
 	if endpoint := cfg.Scan.Intelligence.ResolvedEndpoint(); endpoint != "" && vulnLookupEnabled {
+		verify := cfg.Scan.Intelligence.VerificationEnabled()
 		newIntel := func(deg *degrade.Degradations) vulnsource.Source {
-			return osvsource.NewNamed("nox-intelligence", endpoint, intelHTTPClient(), deg).
+			// Only this source asks for the mirror fallback, never the OSV.dev
+			// reference: it is what lets a scan keep working through an OSV
+			// outage. The answer comes back marked degraded, which the source
+			// records as a blocking intel_incomplete degradation, so the scan
+			// is honest about it rather than failing over to nothing.
+			intel := osvsource.NewNamed("nox-intelligence", endpoint, intelHTTPClient(), deg).
+				WithAcceptDegraded().
 				WithCache(advisoryCache)
+			// mirror-lag lets the service answer from its synced OSV corpus
+			// instead of live OSV. That is only safe when the VerifyingSource
+			// applies the lag rule: it restores a record newer than the sync and
+			// still calls an older missing one a suppression. Without the
+			// verifier nothing would separate lag from withholding, so an
+			// unverified scan declares nothing and is answered live as before.
+			// Never sent to the OSV.dev reference, which does not know it.
+			if verify {
+				intel = intel.WithCapabilities(osvsource.CapabilityMirrorLag)
+			}
+			return intel
 		}
 
 		var src vulnsource.Source
-		if cfg.Scan.Intelligence.VerificationEnabled() {
+		if verify {
 			// The verifier builds both sources so it owns both degradation
 			// collectors: that is what lets it report an unreachable service
 			// as unreachable — answered by the reference alone — rather than
@@ -549,21 +691,11 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	}
 
 	depsAnalyzer := deps.NewAnalyzer(depsOpts...)
-	// The SLOP analyzer gains a predictive dimension only when a feed is
-	// configured (default: off, exact reactive behavior preserved). Loading is
-	// offline: a file read plus digest/signature verification, no network. A
-	// misconfigured or tampered feed fails closed — the predictive dimension
-	// stays off and the failure is recorded as a visible degradation.
-	var slopOpts []slop.Option
-	if fp := cfg.Scan.Slop.Feed; fp != "" && opts.Scopes.Has(ScopeSupplyChain) {
-		if loaded, ferr := loadSlopFeed(ctx, target, cfg.Scan.Slop, opts.Offline); ferr != nil {
-			degradations.Add(degrade.SlopFeed,
-				fmt.Sprintf("predictive slopsquat feed %q could not be loaded: %v", fp, ferr),
-				"the SLOP-002 predictive dimension is disabled; high-risk slopsquat targets are not being flagged from the feed")
-		} else {
-			slopOpts = append(slopOpts, slop.WithFeed(loaded))
-		}
-	}
+	// The SLOP analyzer gains a predictive dimension from NOX Intelligence's
+	// signed feed by default, or from the feed .nox.yaml names. A misconfigured
+	// or tampered feed fails closed — the predictive dimension stays off and the
+	// failure is recorded as a visible degradation.
+	slopOpts := resolveSlopFeed(ctx, target, cfg, opts, degradations)
 	slopAnalyzer := slop.NewAnalyzer(slopOpts...)
 	slopAnalyzer.RecordReasoningTo(reasons)
 	cryptoAnalyzer := weakcrypto.NewAnalyzer()
@@ -584,6 +716,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	taintflowAnalyzer.RecordReasoningTo(reasons)
 	taintflowAnalyzer.EnableOptIn(cfg.Scan.Rules.Enable)
 	agentflowAnalyzer := agentflow.NewAnalyzer()
+	authzAnalyzer := authz.NewAnalyzer()
+	authzAnalyzer.EnableOptIn(cfg.Scan.Rules.Enable)
+	authzAnalyzer.RecordReasoningTo(reasons)
 	provenanceAnalyzer := provenance.NewAnalyzer()
 
 	// Per-analyzer result collectors.
@@ -721,6 +856,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			addFindings(fs)
 			return nil
 		}},
+		{"authz", func(c context.Context) error {
+			fs, err := authzAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		}},
 		{"provenance", func(c context.Context) error {
 			fs, err := provenanceAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
@@ -796,12 +939,19 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		{"variants", variantsAnalyzer.Rules()},
 		{"taintflow", taintflowAnalyzer.Rules()},
 		{"agentflow", agentflowAnalyzer.Rules()},
+		{"authz", authzAnalyzer.Rules()},
 		{"provenance", provenanceAnalyzer.Rules()},
 	} {
 		if !opts.Scopes.RunsAnalyzer(rs.analyzer) {
 			continue
 		}
 		for _, r := range rs.rules.Rules() {
+			// AUTHZ-001 and AUTHN-001 not enabled produce leads, never
+			// findings, so they list no rule in the scan's outputs either:
+			// SARIF's rule catalogue stays what it was before they existed.
+			if rs.analyzer == "authz" && (r.ID == authz.RuleID && !authzAnalyzer.Enabled() || r.ID == authz.AuthnRuleID && !authzAnalyzer.AuthnEnabled()) {
+				continue
+			}
 			allRules.Add(r)
 		}
 	}
@@ -926,6 +1076,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// policy-gated like any other. Non-fatal per file.
 	if opts.Scopes.Has(ScopeAI) {
 		runMCPRelationalPass(ctx, target, artifacts, allFindings, degradations)
+		// Advisories for the registry packages those servers launch, from the
+		// signed MCP feed, when it can be checked (docs/mcp-advisory-feed.md).
+		runMCPFeedPass(ctx, target, cfg, opts, artifacts, allFindings, degradations)
 	}
 
 	// Stage 3: Refine findings — apply rule config, generated/noise filters,
@@ -970,7 +1123,26 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// actually concluded rather than an intermediate state.
 	contributeObservations(ctx, cfg, opts, allFindings.Findings(), degradations)
 
-	return &ScanResult{
+	var leads []Lead
+	var leadChecks []string
+	var routes []report.Route
+	if opts.Scopes.RunsAnalyzer("authz") {
+		leads, leadChecks = authzLeads(authzAnalyzer)
+		routes = authzRoutes(authzAnalyzer)
+	}
+
+	var infrastructure *infra.Inventory
+	if opts.Scopes.RunsAnalyzer("iac") {
+		if inv := iacAnalyzer.Inventory(); !inv.Empty() {
+			infrastructure = &inv
+		}
+	}
+
+	res := &ScanResult{
+		Infrastructure:     infrastructure,
+		Leads:              leads,
+		LeadChecks:         leadChecks,
+		Routes:             routes,
 		Capabilities:       capabilities,
 		Coverage:           coverage,
 		CompetenceProfiles: competenceProfiles,
@@ -988,7 +1160,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		Rules:              allRules,
 		Degradations:       degradations.Items(),
 		SASTProfile:        cfg.Scan.SAST.ResolvedProfile(),
-	}, nil
+	}
+	res.AdvisoryLookupSkipped = !vulnLookupEnabled
+	return res, nil
 }
 
 // loadSlopFeed resolves and verifies the predictive slopsquat feed named in the
@@ -1005,8 +1179,8 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 // dimension and records a degradation rather than trusting the feed. When
 // offline is set, a URL feed never touches the network — it is served from the
 // verified cache or the load fails closed.
-func loadSlopFeed(ctx context.Context, target string, cfg SlopConfig, offline bool) (*feed.Loaded, error) {
-	opts := feed.VerifyOptions{RequireSignature: cfg.RequireSignature}
+func loadSlopFeed(ctx context.Context, target string, cfg SlopConfig, offline bool) (*slopfeed.Loaded, error) {
+	opts := slopfeed.VerifyOptions{RequireSignature: cfg.RequireSignature}
 	if cfg.SignatureKeyPath != "" {
 		keyPath := cfg.SignatureKeyPath
 		if !filepath.IsAbs(keyPath) {
@@ -1016,7 +1190,7 @@ func loadSlopFeed(ctx context.Context, target string, cfg SlopConfig, offline bo
 		if err != nil {
 			return nil, fmt.Errorf("reading signature key %s: %w", keyPath, err)
 		}
-		verifier, err := feed.PEMEd25519Verifier(pem)
+		verifier, err := slopfeed.PEMEd25519Verifier(pem)
 		if err != nil {
 			return nil, fmt.Errorf("parsing signature key: %w", err)
 		}
@@ -1117,6 +1291,29 @@ func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptio
 		return
 	}
 
+	// Consent is per installation and explicit. scan.intelligence.contribute is
+	// project config and can be committed; it does not speak for whoever runs
+	// the scan. Until this machine records acceptance of the current terms,
+	// nothing is derived, no salt is created and no request is made - and the
+	// scan says so, because a contribution that quietly stopped is the failure
+	// this exists to prevent.
+	switch status, rec := intel.LoadConsent(ic.ReporterSaltPath); status {
+	case intel.ConsentGranted:
+	case intel.ConsentStale:
+		deg.Add(degrade.IntelContribution,
+			fmt.Sprintf("contribution is paused: you accepted terms %s and the current terms are %s",
+				rec.TermsVersion, intel.TermsVersion),
+			"nothing was contributed; read the new terms with `nox intel consent show` "+
+				"and accept them with `nox intel consent accept`. The scan's own findings are unaffected")
+		return
+	default:
+		deg.Add(degrade.IntelContribution,
+			"scan.intelligence.contribute is set but this machine has not accepted the contribution terms",
+			"nothing was contributed; read the terms with `nox intel consent show` and "+
+				"accept them with `nox intel consent accept`. The scan's own findings are unaffected")
+		return
+	}
+
 	reporterID, err := intel.ReporterID(ic.ReporterSaltPath)
 	if err != nil {
 		// Without a stable identifier the observations would be unattributed
@@ -1129,10 +1326,20 @@ func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptio
 		return
 	}
 
+	delKey, err := intel.DeletionKey(ic.ReporterSaltPath)
+	if err != nil {
+		deg.Add(degrade.IntelContribution,
+			fmt.Sprintf("deletion key unavailable: %v", err),
+			"no observations were contributed; they could not have been erased later")
+		return
+	}
+
 	obs := intel.Derive(fs, intel.DeriveOptions{
-		ReporterID:  reporterID,
-		ObservedAt:  time.Now().UTC().Format(time.RFC3339),
-		ToolVersion: opts.ToolVersion,
+		ReporterID:       reporterID,
+		ObservedAt:       time.Now().UTC().Format(time.RFC3339),
+		ToolVersion:      opts.ToolVersion,
+		ConsentVersion:   intel.TermsVersion,
+		DeletionVerifier: intel.DeletionVerifier(delKey),
 	})
 	if len(obs) == 0 {
 		return
@@ -1141,7 +1348,19 @@ func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptio
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	res := intel.NewClient(endpoint, intelHTTPClient()).Contribute(ctx, obs)
+	client := intel.NewClient(endpoint, intelHTTPClient())
+	if ic.Attested {
+		token := strings.TrimSpace(os.Getenv("NOX_INTEL_TOKEN"))
+		if token == "" {
+			deg.Add(degrade.IntelContribution,
+				"scan.intelligence.attested is set but NOX_INTEL_TOKEN is not",
+				"nothing was contributed: an attested contribution needs the organisation token, and an "+
+					"anonymous one could not count as an independent source. The scan's own findings are unaffected")
+			return
+		}
+		client = client.WithToken(token)
+	}
+	res := client.Contribute(ctx, obs)
 	if res.FirstError != nil {
 		deg.Add(degrade.IntelContribution,
 			fmt.Sprintf("%d of %d observations were not accepted: %v",
@@ -1185,7 +1404,21 @@ func scanRootDir(target string) string {
 // discoverArtifacts walks the target, honoring .gitignore and config excludes,
 // optionally restricting to files changed since a git ref, and filtering out
 // excluded artifact types. It is stage 1 of the scan pipeline.
-func discoverArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]discovery.Artifact, error) {
+//
+// Reports nox wrote are removed from the result and recorded on deg, for a
+// single-file target too: the LSP scans one file at a time, and an editor that
+// opens an old results.sarif should not light up with findings about nox's own
+// rule descriptions. See skipGeneratedReports.
+func discoverArtifacts(target string, cfg *ScanConfig, opts ScanOptions, deg *degrade.Degradations) ([]discovery.Artifact, error) {
+	artifacts, err := walkArtifacts(target, cfg, opts)
+	if err != nil {
+		return nil, err
+	}
+	return skipGeneratedReports(artifacts, deg), nil
+}
+
+// walkArtifacts is discoverArtifacts before nox's own reports are removed.
+func walkArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]discovery.Artifact, error) {
 	// A single-file target scans exactly that file — the walker skips its own
 	// root, so pointing it at a file would yield nothing. The user named the
 	// file explicitly, so gitignore/scan.exclude do not apply.
@@ -2248,8 +2481,18 @@ func applyBaseline(fs *findings.FindingSet, baselinePath string, deg *degrade.De
 		if f.Status != "" && f.Status != findings.StatusNew {
 			continue // already suppressed
 		}
-		if m.Match(&f) != nil {
+		if e, via := m.MatchHow(&f); e != nil {
 			fs.SetStatus(i, findings.StatusBaselined)
+			if via == baseline.ViaAliasFingerprint {
+				// Say it, because it is not the usual path: the entry was
+				// written against a finding this one replaced (a retired rule,
+				// or a vulnerability merged with its duplicate id).
+				if items[i].Metadata == nil {
+					items[i].Metadata = map[string]string{}
+				}
+				items[i].Metadata["baseline_match"] = via
+				items[i].Metadata["baseline_entry"] = e.Fingerprint
+			}
 		}
 	}
 }

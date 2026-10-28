@@ -71,8 +71,8 @@ var commentVerRe = regexp.MustCompile(`v?\d+(?:\.\d+){0,2}`)
 // releaseTagRe matches a tag that denotes a RELEASE — the whole tag, not a
 // prefix of it.
 //
-// commentVerRe is a substring match, which is right for pulling a version out
-// of a trailing comment but wrong for deciding whether a tag is a release:
+// commentVerRe is a substring match, which is right for spotting a version in
+// a ref but wrong for deciding whether a tag is a release:
 // `v2.1.0-rc.3` contains `v2.1.0`, so it passed. It then parsed to [2,1,0]
 // because parseVer discards the suffix, TIEING the real v2.1.0 — and the
 // specificity tiebreak counts dotted components, of which the candidate has
@@ -83,8 +83,40 @@ var commentVerRe = regexp.MustCompile(`v?\d+(?:\.\d+){0,2}`)
 // simply not a release.
 var releaseTagRe = regexp.MustCompile(`^v?\d+(?:\.\d+){0,2}$`)
 
+// pinAnnotationRe matches the version annotation that leads a pin's trailing
+// comment — `# v4.1.0`, `# tag=v4` — and captures what follows it.
+//
+// Only the comment's FIRST word is the annotation. The rest is someone else's
+// text: this repository waives IAC-153 on the same line (`# v7.0.1 # nox:ignore
+// IAC-153 -- ...`). Searching the whole comment for a version read the rule
+// ID's digits as one, so `@v4 # nox:ignore IAC-001` tracked "v1" and a SHA pin
+// waived with no annotation read as v153 and was never upgraded; replacing the
+// whole comment on rewrite silently un-waived every pin it bumped.
+//
+// Groups: 1=the annotation's version (a prerelease suffix is part of the word
+// but not of the version), 2=everything after the annotation word.
+var pinAnnotationRe = regexp.MustCompile(`^\s*#\s*(?:[A-Za-z_-]+[=@:])?(v?\d+(?:\.\d+){0,2})(?:[-+][0-9A-Za-z.+-]*)?(\s.*)?$`)
+
+// commentVersion is the version a pin's annotation records, "" when the
+// comment does not lead with one.
 func commentVersion(comment string) string {
-	return commentVerRe.FindString(comment)
+	if m := pinAnnotationRe.FindStringSubmatch(comment); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// commentTail is what a rewrite must carry over from a pin's comment:
+// everything after the version annotation, or the whole comment when it has
+// none. It keeps its own leading space, so it appends directly.
+func commentTail(comment string) string {
+	if m := pinAnnotationRe.FindStringSubmatch(comment); m != nil {
+		return strings.TrimRight(m[2], " \t")
+	}
+	if c := strings.TrimSpace(comment); c != "" {
+		return " " + c
+	}
+	return ""
 }
 
 func looksLikeVersion(ref string) bool {
@@ -236,7 +268,7 @@ func runActionsFix(root string, dryRun, includeMajor bool, r actionResolver) (ap
 			skipped++ // already pinned to this exact SHA
 			continue
 		}
-		newLine := fmt.Sprintf("%s@%s # %s", p.full, sha, tag)
+		newLine := fmt.Sprintf("%s@%s # %s%s", p.full, sha, tag, commentTail(p.comment))
 		perFile[p.file] = append(perFile[p.file], rewrite{lineNo: p.lineNo, prefix: p.prefix, newRest: newLine})
 		fmt.Printf("plan: %s %s (%s)\n", p.full, why, short(sha))
 	}
@@ -301,6 +333,13 @@ func collectActionPins(root string) []actionPin {
 		}
 		if d.IsDir() {
 			if path != root && skipForActionFiles[d.Name()] {
+				return filepath.SkipDir
+			}
+			// A linked worktree is another checkout of this repository
+			// (agents park them under gitignored directories). Its
+			// action.yml files are copies, and rewriting them edits a tree
+			// the repository does not contain (#830).
+			if path != root && discovery.IsLinkedWorktree(path) {
 				return filepath.SkipDir
 			}
 			return nil

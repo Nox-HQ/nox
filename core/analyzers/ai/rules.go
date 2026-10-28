@@ -777,7 +777,14 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "MCP-002", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)"args"\s*:\s*\[[^\]]*"(?:\$HOME|~|/Users/|/home/|C:\\\\Users\\\\)[^"]*"`,
+			// The first branch is the home-directory prefixes this rule was
+			// written for. The second is the widest grants there are, which it
+			// could not see: `server-filesystem ... "/"` gave a server the
+			// whole disk and scanned clean, while `/Users/alice/project` was
+			// CRITICAL. The root must be a whole array ELEMENT (the
+			// `(?:\s*"[^"]*"\s*,)*?` walk keeps it element-aligned), so a path
+			// that merely CONTAINS a slash - `a/b`, a URL - is not a root.
+			pattern:     `(?i)"args"\s*:\s*\[[^\]]*"(?:\$\{?HOME\}?|~|/Users/|/home/|C:\\\\Users\\\\)[^"]*"|"args"\s*:\s*\[(?:\s*"[^"]*"\s*,)*?\s*"(?:/+|[A-Za-z]:(?:\\\\|/)(?:Windows[^"]*)?|/(?:etc|var|root|usr|bin|sbin|proc|sys|opt|private|Library|System|Volumes|mnt|media)/?|/(?:etc|root|proc|sys)/[^"]*)"\s*[,\]]`,
 			description: "MCP server granted broad home-directory or root-path access",
 			cwe:         "CWE-732", keywords: []string{"args", "$HOME", "/Users/", "/home/"},
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json"},
@@ -787,9 +794,15 @@ func builtinAIRules() []*rules.Rule {
 		},
 		{
 			id: "MCP-003", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:     `(?i)"--allow-write"|"--no-sandbox"|"--dangerously-allow-[a-z-]+"|"--unsafe"|"--insecure"`,
+			// The env branch: a server can be switched into an
+			// "everything allowed" mode by an environment variable as easily as
+			// by a flag, and the env block is where a reviewer looks least.
+			// The variable must be one of the permissive switches AND be set
+			// on (`"ALLOW_ALL": "0"` is the safe spelling, not a hit); the name
+			// of the server is not evidence of anything.
+			pattern:     `(?i)"--allow-write"|"--no-sandbox"|"--dangerously-allow-[a-z-]+"|"--unsafe"|"--insecure"|"env"\s*:\s*\{[^}]*"(?:ALLOW_ALL|ALLOW_ANY|ALLOW_EVERYTHING|[A-Z0-9_]*(?:DANGEROUS|DANGEROUSLY|UNSAFE|UNRESTRICTED|YOLO)[A-Z0-9_]*|(?:DISABLE|SKIP|NO)_(?:AUTH|SANDBOX|SAFETY|PERMISSIONS?|CONFIRM(?:ATION)?|CHECKS?)|AUTO_?APPROVE)"\s*:\s*(?:"(?:1|true|yes|on|all|\*)"|(?:true|1)\b)`,
 			description: "MCP server invoked with dangerously-permissive flags",
-			cwe:         "CWE-732", keywords: []string{"allow-write", "no-sandbox", "dangerously"},
+			cwe:         "CWE-732", keywords: []string{"allow-write", "no-sandbox", "dangerously", "allow_all", "allow_any", "unsafe", "unrestricted", "yolo", "skip_", "disable_", "approve"},
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json"},
 			tags:         []string{"ai", "mcp", "configuration"},
 			remediation:  "Remove permissive flags. If the MCP server requires elevated capability, document the operator decision in a config comment and restrict the scope to a specific subdirectory or operation.",
@@ -1067,6 +1080,23 @@ func builtinAIRules() []*rules.Rule {
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "cline_mcp_settings.json", "mcp_config.json"},
 			tags:         []string{"ai", "mcp", "shadow-server", "supply-chain", "owasp-mcp09"},
 			remediation:  "A remote MCP server has no cryptographic identity in the protocol — a rogue or hijacked endpoint can impersonate it (shadow server). Pin the server to a verified host, prefer signed/pinned local installs, and maintain an explicit allowlist of trusted server identities rather than trusting any reachable URL.",
+			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices", "https://owasp.org/www-project-mcp-top-10/"},
+		},
+		{
+			id: "MCP-025", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
+			// One server's command and args, in either key order, with at most
+			// one level of nested object (an `env` block) between them; it
+			// cannot reach the next server because a server's closing brace is
+			// not consumable. validate reads the args as JSON and decides
+			// whether the package they name carries an exact version (see
+			// mcp_unpinned.go for why a regex cannot).
+			pattern:     `(?i)"command"\s*:\s*"[^"]*"\s*,(?:[^\[\]{}]|\{[^{}]*\})*?"args"\s*:\s*\[[^\]]*\]|"args"\s*:\s*\[[^\]]*\]\s*,(?:[^\[\]{}]|\{[^{}]*\})*?"command"\s*:\s*"[^"]*"`,
+			validate:    mcpServerIsUnpinned,
+			description: "MCP server is launched from a package registry without a pinned version",
+			cwe:         "CWE-1357", keywords: []string{"npx", "pnpx", "bunx", "uvx", "pipx"},
+			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "cline_mcp_settings.json", "mcp_config.json"},
+			tags:         []string{"ai", "mcp", "supply-chain", "owasp-mcp04"},
+			remediation:  "Pin the package to an exact version (`npx -y @scope/server@1.4.2`, `uvx server==1.4.2`) and update it deliberately. An unpinned runner fetches whatever the registry serves at every launch, so a hijacked or compromised release reaches the host without any change to this file.",
 			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices", "https://owasp.org/www-project-mcp-top-10/"},
 		},
 

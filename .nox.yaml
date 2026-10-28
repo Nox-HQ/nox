@@ -1,6 +1,16 @@
 scan:
   exclude:
     - "plugins/"
+    # The install-ci workflow TEMPLATE. Its nox:ignore waivers (IAC-155/308/314)
+    # are written for the workflow it renders into a user's
+    # .github/workflows/, where they suppress 4 real findings. As a .yml.tmpl
+    # under cli/templates/ the file is not a GitHub workflow, so no IAC rule can
+    # fire here and the weekly audit reported each waiver as "matched no
+    # finding". They are not stale -- removing them would un-waive every
+    # installed workflow -- so the template is excluded from the self-scan
+    # rather than the waivers from the template. cli/ install-ci tests cover
+    # the rendered output.
+    - "cli/templates/nox-ci.yml.tmpl"
     - "dist/"
     - "*_test.go"
     # Intentionally-vulnerable ground-truth samples for `nox bench --precision`
@@ -30,6 +40,11 @@ scan:
     # nox REFUSES to refute what it cannot see (see the corpus README and
     # core/refutation_hard_test.go), and the self-scan must not flag fixtures.
     - "testdata/refutation-hard/"
+    # A hardened application and the same application after an insecure change
+    # (cli/false_allclear_e2e_test.go). The second tree is finding-bearing by
+    # construction: a literal password, a public S3 bucket, SYS_ADMIN, an MCP
+    # server rooted at /. The self-scan must not flag fixtures.
+    - "testdata/false-allclear/"
     # Intentionally finding-bearing inputs for the metamorphic corpus oracle
     # (scripts/metamorphic/sweep.py). Same rationale as the precision corpora:
     # the sweep scans them explicitly in isolated temp dirs; the self-scan must

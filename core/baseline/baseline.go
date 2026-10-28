@@ -155,9 +155,27 @@ func (b *Baseline) Prune(current []findings.Finding) int {
 	// still match is carrying two spares — and a spare is exactly what absorbs
 	// the next occurrence without anyone accepting it. Pruning to the live
 	// count keeps the file honest about how many were accepted.
+	//
+	// A finding is counted against the fingerprint it matches, which is its own
+	// or, failing that, one it also answers to (a retired rule's, or the finding
+	// a merged duplicate used to be). Counting only its own would prune the very
+	// entry that is accepting it, and the next scan would report it as new.
+	have := make(map[string]int, len(b.Entries))
+	for i := range b.Entries {
+		have[b.Entries[i].Fingerprint]++
+	}
 	active := make(map[string]int, len(current))
 	for i := range current {
-		active[current[i].Fingerprint]++
+		fp := current[i].Fingerprint
+		if have[fp] <= active[fp] {
+			for _, alias := range current[i].AliasFingerprints {
+				if have[alias] > active[alias] {
+					fp = alias
+					break
+				}
+			}
+		}
+		active[fp]++
 	}
 
 	kept := make([]Entry, 0, len(b.Entries))
@@ -303,18 +321,34 @@ func (b *Baseline) NewMatcher() *Matcher {
 // is looked up under the fingerprint that rule would have produced, so retiring
 // a duplicate rule ID does not un-baseline every finding accepted under it.
 func (m *Matcher) Match(f *findings.Finding) *Entry {
+	e, _ := m.MatchHow(f)
+	return e
+}
+
+// How an entry matched a finding.
+const (
+	// ViaFingerprint is the finding's own fingerprint.
+	ViaFingerprint = "fingerprint"
+	// ViaAliasFingerprint is a fingerprint the finding also answers to: a
+	// retired rule's, or the finding a merged duplicate used to be.
+	ViaAliasFingerprint = "alias_fingerprint"
+)
+
+// MatchHow is Match, and also says how the entry matched. The fingerprint is
+// always tried first; the alias fingerprints are the fallback.
+func (m *Matcher) MatchHow(f *findings.Finding) (entry *Entry, via string) {
 	if m == nil || m.b == nil || f == nil {
-		return nil
+		return nil, ""
 	}
 	if e := m.consume(f.Fingerprint); e != nil {
-		return e
+		return e, ViaFingerprint
 	}
 	for _, fp := range f.AliasFingerprints {
 		if e := m.consume(fp); e != nil {
-			return e
+			return e, ViaAliasFingerprint
 		}
 	}
-	return nil
+	return nil, ""
 }
 
 // consume takes one entry for fingerprint if any remain.

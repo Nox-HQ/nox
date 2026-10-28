@@ -15,7 +15,7 @@
     "written against: if it does not match the tag rule-diff resolved, the ledger",
     "is stale as a whole and says so rather than silently passing."
   ],
-  "nox_release": "v1.48.1",
+  "nox_release": "v1.55.2",
   "classifications": {
     "duplicate-retired": "a second rule reported the same condition; one ID was retired into the other, which carries the alias",
     "applicability-narrowed": "the rule does not apply to this subject or resource kind, and now says so",
@@ -25,7 +25,9 @@
     "context-narrowed": "the rule's context requirement is now measured in characters as well as lines, so a keyword far away on the same physical line no longer qualifies as context",
     "keyword-tokenized": "the rule's vendor keyword must now be a token; it used to match as a bare substring, so it could be supplied by an accident inside opaque data or by an ordinary English word",
     "format-bound": "the rule now requires the vendor's real credential format; the value it matched is issued by that vendor but is not a credential",
-    "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential"
+    "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential",
+    "value-shape-required": "the value must now have the identifier's documented shape (case, digits, a boundary after it); a word or code expression assigned to the key is not the identifier",
+    "duplicate-merged": "the vulnerability source reported one vulnerability under two identifiers (nox_same_as, e.g. a Go module advisory and its GitHub advisory); they are now one finding that keeps every id in aliases"
   },
   "entries": []
 }

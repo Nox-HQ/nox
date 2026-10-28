@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/nox-hq/nox/core/parallel"
 	"github.com/nox-hq/nox/core/source"
@@ -21,6 +22,7 @@ import (
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/lexctx"
+	"github.com/nox-hq/nox/core/mcpconfig"
 	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
 )
@@ -52,12 +54,16 @@ type Inventory struct {
 	PromptTemplates []PromptTemplate `json:"prompt_templates,omitempty"`
 	// ToolMatrix lists tool permission sets for agents and MCP servers.
 	ToolMatrix []ToolPermissionSet `json:"tool_permission_matrix,omitempty"`
+	// Checks names the AI checks that ran. Empty means the AI analyzer did
+	// not run, so empty Components then means "did not look", not "found
+	// nothing".
+	Checks []string `json:"checks"`
 }
 
 // NewInventory returns an empty inventory with the current schema version.
 func NewInventory() *Inventory {
 	return &Inventory{
-		SchemaVersion: "2.0.0",
+		SchemaVersion: schemaVersion,
 		Components:    []Component{},
 	}
 }
@@ -130,7 +136,8 @@ func mergeModel(dst *ModelReference, src ModelReference) {
 
 // JSON returns the inventory as pretty-printed JSON bytes.
 func (inv *Inventory) JSON() ([]byte, error) {
-	return json.MarshalIndent(inv, "", "  ")
+	out := inv.normalized()
+	return json.MarshalIndent(&out, "", "  ")
 }
 
 // WriteFile writes the inventory to the given file path.
@@ -244,6 +251,7 @@ func suppressNonCode(lang lexctx.Lang, content []byte, f *findings.Finding) bool
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, *Inventory, error) {
 	fs := findings.NewFindingSet()
 	inv := NewInventory()
+	inv.Checks = append([]string(nil), inventoryChecks...)
 
 	// Files are scanned on every core (see core/parallel, which also honours
 	// cancellation between artifacts). Each file's findings and inventory
@@ -443,7 +451,16 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) (*fileScan, error) 
 			out.components = extractComponents(artifact.Path, content)
 		}
 
-		out.models = extractModelReferences(artifact.Path, content)
+		// A source file reaches here on a marker as weak as the word
+		// "openai" in a comment, so its config-style `model: "X"` matches
+		// count only when X is a recognised model family; otherwise an ORM's
+		// `model: "Invoice"` became an ML model in the AI-BOM.
+		//
+		// Both model extractors read the file with its comments blanked: a
+		// call quoted in a doc comment is documentation, not a model the
+		// application calls. Offsets and lines are unchanged.
+		code := commentsBlanked(lang, content)
+		out.models = extractModelReferencesIn(artifact.Path, code, !isAIComp)
 		out.prompts = extractPromptTemplates(artifact.Path, content)
 		out.tools = extractToolPermissions(artifact.Path, content, a.deg)
 
@@ -453,7 +470,7 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) (*fileScan, error) 
 		// "misses" suggests: `model="gpt-4o"` satisfies the config pattern
 		// here and the invocation pattern there, so these merge into the
 		// existing entry rather than appending a second one.
-		out.sdkModels = extractSDKInvocations(artifact.Path, content)
+		out.sdkModels = extractSDKInvocations(artifact.Path, code)
 		out.frameworks = extractFrameworkComponents(artifact.Path, content)
 	}
 	return out, nil
@@ -466,7 +483,7 @@ func extractComponents(path string, content []byte) []Component {
 	name := baseName(path)
 
 	switch {
-	case name == "mcp.json":
+	case isMCPConfigPath(path):
 		return extractMCPComponents(path, content)
 	case hasSuffix(name, ".prompt") || hasSuffix(name, ".prompt.md"):
 		return []Component{{
@@ -484,29 +501,38 @@ func extractComponents(path string, content []byte) []Component {
 	}
 }
 
+// isMCPConfigName reports whether a file name is an MCP client configuration:
+// mcp.json, or a dotted variant such as the project-scoped .mcp.json that
+// Claude Code and other clients read from the repository root. Matching only
+// the bare name left that file listed as one opaque component with no servers
+// and no tool matrix.
+func isMCPConfigName(name string) bool {
+	return name == "mcp.json" || hasSuffix(name, ".mcp.json")
+}
+
+// isMCPConfigPath is isMCPConfigName plus the location-keyed configs whose file
+// name is generic: Zed keeps its servers in .zed/settings.json.
+func isMCPConfigPath(path string) bool {
+	return isMCPConfigName(baseName(path)) || mcpconfig.ServersKey(path) == "context_servers"
+}
+
 // extractMCPComponents parses an mcp.json file and extracts one inventory
 // entry per configured MCP server.
 func extractMCPComponents(path string, content []byte) []Component {
-	// Try to parse as JSON with mcpServers key.
-	var config struct {
-		MCPServers map[string]json.RawMessage `json:"mcpServers"`
+	// The servers key depends on the client that owns the path: mcpServers for
+	// most, servers for .vscode/mcp.json, context_servers for .zed/settings.json.
+	servers, err := mcpconfig.ParseServersAt(path, content)
+	generic := []Component{{Name: "mcp.json", Type: "mcp_config", Path: path}}
+	if mcpconfig.ServersKey(path) == "context_servers" {
+		// An editor settings file with no server table is not an MCP config; it
+		// must not be inventoried as one.
+		generic = nil
 	}
-	if err := json.Unmarshal(content, &config); err != nil {
-		// If unparseable, return a single generic entry.
-		return []Component{{
-			Name: "mcp.json",
-			Type: "mcp_config",
-			Path: path,
-		}}
+	if err != nil || len(servers) == 0 {
+		// If unparseable or empty, return a single generic entry.
+		return generic
 	}
-
-	if len(config.MCPServers) == 0 {
-		return []Component{{
-			Name: "mcp.json",
-			Type: "mcp_config",
-			Path: path,
-		}}
-	}
+	config := struct{ MCPServers map[string]json.RawMessage }{servers}
 
 	// Sort so the inventory is byte-identical run to run. Map iteration order is
 	// randomized, and ai.inventory.json is a reproducible artifact — leaving the
@@ -523,10 +549,33 @@ func extractMCPComponents(path string, content []byte) []Component {
 			Name:    serverName,
 			Type:    "mcp_server",
 			Path:    path,
-			Details: map[string]string{"server": serverName},
+			Details: mcpServerDetails(serverName, config.MCPServers[serverName]),
 		})
 	}
 	return components
+}
+
+// mcpServerDetails records what the configuration says about how a server is
+// launched: its command and arguments, which are what a reader needs to know
+// what the server is and what it is pointed at. The environment block is
+// deliberately not copied; it is where credentials live. A definition that does
+// not decode keeps only its name.
+func mcpServerDetails(name string, raw json.RawMessage) map[string]string {
+	details := map[string]string{"server": name}
+	def, err := mcpconfig.ParseLaunch(raw)
+	if err != nil {
+		return details
+	}
+	if def.Command != "" {
+		details["command"] = def.Command
+	}
+	if len(def.Args) > 0 {
+		details["args"] = strings.Join(def.Args, " ")
+	}
+	if def.URL != "" {
+		details["transport"] = "remote"
+	}
+	return details
 }
 
 // classifyByPath returns a component type based on path segments.

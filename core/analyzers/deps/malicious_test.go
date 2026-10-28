@@ -457,3 +457,135 @@ func TestDetectTyposquatting_PopularNotFlagged(t *testing.T) {
 		t.Error("expected 'expres' to be flagged as a typosquat of 'express'")
 	}
 }
+
+// TestDetectTyposquatting_EstablishedNotFlagged: an established package that
+// sits one edit from a target is not a typosquat of it. Each of these was
+// reported by VULN-002 at the production threshold before the exemption set
+// existed, because the curated target list was also the only exemption.
+func TestDetectTyposquatting_EstablishedNotFlagged(t *testing.T) {
+	cases := []struct{ name, ecosystem string }{
+		{"openai", "npm"},       // OpenAI's SDK; one edit from openapi
+		{"jws", "npm"},          // jsonwebtoken's dependency; one edit from ws
+		{"safer-buffer", "npm"}, // one edit from safe-buffer
+		{"gaxios", "npm"},       // Google's HTTP client; one edit from axios
+		{"enquirer", "npm"},     // one edit from inquirer
+		{"query-string", "npm"}, // one edit from querystring
+		{"mz", "npm"},           // one edit from ms
+		{"listr2", "npm"},       // one edit from listr
+		{"aws-cdk", "npm"},      // one edit from aws-sdk
+		{"psycopg", "pypi"},     // psycopg 3; one edit from psycopg2
+		{"cattrs", "pypi"},      // one edit from attrs
+		{"trino", "pypi"},       // one edit from trio
+		{"motor", "pypi"},       // MongoDB's async driver; one edit from moto
+		{"scapy", "pypi"},       // one edit from scipy
+		{"boto", "pypi"},        // one edit from boto3
+		{"grequests", "pypi"},   // one edit from requests
+		{"fastai", "pypi"},      // one edit from fastapi
+	}
+	for _, c := range cases {
+		if target, ok := DetectTyposquatting(c.name, c.ecosystem, 1); ok {
+			t.Errorf("%s (%s) flagged as a typosquat of %q, but it is an established package", c.name, c.ecosystem, target)
+		}
+	}
+}
+
+// TestDetectTyposquatting_HistoricalTyposquatsStillFire: real typosquats from
+// public incident reports must keep firing at the production threshold. The
+// exemption set must not swallow them.
+func TestDetectTyposquatting_HistoricalTyposquatsStillFire(t *testing.T) {
+	cases := []struct{ name, ecosystem, target string }{
+		{"crossenv", "npm", "cross-env"},                // npm, Aug 2017 (hacktask)
+		{"mongose", "npm", "mongoose"},                  // npm, Aug 2017 (hacktask)
+		{"colourama", "pypi", "colorama"},               // PyPI, Oct 2018
+		{"python3-dateutil", "pypi", "python-dateutil"}, // PyPI, Dec 2019
+		{"djago", "pypi", "django"},                     // PyPI, SK-CSIRT Sept 2017
+		{"diango", "pypi", "django"},                    // PyPI, SK-CSIRT Sept 2017
+		{"setup-tools", "pypi", "setuptools"},           // PyPI, SK-CSIRT Sept 2017
+	}
+	for _, c := range cases {
+		target, ok := DetectTyposquatting(c.name, c.ecosystem, 1)
+		if !ok || target != c.target {
+			t.Errorf("DetectTyposquatting(%q, %q, 1) = (%q, %v), want (%q, true)", c.name, c.ecosystem, target, ok, c.target)
+		}
+	}
+}
+
+// TestDetectTyposquatting_MaliciousNeverExempt: the exemption set is built from
+// download and dependent counts, and a typosquat can get popular. A name that
+// is known-malicious (VULN-003) is never exempt, even when it is listed as
+// established.
+func TestDetectTyposquatting_MaliciousNeverExempt(t *testing.T) {
+	popularOnce.Do(loadPopular)
+	set := establishedSet["npm"]
+	if set == nil {
+		t.Fatal("npm exemption set not loaded")
+	}
+	set["crossenv"] = struct{}{}
+	defer delete(set, "crossenv")
+
+	if target, ok := DetectTyposquatting("crossenv", "npm", 1); !ok || target != "cross-env" {
+		t.Errorf("crossenv listed as established: got (%q, %v), want (\"cross-env\", true)", target, ok)
+	}
+}
+
+// TestEstablishedExcludesKnownMalicious checks the committed data files: the
+// generator removes known-malicious names, and this keeps a hand edit or a
+// stale regeneration from reintroducing one.
+func TestEstablishedExcludesKnownMalicious(t *testing.T) {
+	popularOnce.Do(loadPopular)
+	maliciousOnce.Do(loadMalicious)
+	for eco, mal := range maliciousPkgs {
+		for name := range mal {
+			if _, ok := establishedSet[eco][normalizeDistName(name)]; ok {
+				t.Errorf("%s: known-malicious %q is in the exemption set", eco, name)
+			}
+		}
+	}
+}
+
+func TestEstablishedPackagesLoaded(t *testing.T) {
+	popularOnce.Do(loadPopular)
+	for eco, floor := range map[string]int{"npm": 10000, "pypi": 5000} {
+		if got := len(establishedSet[eco]); got < floor {
+			t.Errorf("%s exemption set has %d names, want at least %d", eco, got, floor)
+		}
+	}
+}
+
+// TestScanArtifacts_EstablishedPackagesNotTyposquats runs the analyzer over a
+// lockfile holding the three packages from the reported Express app plus a
+// real typosquat, so the wiring is checked, not only the function.
+func TestScanArtifacts_EstablishedPackagesNotTyposquats(t *testing.T) {
+	tmpDir := t.TempDir()
+	content := []byte(`{
+  "packages": {
+    "node_modules/openai": {"version": "4.20.0"},
+    "node_modules/jws": {"version": "3.2.2"},
+    "node_modules/safer-buffer": {"version": "2.1.2"},
+    "node_modules/crossenv": {"version": "1.0.0"}
+  }
+}`)
+	lockPath := filepath.Join(tmpDir, "package-lock.json")
+	if err := os.WriteFile(lockPath, content, 0o644); err != nil {
+		t.Fatalf("writing lockfile: %v", err)
+	}
+	artifacts := []discovery.Artifact{{
+		Path:    "package-lock.json",
+		AbsPath: lockPath,
+		Type:    discovery.Lockfile,
+		Size:    int64(len(content)),
+	}}
+	_, fs, err := NewAnalyzer(WithOSVDisabled()).ScanArtifacts(context.Background(), artifacts)
+	if err != nil {
+		t.Fatalf("ScanArtifacts returned error: %v", err)
+	}
+	var flagged []string
+	for _, f := range fs.Findings() {
+		if f.RuleID == "VULN-002" {
+			flagged = append(flagged, f.Metadata["package"])
+		}
+	}
+	if len(flagged) != 1 || flagged[0] != "crossenv" {
+		t.Errorf("VULN-002 flagged %v, want exactly [crossenv]", flagged)
+	}
+}

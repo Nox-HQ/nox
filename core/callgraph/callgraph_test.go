@@ -277,3 +277,31 @@ func TestNoGoModStillBuilds(t *testing.T) {
 		t.Error("a graph with no module path called its scope complete")
 	}
 }
+
+func TestCallersOfSymbolNamesTheFunctionNotJustThePackage(t *testing.T) {
+	dir := module(t, map[string]string{"main.go": `package main
+
+import "example.com/dep/pgp"
+
+func a() { pgp.ReadMessage() }
+func b() { pgp.Decrypt() }
+func main() { a(); b() }
+`})
+	g := BuildGo(dir)
+	if got := g.CallersOfSymbol("example.com/dep/pgp", "ReadMessage"); len(got) != 1 {
+		t.Fatalf("callers of ReadMessage = %v", got)
+	}
+	if got := g.CallersOfSymbol("example.com/dep/pgp", "Decrypt"); len(got) != 1 || got[0] == g.CallersOfSymbol("example.com/dep/pgp", "ReadMessage")[0] {
+		t.Fatalf("callers of Decrypt = %v", got)
+	}
+	if got := g.CallersOfSymbol("example.com/dep/pgp", "Nope"); len(got) != 0 {
+		t.Errorf("an uncalled symbol has callers %v", got)
+	}
+	if got := g.CallersOfPackage("example.com/dep/pgp"); len(got) != 2 {
+		t.Errorf("package-level callers regressed: %v", got)
+	}
+	var nilGraph *Graph
+	if nilGraph.CallersOfSymbol("x", "y") != nil {
+		t.Error("nil graph answers nothing")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -260,12 +261,27 @@ func TestParseFormats(t *testing.T) {
 }
 
 func TestRun_ScanStagedFlag(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not available: %v", err)
+	}
 	dir := t.TempDir()
 
-	// Initialize git repo.
-	_ = exec.Command("git", "init").Run()
-	_ = exec.Command("git", "config", "user.email", "test@example.com").Run()
-	_ = exec.Command("git", "config", "user.name", "Test User").Run()
+	// Every git command runs IN dir. These once ran in the package directory
+	// with their errors discarded: `git init` created cli/.git in the source
+	// tree on every run, `git add` in dir then failed, and the test skipped as
+	// "git not available" — so --staged was never tested at all.
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "HOME="+dir)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	git("init", "-q")
+	git("config", "user.email", "test@example.com")
+	git("config", "user.name", "Test User")
 
 	// Create a file with a finding.
 	content := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
@@ -274,10 +290,13 @@ func TestRun_ScanStagedFlag(t *testing.T) {
 	}
 
 	// Stage the file.
-	cmd := exec.Command("git", "add", "config.env")
-	cmd.Dir = dir
-	if err := cmd.Run(); err != nil {
-		t.Skipf("git not available: %v", err)
+	git("add", "config.env")
+
+	// An untracked file with its own finding: --staged must not report it,
+	// or the flag is not restricting anything.
+	untracked := "GITHUB_TOKEN=ghp_" + strings.Repeat("aB3", 12) + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "untracked.env"), []byte(untracked), 0o644); err != nil {
+		t.Fatalf("writing temp file: %v", err)
 	}
 
 	outDir := filepath.Join(dir, "output")
@@ -286,6 +305,16 @@ func TestRun_ScanStagedFlag(t *testing.T) {
 	// Should detect finding in staged file.
 	if code != 1 {
 		t.Fatalf("expected exit code 1 for staged finding, got %d", code)
+	}
+	report, err := os.ReadFile(filepath.Join(outDir, "findings.json"))
+	if err != nil {
+		t.Fatalf("reading findings: %v", err)
+	}
+	if !strings.Contains(string(report), "config.env") {
+		t.Errorf("the staged file's finding is missing from findings.json")
+	}
+	if strings.Contains(string(report), "untracked.env") {
+		t.Errorf("--staged reported a file that is not staged")
 	}
 }
 
@@ -517,11 +546,13 @@ func TestRun_ScanWithAIComponents(t *testing.T) {
   "mcpServers": {
     "test": {
       "command": "npx",
-      "args": ["test-mcp"]
+      "args": ["test-mcp@1.0.0"]
     }
   }
 }
 `
+	// The package is pinned: this test is about a scan of an MCP config
+	// completing cleanly, and an unpinned `npx test-mcp` is MCP-025.
 	if err := os.WriteFile(filepath.Join(dir, "mcp.json"), []byte(mcpConfig), 0o644); err != nil {
 		t.Fatalf("writing mcp.json: %v", err)
 	}

@@ -20,14 +20,37 @@ deterministically and offline.** The difference is that the network is removed
 from scan time entirely — only the out-of-band generator touches a registry; the
 scanner consumes a frozen artifact.
 
-## Default-safe
+## On by default, from NOX Intelligence
 
-The predictive dimension is **opt-in and off by default**. With no feed
-configured, the SLOP analyzer behaves exactly as it always has: `SLOP-001` only,
-no `SLOP-002`, identical findings, identical grade. Enabling a feed is purely
-*additive* — it never changes the `SLOP-001` baseline.
+With NOX Intelligence enabled (the default) and the scan online, nox fetches the
+signed feed at `<intelligence endpoint>/v1/feeds/slopsquat` and verifies it
+under the **Ed25519 key built into nox**: key id `slopfeed-key-v1`, fingerprint
+`sha256:168327fe999925cd025ddeaf1d1cde605dfd0641395cf021da3259c8b451fa08`, the same key that signs the [MCP advisory feed](mcp-advisory-feed.md) (see
+[intelligence.md](intelligence.md#the-signed-feeds-and-the-key-built-into-nox)).
+No configuration is needed. The default feed must be signed; an unsigned answer
+is rejected.
 
-## Enabling it
+- **Your own key wins**: `scan.slop.signature_key_path` replaces the built-in key.
+  `SLOP-002` findings carry `metadata.feed_key` (`built-in:slopfeed-key-v1` or
+  `project:sha256:...`) so the report says which key verified the feed.
+- **Opt out**: `scan.slop.disabled: true` restores exactly the reactive `SLOP-001`
+  behavior (no request, no `SLOP-002`, no degradation). A feed named in
+  `scan.slop.feed` is used as configured, as before.
+- **No request when it must not**: `--offline` (or `--no-osv`, `scan.osv.disabled`)
+  reads only a verified cached copy; `scan.intelligence.disabled` consults
+  nothing. Without a cached copy the scan records a non-blocking `slop_feed`
+  degradation saying the feed was **not checked** and why: that is not "nothing
+  high-risk".
+- **Not published yet** (the service answers 404): a non-blocking degradation.
+- **Does not verify**: a blocking degradation; the feed is never used. If the
+  signature failed, nox also asks the service which key it serves. A key that
+  differs from the built-in one is reported with both fingerprints and the advice
+  to upgrade nox, or review the new key and pin it. It is never trusted
+  automatically.
+
+Enabling a feed is purely additive: it never changes the `SLOP-001` baseline.
+
+## Configuring a different feed
 
 In `.nox.yaml`, `scan.slop.feed` accepts three kinds of value:
 
@@ -44,6 +67,12 @@ scan:
     require_signature: false          # reject an unsigned / bad-signature feed
     signature_key_path: keys/slopsquat.pub.pem  # PEM Ed25519 public key
 ```
+
+`signature_key_path` accepts either PEM form of an Ed25519 public key: the PKIX
+`PUBLIC KEY` that `openssl pkey -pubout` writes, or the raw `ED25519 PUBLIC KEY`
+that `cmd/slopfeed --pubkey-out` writes. (nox v1.48.2 and earlier accepted only
+the raw form and rejected the openssl one with "unexpected public key length:
+44".)
 
 To point at your own regenerated feed file instead of the bundled one:
 
@@ -218,8 +247,13 @@ job and needs no `id-token` (Ed25519 signing is secret-based, not keyless OIDC).
 
 ## Regenerating the feed
 
-The feed is produced by `cmd/slopfeed`, the maintained port of the research
-prototype. It models how LLMs hallucinate names, generates the candidates, and
+The feed is produced by `cmd/slopfeed`, a thin command line over the generator
+in `github.com/nox-hq/nox-core/slopfeed/generate`. The feed format, its digest,
+and signing and verification live in `github.com/nox-hq/nox-core/slopfeed`,
+shared with the service that will publish the feed. In this repository,
+`core/analyzers/slop/feed` keeps only the CLI side: reading a local file, the
+bundled feed (`data/`), and the remote fetch with its verified cache. The
+generator models how LLMs hallucinate names, generates the candidates, and
 checks public registries **read-only, rate-limited, re-verifying every 404**:
 
 ```bash

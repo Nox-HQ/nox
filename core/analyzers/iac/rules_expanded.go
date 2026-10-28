@@ -325,15 +325,22 @@ func builtinExpandedIaCRules() []rules.Rule {
 			references:   []string{"https://cwe.mitre.org/data/definitions/829.html"},
 		},
 		{
-			id: "IAC-296", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
+			id: "IAC-296", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
+			// The pattern only nominates every Ingress; it is not the claim. The
+			// claim is checked by parsing the document (ingress_tls.go), which
+			// drops the nomination unless the Ingress HAS a tls block and (a)
+			// serves a host no tls entry covers, or (b) has a tls entry with no
+			// secretName and no certificate-provisioning annotation. An Ingress
+			// with no tls block at all is IAC-149's, and a template that cannot
+			// be parsed is not evaluated.
 			pattern:      `(?i)kind:\s*Ingress`,
-			description:  "K8s Ingress (verify TLS termination)",
+			description:  "K8s Ingress has a tls block but serves a host it does not cover, or names no certificate source",
 			cwe:          "CWE-319",
 			keywords:     []string{"Ingress"},
 			filePatterns: k8sFilePatterns,
 			tags:         []string{"iac", "kubernetes", "transport-security"},
-			remediation:  "Ensure the Ingress resource defines a tls section with valid certificates. Without TLS termination, traffic between clients and the cluster is transmitted in plain text.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/319.html"},
+			remediation:  "List every host in spec.rules[].host under a spec.tls[].hosts entry (a wildcard covers one label), and give each tls entry a secretName or a cert-manager/controller annotation that provisions the certificate. A host with no covering tls entry is served over plain HTTP.",
+			references:   []string{"https://cwe.mitre.org/data/definitions/319.html", "https://kubernetes.io/docs/concepts/services-networking/ingress/#tls"},
 		},
 		{
 			id: "IAC-297", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
@@ -392,7 +399,14 @@ func builtinExpandedIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-302", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
-			pattern:      `(?i)add:\s*\n\s*-\s*['"]?(?:SYS_ADMIN|ALL|NET_ADMIN)`,
+			// Two gaps, one shape. `add:` followed by the dangerous entry as
+			// the FIRST list item was all this saw, so `add: [NET_BIND_SERVICE,
+			// NET_ADMIN]` (any position but first) and the flow spelling
+			// `capabilities: {add: [SYS_ADMIN]}` both read as a container that
+			// asked for nothing. The entry may now be any item of the `add`
+			// list, in block or flow form; `drop: [ALL]` - the hardening this
+			// is the opposite of - has no `add` key and does not match.
+			pattern:      `(?i)\badd\s*:\s*(?:\n(?:[ \t]*-[ \t]*['"]?[A-Z_]+['"]?[ \t]*(?:#[^\n]*)?\n)*?[ \t]*-[ \t]*|\[(?:[^\]\n]*,)?[ \t]*)['"]?(?:SYS_ADMIN|ALL|NET_ADMIN)['"]?[ \t]*(?:[,\]\n#]|$)`,
 			description:  "K8s container adds dangerous capability",
 			cwe:          "CWE-250",
 			keywords:     []string{"capabilities", "SYS_ADMIN", "ALL"},
@@ -2585,6 +2599,60 @@ func builtinExpandedIaCRules() []rules.Rule {
 			tags:         []string{"iac", "kubernetes", "runtime"},
 			remediation:  "Container has been assigned a runtime ID. Use with 'kubectl logs' or 'docker logs' for debugging. ID changes on restart.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
+		},
+		{
+			id: "IAC-502", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			// A Kubernetes or Helm environment variable carries its own name
+			// as a `name:` VALUE, so every rule keyed on a `password:` or
+			// `token:` mapping key never saw `name: DB_PASSWORD` / `value:
+			// hunter2`. Replacing `valueFrom: secretKeyRef` with the literal it
+			// referenced produced a scan identical to the hardened one. The
+			// pattern finds a credential-named variable followed by a value;
+			// validate decides whether the value is a literal (not empty, a
+			// path, a template, a reference or a placeholder) and whether the
+			// name is a credential or a setting about one (DB_PASSWORD_FILE).
+			pattern:      `(?im)^[ \t]*-?[ \t]*name:[ \t]*["']?[A-Za-z0-9_.-]*(?:pass(?:word|wd|phrase)|secret|token|api[_-]?key|private[_-]?key|access[_-]?key|credential|auth[_-]?key|signing[_-]?key|encryption[_-]?key|master[_-]?key)[A-Za-z0-9_.-]*["']?[ \t]*\r?\n[ \t]*value:[ \t]*[^\s#][^\n]*$|\{[ \t]*name:[ \t]*["']?[A-Za-z0-9_.-]*(?:pass(?:word|wd|phrase)|secret|token|api[_-]?key|private[_-]?key|access[_-]?key|credential|auth[_-]?key|signing[_-]?key|encryption[_-]?key|master[_-]?key)[A-Za-z0-9_.-]*["']?[ \t]*,[ \t]*value:[ \t]*[^\s}][^}\n]*\}`,
+			validate:     envNameValueIsLiteralCredential,
+			description:  "Kubernetes or Helm environment variable sets a credential to a literal value",
+			cwe:          "CWE-798",
+			keywords:     []string{"value"},
+			filePatterns: k8sFilePatterns,
+			tags:         []string{"iac", "kubernetes", "helm", "secrets"},
+			remediation:  "Reference the credential from a Secret with env[].valueFrom.secretKeyRef (or the chart's existingSecret value) instead of writing it into the manifest. A literal in a manifest is in version control, in every rendered release, and in `kubectl get -o yaml` for anyone who can read the workload.",
+			references:   []string{"https://cwe.mitre.org/data/definitions/798.html", "https://kubernetes.io/docs/concepts/configuration/secret/#using-secrets-as-environment-variables"},
+		},
+		{
+			id: "IAC-503", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			// The Compose list form `- DB_PASSWORD=hunter2`. The map form
+			// (`DB_PASSWORD: hunter2`) is IAC-225's, and the Kubernetes pair
+			// form is IAC-502's. A bare `- DB_PASSWORD` forwards the host's
+			// value and `${...}` is expansion: neither is a literal, and
+			// validate says so.
+			pattern:      `(?im)^[ \t]*-[ \t]*["']?[A-Za-z_][A-Za-z0-9_.-]*(?:pass(?:word|wd|phrase)|secret|token|api[_-]?key|private[_-]?key|access[_-]?key|credential|auth[_-]?key|signing[_-]?key|encryption[_-]?key|master[_-]?key)[A-Za-z0-9_.-]*=[^\n]*$`,
+			validate:     composeEnvIsLiteralCredential,
+			description:  "Docker Compose environment entry sets a credential to a literal value",
+			cwe:          "CWE-798",
+			keywords:     []string{"="},
+			filePatterns: []string{"docker-compose*.yml", "docker-compose*.yaml", "compose*.yml", "compose*.yaml"},
+			tags:         []string{"iac", "docker-compose", "secrets"},
+			remediation:  "Pass the credential from the host environment or an env_file that is not committed (`- DB_PASSWORD` or `- DB_PASSWORD=${DB_PASSWORD}`), or use Compose secrets. A literal in docker-compose.yml is in version control for everyone who clones the repository.",
+			references:   []string{"https://cwe.mitre.org/data/definitions/798.html", "https://docs.docker.com/compose/how-tos/use-secrets/"},
+		},
+		{
+			id: "IAC-504", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
+			// IAC-052 is the same condition in CloudFormation's spelling and
+			// does not apply to .tf. Terraform's S3 public access block has
+			// four independent switches; any one of them set to false removes
+			// that layer of protection, and the resource reads identically to
+			// the hardened one except for a single word.
+			pattern:      `(?im)^[ \t]*(?:block_public_acls|block_public_policy|ignore_public_acls|restrict_public_buckets)[ \t]*=[ \t]*false\b`,
+			description:  "Terraform S3 public access block disabled",
+			cwe:          "CWE-284",
+			keywords:     []string{"block_public_acls", "block_public_policy", "ignore_public_acls", "restrict_public_buckets"},
+			filePatterns: []string{"*.tf", "*.tfvars"},
+			tags:         []string{"iac", "terraform", "aws", "s3"},
+			remediation:  "Set block_public_acls, block_public_policy, ignore_public_acls and restrict_public_buckets to true on aws_s3_bucket_public_access_block, or on aws_s3_account_public_access_block for the whole account. Each switch closes a different route to a public object.",
+			references:   []string{"https://cwe.mitre.org/data/definitions/284.html", "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html"},
 		},
 	}
 

@@ -387,11 +387,17 @@ func (fs *FindingSet) Add(f Finding) {
 	fs.items = append(fs.items, f)
 }
 
-// Deduplicate removes findings that share the same Fingerprint, keeping only
-// the first occurrence. Call this after all findings have been added and before
+// Deduplicate removes findings that share the same Fingerprint and position,
+// keeping the one that sorts first under compareFindings. Call this after all findings have been added and before
 // producing output.
 func (fs *FindingSet) Deduplicate() {
-	seen := make(map[string]struct{}, len(fs.items))
+	// index maps a key to its slot in unique, so a later duplicate can displace
+	// the earlier one when it sorts first under compareFindings. Keeping "the
+	// first occurrence" made the survivor a function of encounter order, which
+	// across analyzers is goroutine completion order. The survivor is now the
+	// minimum under a total order, and the slot keeps the position of the first
+	// occurrence so a set that is not sorted afterwards is laid out as before.
+	index := make(map[dedupKey]int, len(fs.items))
 	unique := make([]Finding, 0, len(fs.items))
 	for i := range fs.items {
 		finding := fs.items[i]
@@ -405,14 +411,24 @@ func (fs *FindingSet) Deduplicate() {
 		// MD5 calls at lines 10 and 50. Keying dedup on fingerprint alone then
 		// silently dropped the second, real finding. Two findings at different
 		// positions are never duplicates; a true duplicate shares position too.
-		key := fmt.Sprintf("%s|%d|%d", finding.Fingerprint, finding.Location.StartLine, finding.Location.StartColumn)
-		if _, exists := seen[key]; exists {
+		key := dedupKey{finding.Fingerprint, finding.Location.StartLine, finding.Location.StartColumn}
+		slot, exists := index[key]
+		if !exists {
+			index[key] = len(unique)
+			unique = append(unique, finding)
 			continue
 		}
-		seen[key] = struct{}{}
-		unique = append(unique, finding)
+		if compareFindings(&finding, &unique[slot]) < 0 {
+			unique[slot] = finding
+		}
 	}
 	fs.items = unique
+}
+
+type dedupKey struct {
+	fingerprint string
+	line        int
+	column      int
 }
 
 // flowKey identifies one source→sink dataflow independently of which end of it
@@ -496,7 +512,7 @@ func preferFlowFinding(a, b *Finding) bool {
 	if a.Location.StartLine != b.Location.StartLine {
 		return a.Location.StartLine < b.Location.StartLine
 	}
-	return a.Fingerprint < b.Fingerprint
+	return compareFindings(a, b) < 0
 }
 
 // DeduplicateFlows collapses findings that describe the SAME source→sink
@@ -636,30 +652,7 @@ func (fs *FindingSet) SuppressDuplicateVulnClass(suppressRulePrefix string) {
 // already breaks its ties this way, for the same reason.
 func (fs *FindingSet) SortDeterministic() {
 	sort.Slice(fs.items, func(i, j int) bool {
-		a, b := fs.items[i], fs.items[j]
-		if a.RuleID != b.RuleID {
-			return a.RuleID < b.RuleID
-		}
-		if a.Location.FilePath != b.Location.FilePath {
-			return a.Location.FilePath < b.Location.FilePath
-		}
-		if a.Location.StartLine != b.Location.StartLine {
-			return a.Location.StartLine < b.Location.StartLine
-		}
-		if a.Fingerprint != b.Fingerprint {
-			return a.Fingerprint < b.Fingerprint
-		}
-		// A v2 fingerprint ignores position, so two matches of the same text
-		// on one line tie on everything above. Without these the sort is not
-		// a total order and their order follows whatever order the analyzers
-		// produced them in -- which changed between builds on llama_index.
-		if a.Location.StartColumn != b.Location.StartColumn {
-			return a.Location.StartColumn < b.Location.StartColumn
-		}
-		if a.Location.EndLine != b.Location.EndLine {
-			return a.Location.EndLine < b.Location.EndLine
-		}
-		return a.Location.EndColumn < b.Location.EndColumn
+		return compareFindings(&fs.items[i], &fs.items[j]) < 0
 	})
 }
 

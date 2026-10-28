@@ -74,7 +74,7 @@ reports/
   sbom.cdx.json        # CycloneDX SBOM with vulnerability enrichment
   sbom.spdx.json       # SPDX SBOM with security references
   report.html          # Standalone HTML report
-  ai.inventory.json    # AI component inventory (if detected)
+  ai.inventory.json    # AI component and model inventory (always written)
 ```
 
 ### Use in CI (GitHub Action)
@@ -140,7 +140,7 @@ make build
 
 ## What Nox Detects
 
-Nox ships with **1498 built-in rules** across five analyzer suites:
+Nox ships with **1505 built-in rules** across five analyzer suites:
 
 ### Secrets (884 rules)
 
@@ -182,7 +182,7 @@ Detects AI/ML application security risks aligned with the **OWASP LLM Top 10**:
 | Supply Chain | AI-008, AI-014 | LLM03 | Unpinned models, insecure HTTP model downloads |
 | Resource Management | AI-017 | LLM10 | Unlimited token limits |
 
-### Infrastructure as Code (482 rules)
+### Infrastructure as Code (485 rules)
 
 Detects misconfigurations across **7 IaC categories**:
 
@@ -365,12 +365,22 @@ Supports all comment styles: `//`, `#`, `--`, `/*`, `<!--`. Multi-rule: `nox:ign
 
 ### Diff Mode
 
-Show only findings in changed files:
+Show what a branch changed: what is new, what is no longer present, what got
+worse, which agents gained a capability, and which routes became authorization
+leads. Both refs are scanned from git's object database and compared; your
+working tree is never touched.
 
 ```bash
 nox diff --base main --head HEAD
 nox diff --base main --json
 nox diff . --rules custom-rules.yaml
+```
+
+Compare with an earlier run instead of a ref (keep its `findings.json` and the
+`ai.inventory.json` beside it):
+
+```bash
+nox scan . --previous last-run/findings.json
 ```
 
 ### Watch Mode
@@ -851,6 +861,7 @@ nox serve --allowed-paths /path/to/project   # or name the roots
 | `list_findings` | `severity`, `rule`, `file`, `limit` | List findings with filtering |
 | `baseline_status` | `path` | Get baseline statistics |
 | `baseline_add` | `path`, `fingerprint`, `reason` | Add finding to baseline |
+| `advisories` | `previous`, `policy` | Decide what to do about dependency advisories in the last scan (new, relevance, policy). Read-only: never opens a pull request or merges |
 | `attack_plan` | `path` | Build exploit hypotheses from the last scan. Offline: contacts no target, executes nothing |
 | `plugin.list` | -- | List registered plugins |
 | `plugin.call_tool` | `tool`, `input`, `workspace_root` | Invoke a plugin tool |
@@ -867,7 +878,8 @@ nox serve --allowed-paths /path/to/project   # or name the roots
 
 Output is truncated at 1 MB. Workspace paths are allowlisted.
 
-Most tools are read-only. The exceptions are explicit: `baseline_add` /
+Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
+`idempotentHint`, `openWorldHint`). Most tools are read-only. The exceptions are explicit: `baseline_add` /
 `baseline_add_many` write the baseline file, and `plugin_install` runs new code
 on the operator's machine and requires `confirmed: true`, which the MCP host must
 collect from a human.

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "fs": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem@2025.1.14", "./docs"]
+    },
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git==0.6.2", "--repository", "."],
+      "env": { "ALLOW_ALL": "0" }
+    }
+  }
+}

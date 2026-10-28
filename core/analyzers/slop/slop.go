@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/nox-hq/nox-core/evidence"
-	"github.com/nox-hq/nox/core/analyzers/slop/feed"
+	"github.com/nox-hq/nox-core/slopfeed"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/reasoning"
@@ -33,7 +33,10 @@ type Analyzer struct {
 	// check and nothing else — no feed means zero behavior change. When set, an
 	// imported name that matches a feed entry additionally raises a distinct
 	// SLOP-002 predictive finding; the SLOP-001 baseline is never altered.
-	feed *feed.Loaded
+	feed *slopfeed.Loaded
+	// feedKey names the key the feed verified under ("built-in:slopfeed-key-v1",
+	// "project:sha256:..."), recorded on SLOP-002 findings. Empty when unknown.
+	feedKey string
 
 	// reasoning receives the refutations. Nil until asked for, and every
 	// recording call is nil-safe.
@@ -63,9 +66,12 @@ func (a *Analyzer) refute(path string, line int, reason string) {
 // Option configures an Analyzer.
 type Option func(*Analyzer)
 
+// WithFeedKey records which key the attached feed verified under.
+func WithFeedKey(source string) Option { return func(a *Analyzer) { a.feedKey = source } }
+
 // WithFeed attaches a verified predictive slopsquat blocklist. Passing a nil
 // feed is a no-op, so callers can wire it unconditionally.
-func WithFeed(f *feed.Loaded) Option {
+func WithFeed(f *slopfeed.Loaded) Option {
 	return func(a *Analyzer) {
 		if f != nil {
 			a.feed = f
@@ -123,9 +129,9 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 // compromise, so a critical-tier target is reported High, not Critical.
 func predictiveSeverity(tier string) findings.Severity {
 	switch tier {
-	case feed.TierCritical:
+	case slopfeed.TierCritical:
 		return findings.SeverityHigh
-	case feed.TierHigh:
+	case slopfeed.TierHigh:
 		return findings.SeverityMedium
 	default: // medium and anything unexpected
 		return findings.SeverityLow
@@ -319,6 +325,21 @@ func (a *Analyzer) emitPredictive(fs *findings.FindingSet, eco ecosystem, path, 
 		return
 	}
 	seen[pkg] = struct{}{}
+	meta := map[string]string{
+		"package":      pkg,
+		"ecosystem":    string(eco),
+		"import":       imp.spec,
+		"tier":         entry.Tier,
+		"pattern":      entry.Pattern,
+		"neighbor_of":  entry.NeighborOf,
+		"verified_at":  entry.VerifiedAt,
+		"feed_version": a.feed.Version(),
+		"feed_digest":  a.feed.Digest(),
+		"cwe":          "CWE-1357",
+	}
+	if a.feedKey != "" {
+		meta["feed_key"] = a.feedKey
+	}
 	fs.Add(findings.Finding{
 		RuleID:     "SLOP-002",
 		Severity:   predictiveSeverity(entry.Tier),
@@ -327,18 +348,7 @@ func (a *Analyzer) emitPredictive(fs *findings.FindingSet, eco ecosystem, path, 
 		Message: "Imported package \"" + pkg + "\" is a known high-risk slopsquat target (" + entry.Tier +
 			" tier): a name an LLM is likely to hallucinate that was verified unregistered on " + entry.VerifiedAt +
 			". Verify it on the official registry before installing or running it.",
-		Metadata: map[string]string{
-			"package":      pkg,
-			"ecosystem":    string(eco),
-			"import":       imp.spec,
-			"tier":         entry.Tier,
-			"pattern":      entry.Pattern,
-			"neighbor_of":  entry.NeighborOf,
-			"verified_at":  entry.VerifiedAt,
-			"feed_version": a.feed.Version(),
-			"feed_digest":  a.feed.Digest(),
-			"cwe":          "CWE-1357",
-		},
+		Metadata: meta,
 	})
 }
 

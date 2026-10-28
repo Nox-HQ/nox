@@ -633,8 +633,14 @@ func TestAllIaCRules_Count(t *testing.T) {
 	// 485 -> 484 is not a retirement: IAC-185 moved out of the ENGINE's set
 	// because it is evaluated by parsing (pull_policy.go). It is still in the
 	// analyzer's published catalog, and TestCatalogContainsAllRules counts it.
-	if got := len(rules); got != 476 {
-		t.Errorf("expected 476 IaC rules, got %d", got)
+	//
+	// 476 -> 479: three rules added. IAC-502 and IAC-503
+	// (a credential-named environment variable with a literal value, in
+	// Kubernetes/Helm and in Compose) and IAC-504 (Terraform S3 public access
+	// block disabled) report changes that used to read as a clean scan.
+	// IAC-296 keeps its ID and is now a checkable claim distinct from IAC-149.
+	if got := len(rules); got != 479 {
+		t.Errorf("expected 479 IaC rules, got %d", got)
 	}
 }
 

@@ -57,6 +57,7 @@ var scanFlagBindings = []scanFlagBinding{
 	{"emit-hypotheses", "hypothesesOutFlag"},
 	{"only", "onlyFlag"},
 	{"skip", "skipFlag"},
+	{"previous", "previousFlag"},
 }
 
 // inertScanFlags are flags that deliberately do nothing. An entry is a promise

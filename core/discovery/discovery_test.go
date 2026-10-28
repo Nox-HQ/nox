@@ -70,6 +70,11 @@ func TestDefaultClassifier_AIComponent(t *testing.T) {
 		want ArtifactType
 	}{
 		{"mcp.json", AIComponent},
+		{".vscode/mcp.json", AIComponent},
+		// Zed keeps MCP servers in its project settings; other settings.json
+		// files stay what they were.
+		{".zed/settings.json", AIComponent},
+		{"app/settings.json", Config},
 		{"system.prompt", AIComponent},
 		{"system.prompt.md", AIComponent},
 		{"prompts/security.txt", AIComponent},
@@ -1186,5 +1191,40 @@ func TestSourceExtensionsCoverTheLexer(t *testing.T) {
 			t.Errorf("lexer supports %q but discovery does not classify it as Source — "+
 				"add it to sourceExtensions or source-gated rules will skip it", ext)
 		}
+	}
+}
+
+// A linked worktree and a submodule both have a `.git` file; only the
+// worktree's points into `<repo>/.git/worktrees/`. A nested clone has a `.git`
+// directory. Only the first is a linked worktree (#830).
+func TestIsLinkedWorktree(t *testing.T) {
+	write := func(dir, content string) string {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, ".git"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return dir
+	}
+	cases := []struct {
+		name string
+		prep func(dir string)
+		want bool
+	}{
+		{"linked worktree", func(d string) { write(d, "gitdir: /r/.git/worktrees/agent-1\n") }, true},
+		{"bare-repo worktree", func(d string) { write(d, "gitdir: /r/proj.git/worktrees/x\n") }, true},
+		{"submodule", func(d string) { write(d, "gitdir: ../.git/modules/sub\n") }, false},
+		{"submodule named worktrees", func(d string) { write(d, "gitdir: /r/.git/modules/worktrees\n") }, false},
+		{"nested clone", func(d string) { _ = os.Mkdir(filepath.Join(d, ".git"), 0o755) }, false},
+		{"not a repo", func(string) {}, false},
+		{"garbage .git file", func(d string) { write(d, "hello worktrees") }, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			c.prep(dir)
+			if got := IsLinkedWorktree(dir); got != c.want {
+				t.Fatalf("IsLinkedWorktree = %v, want %v", got, c.want)
+			}
+		})
 	}
 }

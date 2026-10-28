@@ -99,6 +99,35 @@ func isLikelyAIContent(content []byte) bool {
 	return false
 }
 
+// commentsBlanked returns content with every comment byte except line breaks
+// replaced by a space, so a regex extractor reading it cannot match text that
+// only appears in a comment, and every offset and line number is unchanged.
+// Strings are kept: a model name is a string literal. Content in a language
+// lexctx cannot classify is returned as is.
+func commentsBlanked(lang lexctx.Lang, content []byte) []byte {
+	if lang == lexctx.LangUnknown {
+		return content
+	}
+	var out []byte
+	for _, r := range lexctx.Classify(lang, content) {
+		if r.Kind != lexctx.KindComment {
+			continue
+		}
+		if out == nil {
+			out = append([]byte(nil), content...)
+		}
+		for i := r.Start; i < r.End; i++ {
+			if out[i] != '\n' && out[i] != '\r' {
+				out[i] = ' '
+			}
+		}
+	}
+	if out == nil {
+		return content
+	}
+	return out
+}
+
 // indexBytes is a tiny stand-in for bytes.Index without importing the
 // bytes package at top-level (file-local helper).
 func indexBytes(haystack, needle []byte) int {
@@ -153,13 +182,9 @@ var providerInvocations = []sdkInvocationPattern{
 // the matching pattern (overrides classifyModelRegistry's prefix-based
 // guess) so that an `azure.openai` deployment shows up correctly even
 // when its model name is a custom string. The result is enriched with
-// the invocation's line number, the auth env var (when an api_key is
-// passed inline), and the endpoint / base URL (Azure, Bedrock, custom).
+// the invocation's line number, the auth env var (only when the client the call is made on
+// was built from one; see credentialFor), and the endpoint / base URL (Azure, Bedrock, custom).
 func extractSDKInvocations(path string, content []byte) []ModelReference {
-	text := string(content)
-	endpointGuess := detectEndpoint(text)
-	authGuess := detectAuthEnvVar(text)
-
 	var refs []ModelReference
 	for _, p := range providerInvocations {
 		locs := p.re.FindAllSubmatchIndex(content, -1)
@@ -176,56 +201,12 @@ func extractSDKInvocations(path string, content []byte) []ModelReference {
 				Registry:   p.provider,
 				Path:       path,
 				Line:       lexctx.LineForOffset(content, m[0]),
-				AuthEnvVar: authGuess,
-				Endpoint:   endpointGuess,
+				AuthEnvVar: credentialFor(content, m[0]),
+				Endpoint:   endpointFor(content, m[0]),
 			})
 		}
 	}
 	return refs
-}
-
-// detectAuthEnvVar inspects content for `api_key = os.getenv("X")` /
-// `process.env.X` style references commonly used to feed LLM clients.
-// Returns the env var name when one matches, or "" otherwise.
-func detectAuthEnvVar(text string) string {
-	// These are detector regexes, not credentials: they match
-	// "API_KEY"/"TOKEN"/"SECRET"/"PASSWORD" identifiers in scanned source.
-	//
-	// The waivers are per-line and trailing. A directive applies to exactly one
-	// line, so the single directive that used to sit above this block waived
-	// nothing at all — every pattern below was reported despite looking waived.
-	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`os\.getenv\s*\(\s*["']([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))["']`), // nox:ignore SEC-161,SEC-163 -- detector pattern, not a credential
-		regexp.MustCompile(`os\.environ\[\s*["']([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))["']`),   // nox:ignore SEC-161,SEC-163 -- detector pattern, not a credential
-		regexp.MustCompile(`process\.env\.([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))`),
-		regexp.MustCompile(`process\.env\[\s*["']([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))["']`), // nox:ignore SEC-161,SEC-163 -- detector pattern, not a credential
-		regexp.MustCompile(`os\.Getenv\s*\(\s*"([A-Z][A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD))"\s*\)`), // nox:ignore SEC-161,SEC-163 -- detector pattern, not a credential
-	}
-	for _, re := range patterns {
-		if m := re.FindStringSubmatch(text); len(m) > 1 {
-			return m[1]
-		}
-	}
-	return ""
-}
-
-// detectEndpoint extracts a non-default LLM endpoint URL when present.
-// Captures Azure OpenAI deployment names, AWS Bedrock regions, and
-// custom base_url values.
-func detectEndpoint(text string) string {
-	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`base_url\s*[:=]\s*["']([^"']+)["']`),
-		regexp.MustCompile(`baseURL\s*:\s*["']([^"']+)["']`),
-		regexp.MustCompile(`azure_endpoint\s*[:=]\s*["']([^"']+)["']`),
-		regexp.MustCompile(`AzureOpenAI\s*\([^)]*endpoint\s*[:=]\s*["']([^"']+)["']`),
-		regexp.MustCompile(`bedrock-runtime[^"']*['"]?,?\s*region_name\s*=\s*["']([^"']+)["']`),
-	}
-	for _, re := range patterns {
-		if m := re.FindStringSubmatch(text); len(m) > 1 {
-			return m[1]
-		}
-	}
-	return ""
 }
 
 // frameworkPattern recognises agent / vector-store framework usage and

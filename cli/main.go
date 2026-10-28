@@ -155,6 +155,8 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  confirm          ACTIVE: dynamically confirm AI prompt-injection findings against a running --target (opt-in)\n")
 		fmt.Fprintf(os.Stderr, "  attack <cmd>     Dynamic exploit validation: plan (offline), run, replay, regress (ACTIVE, --authorize)\n")
 		fmt.Fprintf(os.Stderr, "  badge [path]     Generate an SVG status badge\n")
+		fmt.Fprintf(os.Stderr, "  compliance <fw>  Technical evidence for a framework from scan outputs (iso27001)\n")
+		fmt.Fprintf(os.Stderr, "  model [path]     Threat model (system elements, data flows, STRIDE evidence) from scan outputs\n")
 		fmt.Fprintf(os.Stderr, "  baseline <cmd>   Manage finding baselines\n")
 		fmt.Fprintf(os.Stderr, "  diff [path]      Show findings in changed files\n")
 		fmt.Fprintf(os.Stderr, "  watch [path]     Watch for changes and re-scan\n")
@@ -164,7 +166,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  cache <cmd>      Manage scan cache\n")
 		fmt.Fprintf(os.Stderr, "  vex <cmd>        OpenVEX waiver document tools (vex init)\n")
 		fmt.Fprintf(os.Stderr, "  install-hook     Install pre-commit/pre-push git hooks\n")
-		fmt.Fprintf(os.Stderr, "  fix              Apply OSV dep upgrades (--actions also bumps GitHub Actions pins)\n")
+		fmt.Fprintf(os.Stderr, "  fix              Plan, apply and verify fixes (fix plan | apply | verify); bare nox fix applies OSV dep upgrades\n")
 		fmt.Fprintf(os.Stderr, "  doctor           Report environment, plugin state, config sanity\n")
 		fmt.Fprintf(os.Stderr, "  agent-graph      Render agent capability lattice (mermaid/dot)\n")
 		fmt.Fprintf(os.Stderr, "  analysis-capabilities  Report what this installation can establish, and what it cannot\n")
@@ -172,6 +174,9 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  calibrate        Suggest severity overrides from a bench report\n")
 		fmt.Fprintf(os.Stderr, "  rule-review      List rule propositions worth a maintainer read\n")
 		fmt.Fprintf(os.Stderr, "  ci-gate          Decide whether a scan should fail a build (degradations, dead baseline, net-new)\n")
+		fmt.Fprintf(os.Stderr, "  advisories       Decide what to do about newly disclosed dependency advisories (report, prepare, remediate)\n")
+		fmt.Fprintf(os.Stderr, "  enable           Turn on optional checks by what they check (writes .nox.yaml)\n")
+		fmt.Fprintf(os.Stderr, "  install-ci       Write a GitHub Actions workflow: scan on PRs, watch for new advisories on a schedule\n")
 		fmt.Fprintf(os.Stderr, "  install          Install plugins listed in .nox.yaml plugins.required\n")
 		fmt.Fprintf(os.Stderr, "  uri <uri>        Handle nox:// URI (install action). Use `uri register` to wire OS URL handler\n")
 		fmt.Fprintf(os.Stderr, "  completion <sh>  Generate shell completions\n")
@@ -220,6 +225,10 @@ func run(args []string) int {
 		return runAttack(remaining[1:])
 	case "badge":
 		return runBadge(remaining[1:])
+	case "compliance":
+		return runCompliance(remaining[1:])
+	case "model":
+		return runModel(remaining[1:])
 	case "serve":
 		return runServe(remaining[1:])
 	case "mcp":
@@ -237,7 +246,7 @@ func run(args []string) int {
 	case "baseline":
 		return runBaseline(remaining[1:])
 	case "diff":
-		return runDiff(remaining[1:])
+		return runDiffWith(remaining[1:], verboseFlag)
 	case "watch":
 		return runWatch(remaining[1:])
 	case "completion":
@@ -270,6 +279,12 @@ func run(args []string) int {
 		return runCalibrate(remaining[1:])
 	case "rule-review":
 		return runRuleReview(remaining[1:])
+	case "advisories":
+		return runAdvisories(remaining[1:])
+	case "install-ci":
+		return runInstallCI(remaining[1:])
+	case "enable":
+		return runEnable(remaining[1:])
 	case "install":
 		return runInstall(remaining[1:])
 	case "uri":
@@ -453,6 +468,23 @@ func printGlobalFlags(out io.Writer) {
 	tmp.PrintDefaults()
 }
 
+// scanEnvironmentHelp documents the environment variables that change what a
+// scan writes. SOURCE_DATE_EPOCH was honoured by every timestamped report for
+// releases without appearing anywhere a user would look for it.
+const scanEnvironmentHelp = `
+Environment:
+  SOURCE_DATE_EPOCH
+    	Unix time in seconds (e.g. 1700000000) used for every timestamp in the
+    	reports (findings.json, SBOMs, HTML). With it set, two scans of the same
+    	tree write byte-identical files; without it each report carries the time
+    	it was written. An unparseable value is ignored. Vulnerability lookups
+    	are a second input: pass --offline for a run that depends only on the tree.
+  NOX_FINGERPRINT_VERSION
+    	Same as --fingerprint-version.
+`
+
+func printScanEnvironment(out io.Writer) { _, _ = fmt.Fprint(out, scanEnvironmentHelp) }
+
 func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verbose bool) int {
 	// Parse scan-specific flags.
 	scanFS := flag.NewFlagSet("scan", flag.ContinueOnError)
@@ -519,11 +551,14 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	scanFS.StringVar(&hypothesesOutFlag, "emit-hypotheses", "", "write the active-testing questions this scan raises to a JSON file (see `nox attack run --plan`). Emits only; the scan stays read-only.")
 	var fingerprintVersionFlag string
 	scanFS.StringVar(&fingerprintVersionFlag, "fingerprint-version", "", "fingerprint algorithm version (1 = legacy, line+path+content; 2 = line-independent + path-normalised). Default v2 (line-independent) unless NOX_FINGERPRINT_VERSION is set.")
+	var previousFlag string
+	scanFS.StringVar(&previousFlag, "previous", "", "findings.json from an earlier run (with the ai.inventory.json beside it): lead the assessment with what changed since, instead of listing everything as if it were new")
 	scanFS.Usage = func() {
 		out := scanFS.Output()
 		_, _ = fmt.Fprintln(out, "Usage of scan:")
 		scanFS.PrintDefaults()
 		printGlobalFlags(out)
+		printScanEnvironment(out)
 	}
 	positionals, err := parseInterspersed(scanFS, args)
 	if err != nil {
@@ -599,6 +634,14 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 
 	if verbose {
 		fmt.Println("[discover] walking directory...")
+	}
+
+	// Read the earlier run before this one writes anything: --previous often
+	// points at the file this run is about to overwrite.
+	prev, havePrev, perr := loadPreviousState(previousFlag, stagedFlag || historyFlag)
+	if perr != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", perr)
+		return 2
 	}
 
 	scopes, err := nox.ResolveScopes(strings.Split(onlyFlag, ","), strings.Split(skipFlag, ","))
@@ -742,7 +785,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		if !result.Scope.Has(nox.ScopeDeps) {
 			deps = "dependencies not scanned"
 		}
-		aiComponents := fmt.Sprintf("%d AI components", len(result.AIInventory.Components))
+		aiComponents := result.AIInventory.Summary()
 		if !result.Scope.Has(nox.ScopeAI) {
 			aiComponents = "AI components not scanned"
 		}
@@ -762,6 +805,9 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		if offlineFlag {
 			fmt.Println("[offline] zero-network guarantee: no OSV, no API, no token, no telemetry (recorded in findings.json meta)")
 		}
+		if note := networkNotice(cfg, offlineFlag, noOSVFlag, result.Scope.Has(nox.ScopeDeps), pkgCount); note != "" {
+			fmt.Println(note)
+		}
 	}
 
 	// Report incomplete checks even under --quiet, and on stderr. A scan that
@@ -773,7 +819,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	// SBOM, so a pipeline that tripped the flag lost the findings it did
 	// collect and had nothing to upload. The exit is applied after reports are
 	// written; see below.
-	for _, d := range result.Degradations {
+	for _, d := range degradationsToPrint(result.Degradations, assessmentShown(quiet, stagedFlag, historyFlag), verbose) {
 		fmt.Fprintf(os.Stderr, "[degraded] %s\n  impact: %s\n", d.Detail, d.Impact)
 	}
 
@@ -830,7 +876,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 				fmt.Fprintf(os.Stderr, "[scope] %s not written: dependencies were not scanned\n", path)
 				continue
 			}
-			r := sbom.NewCycloneDXReporter(version)
+			r := sbom.NewCycloneDXReporter(version).WithAIInventory(result.AIInventory)
 			if err := r.WriteToFile(result.Inventory, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
@@ -873,8 +919,9 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		}
 	}
 
-	// Always write AI inventory if components were found.
-	if len(result.AIInventory.Components) > 0 {
+	// Always write the AI inventory. An empty one still records which AI
+	// checks ran, so "found nothing" stays distinguishable from "did not look".
+	{
 		path := filepath.Join(outputDir, "ai.inventory.json")
 		if err := result.AIInventory.WriteFile(path); err != nil {
 			fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
@@ -896,7 +943,10 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	}
 
 	if !quiet {
-		printNextStepTips(activeFindings, outputDir)
+		if assessmentShown(quiet, stagedFlag, historyFlag) {
+			scanAssessment{result: result, active: activeFindings, target: target, outDir: outputDir,
+				formats: formats, offline: offlineFlag, verbose: verbose, targets: scanTargetChecker(cfg, offlineFlag, noOSVFlag), since: sinceDelta(prev, havePrev, result)}.print(os.Stdout)
+		}
 		fmt.Println("[done]")
 	}
 

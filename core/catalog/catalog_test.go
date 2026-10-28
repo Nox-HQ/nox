@@ -118,8 +118,17 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1495 -> 1497 added HARDEN-003 (cookie secure=False) and TAINT-011
 	// (untrusted data stored in the session, opt-in).
 	// 1497 -> 1498 added SEC-952, a JWT in a non-compact JSON layout.
-	if got := len(cat); got != 1498 {
-		t.Errorf("Catalog() returned %d rules, want 1498", got)
+	// 1498 -> 1499 added AUTHZ-001, possible broken object-level
+	// authorization in Express routes (opt-in).
+	// 1499 -> 1502 adds IAC-502, IAC-503 (a credential-named environment
+	// variable with a literal value, Kubernetes/Helm and Compose), IAC-504
+	// (Terraform S3 public access block disabled) and MCP-025 (an MCP server
+	// launched from a package registry without a pinned version).
+	// 1503 -> 1505 adds AUTHN-001 (a route with no visible authentication,
+	// opt-in) and WEBHOOK-001 (a Stripe, GitHub or Slack webhook payload
+	// accepted without signature verification).
+	if got := len(cat); got != 1505 {
+		t.Errorf("Catalog() returned %d rules, want 1505", got)
 	}
 }
 

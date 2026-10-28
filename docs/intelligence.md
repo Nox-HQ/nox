@@ -13,6 +13,12 @@ the scan. If a sentence here is not true of the binary, that is a bug.
 | `scan.intelligence.contribute: true` **only** | redacted observations: per finding, the fields in `nox intel allowlist` — fingerprint, rule id, ecosystem/package/version range, verdict — never a path, a line, a snippet, a secret, or a prompt | the intelligence service |
 | never | source code, file paths, file contents, prompts, credentials, customer data | — |
 
+| every online scan, when a signed feed is not cached or has expired (24h) | two plain `GET`s of public files: `/v1/feeds/slopsquat` and, when the scan found registry-launched MCP servers, `/v1/feeds/mcp`. Nothing about the project is sent | the intelligence service |
+
+A scan that made the lookup says so once, in a `[network]` line after the
+results: how many dependencies, where they went, and how to opt out. A scan that
+made no lookup (`--offline`, `--no-osv`, no dependencies) prints no such line.
+
 `nox intel preview <path>` prints exactly what a contribution from `<path>`
 would carry, without sending it. `nox intel allowlist` prints every field an
 observation may carry; anything not on that list cannot be sent, by
@@ -44,7 +50,61 @@ says so: the scan carries an `intel_unreachable` degradation naming the
 endpoint, distinct from the `intel_suppression` a withheld record raises —
 silence is not withholding, and the two are never confused. Only when the
 reference is unreachable as well does the scan report an advisory under-report
-(`osv_lookup`), the one degradation that can hide a finding.
+(`osv_lookup`), the degradation that can hide a finding.
+
+A finding's existence and its severity are looked up separately. When the
+follow-up fetch for an advisory's details (severity, summary, affected ranges)
+fails, nox retries it twice on a transport error, a 5xx or a 429, and fills it
+from the other source (NOX Intelligence or OSV.dev) if that one has it. Only
+when neither source can supply the details does the scan raise a blocking
+`advisory_detail` degradation naming the advisories. The finding is still
+reported, but it kept a default severity, so a severity gate (`fail_on: high`)
+may not see it: that degradation can hide a severity, never a finding.
+
+An answer the service marks incomplete is not an answer of "none". Each query
+result may carry `nox_coverage` (`complete`, `incomplete`, `unsupported`); a
+partial one raises an `intel_incomplete` degradation naming the packages and
+sets `meta.advisory_lookup` to `incomplete` in `findings.json`, so `nox diff`
+does not compare its advisories against a full scan. A plain OSV.dev response
+carries no coverage statement and raises nothing: it claims neither
+completeness nor its absence.
+
+## The signed feeds, and the key built into nox
+
+Two feeds come from the service, both signed with one Ed25519 key:
+the predictive slopsquat feed (`SLOP-002`, [slopsquat-feed.md](slopsquat-feed.md))
+and the MCP advisory feed (`MCP-026`, [mcp-advisory-feed.md](mcp-advisory-feed.md)).
+They are used by default, with no configuration, because nox carries the public
+half of that key:
+
+- **Key id** `slopfeed-key-v1`, fingerprint `sha256:168327fe999925cd025ddeaf1d1cde605dfd0641395cf021da3259c8b451fa08` (SHA-256 of the raw 32-byte key),
+  published at `/v1/feeds/slopsquat.pub.pem` and `/v1/feeds/mcp.pub.pem`:
+
+```text
+-----BEGIN ED25519 PUBLIC KEY-----
+2ByJdNFjJEs1EDZB5C16bmRdMVdT62k3Ydv1GnqIYQs=
+-----END ED25519 PUBLIC KEY-----
+```
+
+- **Verification is unchanged**: digest recomputed over the canonical entries, then
+  the Ed25519 signature (MCP: over the domain-separated canonical bytes). A feed
+  that fails either is never used, is never papered over with a cached copy, and
+  is a **blocking** degradation (`--fail-on-degraded`).
+- **Your own key wins.** `scan.slop.signature_key_path` and
+  `scan.mcp_feed.signature_key_path` replace the built-in key for that feed.
+  Findings record which key verified them in `metadata.feed_key`:
+  `built-in:slopfeed-key-v1` or `project:sha256:...`.
+- **Consulted only when the service is**: online and `scan.intelligence` not
+  disabled. `--offline`, `--no-osv`, `scan.osv.disabled` make no request (a
+  verified cached copy is still read); `scan.intelligence.disabled` makes none and
+  asks for none. In each case the scan records a non-blocking degradation that
+  says the feed was **not checked** and why, which is not "no advisories".
+- **Opt out per feed**: `scan.slop.disabled: true`, `scan.mcp_feed.disabled: true`.
+- **Rotation.** If a feed fails signature verification, nox makes one extra
+  request for the key the service serves now. If its fingerprint differs from the
+  built-in one, the degradation names both fingerprints and says to upgrade nox
+  or to review the new key and pin it with `signature_key_path`. nox never starts
+  trusting a key because the server served it.
 
 ## Turning it off, at every level
 
@@ -76,6 +136,31 @@ Contribution is a separate decision from querying, and it is off until
 `scan.intelligence.contribute: true` is set. A lookup already transmits the
 dependency list; it would be a lie to say "contribute: false" meant nothing
 was sent, so the two are named separately and documented separately.
+
+### Consent, terms and erasure
+
+Setting `scan.intelligence.contribute: true` is not enough. `.nox.yaml` is
+project config and may be committed, so it cannot speak for whoever runs the
+scan; consent is recorded **per installation**, in `~/.nox/intel-consent.json`
+next to the reporter salt (or beside `scan.intelligence.reporter_salt_path`).
+
+| command | does |
+|---|---|
+| `nox intel consent show` | prints the contribution terms (the single source: `core/intel/terms.go`) |
+| `nox intel consent accept` | shows the terms and records acceptance after you type `yes`; `--accept-terms 2026-10` does it non-interactively and must name the current version |
+| `nox intel consent status` / `withdraw` | report / remove the acceptance (no network) |
+| `nox intel preview <path>` | the terms, your consent status, and the exact observations a scan would send |
+| `nox intel forget` | posts your reporter id and deletion key to `/v1/reporters/erase`, prints the counts the service returns, then withdraws consent and discards the reporter salt, so consenting again is a new, unlinkable reporter. Unreachable or refused: it exits non-zero and changes nothing locally |
+
+Observations are contribution schema 2: the allowlisted fields plus
+`schema_version`, `consent_version` (the terms version you accepted) and
+`deletion_verifier`. The verifier is the SHA-256 of a deletion key, itself an
+HMAC of the private salt under a fixed label; the key is sent only to the erase
+endpoint, so only this machine can erase its id once the service has bound the
+verifier. If the terms version changes, contribution pauses until you accept the
+new one, and each scan says so. With contribution off, a scan makes no
+contribution request and says nothing about it. An observation without a
+`consent_version` is never sent.
 
 A contribution that fails is recorded as a degradation and never fails the
 scan. Only `nox scan` contributes — `diff`, `bench` and `intel preview` derive
@@ -160,3 +245,40 @@ of itself, only with `--upload`, and only into its own tenant. See
 [design/intelligence-service.md](design/intelligence-service.md) for the
 service side and [ADR 0002](adr/0002-intelligence-layer-is-a-separate-service.md)
 for why it is a service at all.
+
+
+## Attested contribution and attack evidence
+
+A reporter id on an anonymous contribution is self-asserted, so the service stores
+it and shows it as a triage signal but **never counts it as an independent source**.
+Two ways to be counted, both **attributed to your organisation**: the service
+authenticates your token and can link the contribution to your organisation, which an
+anonymous contribution never allows. That is the price of counting, so both are off by
+default. The scan contribution terms (2026-10) describe the anonymous case and are
+unchanged; attributed scanning is disclosed here and in the attack-evidence terms
+(`nox intel consent attack show`), and you opt in to it separately with
+`scan.intelligence.attested: true`.
+
+- Scan observations: set `scan.intelligence.attested: true` (with
+  `contribute: true` and accepted terms) and export `NOX_INTEL_TOKEN`, an
+  organisation token. Observations then go to `/v1/attested/observations`, and your
+  organisation counts as one source however many seats or machines it has. With no
+  token the scan sends nothing and says so; it does not fall back to a contribution
+  that could not count.
+- Attack evidence from your CI: `nox attack run|replay ... --contribute --candidate
+  <fingerprint>`. Needs `NOX_INTEL_TOKEN` and the separate attack-evidence terms
+  (`nox intel consent attack show|accept|withdraw`, or `--accept-attack-terms
+  attack-2026-10`). `nox intel allowlist --attack` prints every field. Nothing about
+  the target leaves: no URL, host, route, field names, payloads, responses or
+  canaries; only the nox-core `RunReport` fields and a one-way digest of the trace.
+  Only runs that actually executed against a target with a sound control and no
+  unreachable attempts are sent; everything else is listed as skipped, so "never
+  reached" is not stored as "prevented". Refusals (consent, token, candidate,
+  `--profile safe`) happen before any attack fires. A failed upload never changes the
+  attack's exit code.
+
+The service treats a contributed run as **reporter-scoped**: it can raise your own
+exposure view and appear as "reported by N attested reporters", and it cannot change
+the candidate's confidence for anyone else or make it CONFIRMED. Erase with
+`nox intel forget --attested`. Service-side rules: nox-intelligence
+`docs/contributions.md`.

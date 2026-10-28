@@ -1,0 +1,270 @@
+# Written by `nox install-ci`.
+#
+# Two jobs, one workflow:
+#
+#   scan        every pull request and push: findings land in Code Scanning and
+#               as inline annotations, so security checks are part of normal
+#               development.
+#   advisories  on a schedule: scans the code that is already merged, because a
+#               dependency can become vulnerable without a single line changing.
+#               New advisories (absent from the previous scheduled run) are
+#               decided by the `advisories` block in .nox.yaml:
+#
+#                 report     a job summary and an issue. This is the default.
+#                 prepare    also a remediation pull request with the planned upgrade.
+#                 remediate  also allows auto-merge, for safe upgrades only, and
+#                            only once the repository's own required checks pass.
+#                            Branch protection is never bypassed.
+#
+# Pull requests opened with the default GITHUB_TOKEN do not trigger other
+# workflows, so their required checks would never run and auto-merge could
+# never complete. For prepare/remediate the advisories job therefore opens them
+# as, in order of preference:
+#
+#   1. a GitHub App   secrets NOX_APP_ID and NOX_APP_PRIVATE_KEY; a short-lived
+#                     installation token is minted for this one job (recommended)
+#   2. a fine-grained personal access token in secret NOX_TOKEN
+#   3. GITHUB_TOKEN   the pull request is still opened, with a warning that CI
+#                     will not run on it; auto-merge is NOT enabled
+#
+# Setup: https://github.com/nox-hq/nox/blob/main/docs/advisory-policy.md#opening-pull-requests-that-run-your-checks
+name: Nox
+
+on:
+  pull_request:
+  push:
+    branches: ['[[.Branch]]']
+  schedule:
+    - cron: '[[.Cron]]'
+  workflow_dispatch: # nox:ignore IAC-308,IAC-155 -- run on demand to test a policy; it can only report, or open a pull request that is reviewed
+    inputs:
+      policy:
+        description: 'Override the .nox.yaml advisories policy for this run: report, prepare or remediate. Empty uses .nox.yaml.'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run Nox security scan
+        uses: nox-hq/nox@[[.NoxRef]][[.NoxLabel]]
+        with:
+          format: sarif
+          version: '[[.NoxVersion]]'
+          fail-on-degraded: 'true'
+
+      - name: Upload SARIF to Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          sarif_file: nox-results/results.sarif
+
+  advisories:
+    name: New advisories
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # nox:ignore IAC-314 -- the remediation action pushes the branch for the pull request
+      pull-requests: write
+      issues: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The previous scheduled run's findings are what "new" is measured
+      # against. A miss is the first run: everything is reported, nothing is
+      # acted on, and this run becomes the baseline.
+      - name: Restore the previous run
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/nox-previous
+          key: nox-advisories-none
+          restore-keys: nox-advisories-
+
+      - name: Scan
+        uses: nox-hq/nox@[[.NoxRef]][[.NoxLabel]]
+        with:
+          format: json,sarif
+          version: '[[.NoxVersion]]'
+          fail-on-findings: 'false'
+          annotate: 'false'
+
+      - name: Upload SARIF to Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          sarif_file: nox-results/results.sarif
+
+      - name: Decide what is new and what to do about it
+        id: decide
+        env:
+          POLICY_OVERRIDE: ${{ inputs.policy }}
+          PREVIOUS: ${{ runner.temp }}/nox-previous/findings.json
+        run: |
+          set -euo pipefail
+          args=(--github --input nox-results/findings.json --previous "${PREVIOUS}"
+            --prepare-findings nox-results/prepare.json --markdown-out nox-results/advisories.md)
+          if [ -n "${POLICY_OVERRIDE}" ]; then args+=(--policy "${POLICY_OVERRIDE}"); fi
+          nox advisories "${args[@]}"
+
+      # The issue is the durable record of what has been reported. The cache
+      # above is only a performance and "what to act on" aid: GitHub evicts it
+      # after seven days without use, and a run that finds it gone has no
+      # "previous" to compare with. Such a run reports every current advisory
+      # that no existing issue (open OR closed) already carries, instead of
+      # concluding that nothing is new. So a disclosure that lands while the
+      # cache is missing is still reported, once, and nothing is reported twice.
+      # Each advisory is recorded in the issue body as a hidden marker
+      # (ecosystem/package/id, aliases included, version excluded).
+      - name: Report advisories in an issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS: ${{ runner.temp }}/nox-previous/findings.json
+          POLICY_OVERRIDE: ${{ inputs.policy }}
+        run: |
+          set -euo pipefail
+          args=(--input nox-results/findings.json --previous "${PREVIOUS}" --format json)
+          if [ -n "${POLICY_OVERRIDE}" ]; then args+=(--policy "${POLICY_OVERRIDE}"); fi
+          nox advisories "${args[@]}" > nox-results/advisories.json
+
+          gh issue list --state all --limit 1000 --json body --jq '.[].body' > nox-results/issue-bodies.txt
+
+          jq --rawfile seen nox-results/issue-bodies.txt '
+            . as $r
+            | ( $r.decisions // [] )
+            | map(select(.novelty == "new" or .novelty == "unestablished"))
+            | map( . as $d
+                | ( [ $d.advisory ] + ( $d.aliases // [] ) ) as $ids
+                | $d + { markers: ( $ids | map( "<!-- nox-advisory:" + $d.ecosystem + "/" + $d.package + "/" + . + " -->" ) ) } )
+            | map( select( ( .markers | map( . as $m | $seen | contains($m) ) | any ) | not ) )
+          ' nox-results/advisories.json > nox-results/to-report.json
+
+          count="$(jq 'length' nox-results/to-report.json)"
+          if [ "${count}" = "0" ]; then
+            echo "No advisory is waiting to be reported: every current one is already in an issue, known from the previous run, or waived."
+            exit 0
+          fi
+
+          previous="$(jq -r '.previous_run' nox-results/advisories.json)"
+          {
+            echo "## Nox advisory report"
+            echo
+            if [ "${previous}" != "true" ]; then
+              echo "There was no previous run to compare against (this is the first scheduled run, or GitHub evicted the Actions cache), so every current advisory that no earlier issue already lists is reported here. Nothing was acted on."
+            else
+              echo "These advisories are new since the previous scheduled run."
+            fi
+            echo
+            echo "| Advisory | Package | Severity | Relevance |"
+            echo "|---|---|---|---|"
+            jq -r '.[] | "| \(.advisory) | \(.ecosystem) \(.package)@\(.version) | \(.severity) | \(.relevance) |"' nox-results/to-report.json
+            echo
+            echo "Why:"
+            echo
+            jq -r '.[] | "- **\(.advisory)**: \(.reason)"' nox-results/to-report.json
+            echo
+            jq -r '.[].markers[]' nox-results/to-report.json
+          } > nox-results/issue.md
+
+          if [ "${previous}" = "true" ]; then
+            title="nox: ${count} newly disclosed dependency advisories"
+          else
+            title="nox: ${count} dependency advisories reported (no previous run to compare against)"
+          fi
+          gh issue create --title "${title}" --body-file nox-results/issue.md
+
+      # Which credential opens the pull request. The secrets are only tested
+      # for presence here; their values never enter this step's environment.
+      - name: Choose the token that opens pull requests
+        id: bot
+        if: steps.decide.outputs.action == 'prepare' || steps.decide.outputs.action == 'remediate'
+        env:
+          HAS_APP: ${{ secrets.NOX_APP_ID != '' && secrets.NOX_APP_PRIVATE_KEY != '' }}
+          HAS_PAT: ${{ secrets.NOX_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          if [ "${HAS_APP}" = "true" ]; then
+            kind=app
+          elif [ "${HAS_PAT}" = "true" ]; then
+            kind=pat
+          else
+            kind=github
+            docs='https://github.com/nox-hq/nox/blob/main/docs/advisory-policy.md#opening-pull-requests-that-run-your-checks'
+            echo "::warning::No NOX_APP_ID/NOX_APP_PRIVATE_KEY or NOX_TOKEN secret: the remediation pull request is opened with GITHUB_TOKEN, so CI will not run on it and auto-merge cannot complete. Setup: ${docs}"
+            {
+              echo "### Remediation pull request: CI will not run on it"
+              echo
+              echo "It was opened with \`GITHUB_TOKEN\`, which GitHub does not let trigger other workflows, so required checks never start and auto-merge cannot complete. Add a GitHub App (\`NOX_APP_ID\`, \`NOX_APP_PRIVATE_KEY\`) or a \`NOX_TOKEN\` secret: ${docs}"
+            } >> "${GITHUB_STEP_SUMMARY}"
+          fi
+          echo "kind=${kind}" >> "${GITHUB_OUTPUT}"
+
+      - name: Mint a short-lived GitHub App token
+        id: app-token
+        if: steps.bot.outputs.kind == 'app'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.NOX_APP_ID }}
+          private-key: ${{ secrets.NOX_APP_PRIVATE_KEY }}
+          permission-contents: write # nox:ignore IAC-314 -- the token pushes the remediation branch; it lives for this job only
+          permission-pull-requests: write
+          permission-issues: write
+
+      - name: Prepare the remediation pull request
+        id: remediate
+        if: steps.decide.outputs.action == 'prepare' || steps.decide.outputs.action == 'remediate'
+        uses: nox-hq/nox/actions/remediate@[[.NoxRef]][[.NoxLabel]]
+        with:
+          findings-file: nox-results/prepare.json
+          version: '[[.NoxVersion]]'
+          pr-title: 'chore(security): nox remediation for newly disclosed advisories'
+          github-token: ${{ steps.app-token.outputs.token || secrets.NOX_TOKEN || github.token }}
+
+      # Auto-merge, not merge: GitHub merges only when the branch's required
+      # checks and reviews are satisfied. If the repository has none, or does not
+      # allow auto-merge, nothing is merged and the pull request waits for a person.
+      - name: Allow auto-merge for safe upgrades
+        if: steps.decide.outputs.automerge == 'true' && steps.remediate.outputs.pr-url != '' && steps.bot.outputs.kind != 'github'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.NOX_TOKEN }}
+          PR_URL: ${{ steps.remediate.outputs.pr-url }}
+        run: |
+          if ! gh pr merge --auto --squash "${PR_URL}"; then
+            echo "::warning::auto-merge was not enabled on ${PR_URL}; it is open for review"
+          fi
+
+      # With GITHUB_TOKEN the pull request's checks never run, so auto-merge
+      # would sit pending forever. Say so instead of leaving it dangling.
+      - name: Explain why auto-merge was not enabled
+        if: steps.decide.outputs.automerge == 'true' && steps.remediate.outputs.pr-url != '' && steps.bot.outputs.kind == 'github'
+        env:
+          PR_URL: ${{ steps.remediate.outputs.pr-url }}
+        run: |
+          echo "::warning::auto-merge was not enabled on ${PR_URL}: it was opened with GITHUB_TOKEN, so its required checks cannot run and auto-merge could never complete. Configure a GitHub App or NOX_TOKEN to allow it."
+          echo "Auto-merge was not enabled on ${PR_URL}: the pull request was opened with \`GITHUB_TOKEN\`, so its checks cannot run." >> "${GITHUB_STEP_SUMMARY}"
+
+      # Last, and only when every step above succeeded: a run that failed
+      # part-way must not make its advisories look known to the next one.
+      - name: Remember this run
+        env:
+          PREVIOUS_DIR: ${{ runner.temp }}/nox-previous
+        run: |
+          mkdir -p "${PREVIOUS_DIR}"
+          cp nox-results/findings.json "${PREVIOUS_DIR}/findings.json"
+
+      - name: Save this run for the next
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/nox-previous
+          key: nox-advisories-${{ github.run_id }}-${{ github.run_attempt }}

@@ -442,6 +442,8 @@ func TestCollectActionPins_FindsCompositeActionsAnywhere(t *testing.T) {
 	write("testdata/old/action.yml", step("fixture/action"))
 	write("node_modules/pkg/action.yml", step("vendored/action"))
 	write("docs/notes.yml", "uses: not/an-action-file@v1.0.0\n")
+	write(".claude/worktrees/agent-1/action.yml", step("worktree/action"))
+	write(".claude/worktrees/agent-1/.git", "gitdir: /r/.git/worktrees/agent-1\n")
 
 	var got []string
 	for _, p := range collectActionPins(root) {
@@ -453,7 +455,7 @@ func TestCollectActionPins_FindsCompositeActionsAnywhere(t *testing.T) {
 			t.Errorf("%s not collected; got %v", want, got)
 		}
 	}
-	for _, not := range []string{"fixture/action", "vendored/action", "not/an-action-file"} {
+	for _, not := range []string{"fixture/action", "vendored/action", "not/an-action-file", "worktree/action"} {
 		if strings.Contains(joined, not) {
 			t.Errorf("%s must not be collected; got %v", not, got)
 		}
@@ -478,5 +480,65 @@ func TestCollectActionPins_ThroughSymlinkedRoot(t *testing.T) {
 	want, got := collectActionPins(realDir), collectActionPins(link)
 	if len(want) != 1 || len(got) != 1 || got[0].repo != want[0].repo {
 		t.Errorf("pins: %d by the real path, %d through a link", len(want), len(got))
+	}
+}
+
+// A pin's trailing comment carries more than its version: this repository
+// waives IAC-153 on the same line as the `# v7.0.1` annotation. Rewriting the
+// pin replaced the whole comment, so every remediation PR that bumped a waived
+// pin silently un-waived it (#835 dropped all three). And the version was read
+// from anywhere in the comment, so `@v4 # nox:ignore IAC-001` was taken to
+// track v1 — the rule ID's digits — and a SHA pin waived as IAC-153 with no
+// version annotation read as v153, newer than any release, and was never
+// upgraded.
+func TestRunActionsFix_KeepsWhatFollowsTheVersion(t *testing.T) {
+	root := t.TempDir()
+	p := writeWFPin(t, root, "ci.yml", `steps:
+  - uses: actions/upload-artifact@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa # v7.0.1 # nox:ignore IAC-153 -- CI artifact
+  - uses: actions/checkout@v4 # nox:ignore IAC-001 -- reason
+  - uses: actions/setup-go@v5.0.0 # pinned for go1.26
+  - uses: octo/tagged@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb # tag=v1.0.0
+`)
+	res := fakeResolver{
+		"actions/upload-artifact": {"v7.0.2", "cccccccccccccccccccccccccccccccccccccccc"},
+		"actions/checkout":        {"v7.0.1", "dddddddddddddddddddddddddddddddddddddddd"},
+		"actions/setup-go":        {"v5.2.0", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"},
+		"octo/tagged":             {"v1.1.0", "ffffffffffffffffffffffffffffffffffffffff"},
+	}
+	applied, skipped, failed := runActionsFix(root, false, false, res)
+	if applied != 4 || failed != 0 {
+		t.Fatalf("applied=%d skipped=%d failed=%d, want applied=4", applied, skipped, failed)
+	}
+	got, _ := os.ReadFile(p)
+	checkoutV4, _ := res.tagSHA("actions/checkout", "v4")
+	want := `steps:
+  - uses: actions/upload-artifact@cccccccccccccccccccccccccccccccccccccccc # v7.0.2 # nox:ignore IAC-153 -- CI artifact
+  - uses: actions/checkout@` + checkoutV4 + ` # v4 # nox:ignore IAC-001 -- reason
+  - uses: actions/setup-go@eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee # v5.2.0 # pinned for go1.26
+  - uses: octo/tagged@ffffffffffffffffffffffffffffffffffffffff # v1.1.0
+`
+	if string(got) != want {
+		t.Errorf("rewrite lost or misread the comment:\n%s", got)
+	}
+}
+
+func TestCurrentVersion_ReadsOnlyTheAnnotation(t *testing.T) {
+	sha := strings.Repeat("a", 40)
+	cases := []struct{ ref, comment, want string }{
+		{sha, " # v4.1.0", "v4.1.0"},
+		{sha, " # v7.0.1 # nox:ignore IAC-153 -- x", "v7.0.1"},
+		{sha, " # tag=v4", "v4"},
+		{sha, " # v2.1.0-rc.3", "v2.1.0"},
+		// No annotation: the waiver's digits are not a version.
+		{sha, " # nox:ignore IAC-153 -- x", ""},
+		{sha, " # nox:ignore=IAC-153", ""},
+		{"v4", " # nox:ignore IAC-001 -- x", "v4"},
+		{"v5.0.0", " # pinned for go1.26", "v5.0.0"},
+	}
+	for _, c := range cases {
+		p := actionPin{ref: c.ref, comment: c.comment}
+		if got := p.currentVersion(); got != c.want {
+			t.Errorf("currentVersion(@%s%s) = %q, want %q", c.ref[:min(len(c.ref), 8)], c.comment, got, c.want)
+		}
 	}
 }

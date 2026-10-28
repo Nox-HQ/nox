@@ -84,6 +84,7 @@ func depFinding(pkg, eco, version, fixed string) findings.Finding {
 
 var derOpts = DeriveOptions{
 	ReporterID: "reporter-abc", ObservedAt: "2026-08-01T00:00:00Z", ToolVersion: "1.30.0",
+	ConsentVersion: TermsVersion,
 }
 
 // Only dependency findings are eligible. Every other rule reports on the

@@ -43,6 +43,9 @@ func Allowlist() []AllowedField {
 		{"reporter_id", "opaque per-installation id, for counting distinct reporters"},
 		{"observed_at", "when this installation saw it"},
 		{"tool_version", "the nox build that produced it, so a claim is traceable"},
+		{"schema_version", "the wire contract version (2)"},
+		{"consent_version", "the version of the contribution terms you accepted"},
+		{"deletion_verifier", "SHA-256 of a key only this machine holds; lets only you erase your reporter id"},
 	}
 }
 

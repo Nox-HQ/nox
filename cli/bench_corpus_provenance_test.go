@@ -288,6 +288,15 @@ func TestCorpusProvenanceHasOneReader(t *testing.T) {
 			case ".git", "node_modules", "testdata", "vendor":
 				return filepath.SkipDir
 			}
+			// A nested checkout (a git worktree under .claude/worktrees, say)
+			// is another copy of this repository, not a second reader: each
+			// one listed both allowed files again and failed every local push.
+			// It takes a .git AND a go.mod to be one. A .git alone is not
+			// enough: a test that ran `git init` in the package directory left
+			// an empty cli/.git behind, and skipping on that hid cli/ itself.
+			if path != ".." && isModuleCheckout(path) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
@@ -337,4 +346,15 @@ func TestShippedProvenanceNamesCuratedProjects(t *testing.T) {
 			t.Errorf("manifest declares %q, which --autocorpus does not clone", name)
 		}
 	}
+}
+
+// isModuleCheckout reports whether dir is the root of a separate checkout of
+// a Go module: it holds both a .git entry and a go.mod.
+func isModuleCheckout(dir string) bool {
+	for _, name := range []string{".git", "go.mod"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			return false
+		}
+	}
+	return true
 }

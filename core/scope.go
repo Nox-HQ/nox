@@ -48,6 +48,7 @@ var analyzerScope = map[string]struct {
 	"secrets":    {ScopeSecrets, []string{"SEC-*"}},
 	"taintflow":  {ScopeCode, []string{"TAINT-*"}},
 	"agentflow":  {ScopeCode, []string{"AGENTFLOW-*"}},
+	"authz":      {ScopeCode, []string{"AUTHZ-*", "AUTHN-*", "WEBHOOK-*"}},
 	"variants":   {ScopeCode, []string{"VARIANT-*"}},
 	"weakcrypto": {ScopeCode, []string{"CRYPTO-*"}},
 	"hardening":  {ScopeCode, []string{"HARDEN-*"}},
@@ -164,6 +165,31 @@ func (s ScopeSet) ruleRan(id string) bool {
 		}
 	}
 	return true
+}
+
+// ScopeOfRule names the scope that owns a rule ID, so a caller that wants to
+// check one finding again can run only what produced it. A rule no scope owns
+// (a custom rule) reports false: it runs in every scan, and the caller must
+// not narrow a re-check to a scope that never held it.
+func ScopeOfRule(id string) (Scope, bool) {
+	family, _, _ := strings.Cut(strings.ToUpper(id), "-")
+	for _, a := range analyzerScope {
+		for _, p := range a.rulePatterns {
+			if strings.TrimSuffix(p, "-*") == family {
+				return a.scope, true
+			}
+		}
+	}
+	return "", false
+}
+
+// OnlyScopes is the ScopeSet that runs exactly the given scopes.
+func OnlyScopes(scopes ...Scope) ScopeSet {
+	only := map[Scope]bool{}
+	for _, s := range scopes {
+		only[s] = true
+	}
+	return ScopeSet{only: only}
 }
 
 // Ran lists the scopes that ran, in output order.

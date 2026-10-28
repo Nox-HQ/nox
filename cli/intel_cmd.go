@@ -17,11 +17,15 @@ func runIntel(args []string) int {
 	}
 	switch args[0] {
 	case "allowlist":
-		return runIntelAllowlist()
+		return runIntelAllowlist(args[1:]...)
 	case "preview":
 		return runIntelPreview(args[1:])
 	case "id":
 		return runIntelID()
+	case "consent":
+		return runIntelConsent(args[1:])
+	case "forget":
+		return runIntelForget(args[1:])
 	case "login":
 		return runIntelLogin(args[1:])
 	case "logout":
@@ -52,6 +56,8 @@ func printIntelUsage() {
 	fmt.Fprintf(os.Stderr, "  allowlist        print every field an observation may carry\n")
 	fmt.Fprintf(os.Stderr, "  preview <path>   show exactly what a scan of <path> would contribute\n")
 	fmt.Fprintf(os.Stderr, "  id               print this installation's opaque reporter id\n")
+	fmt.Fprintf(os.Stderr, "  consent          show, accept or withdraw the contribution terms (show|status|accept|withdraw)\n")
+	fmt.Fprintf(os.Stderr, "  forget           erase this installation's reporter id from the service and stop contributing\n")
 	fmt.Fprintf(os.Stderr, "\nBlast radius (organisation token in NOX_INTEL_TOKEN; prints, sends with --upload):\n")
 	fmt.Fprintf(os.Stderr, "  components [path]            describe this service's dependencies and capabilities\n")
 	fmt.Fprintf(os.Stderr, "  evidence <attack-result>     bind `nox attack run` traces to a candidate\n")
@@ -79,7 +85,17 @@ func intelEndpointDefault() string {
 
 // runIntelAllowlist prints the allowlist. The design requires that "what would
 // you send?" be answerable without reading the source; this is that answer.
-func runIntelAllowlist() int {
+func runIntelAllowlist(args ...string) int {
+	if len(args) > 0 && (args[0] == "--attack" || args[0] == "attack") {
+		fmt.Println("Fields a contributed attack run may carry (nox attack run|replay --contribute):")
+		fmt.Println()
+		for _, f := range intel.AttackAllowlist() {
+			fmt.Printf("  %-16s %s\n", f.Name, f.Purpose)
+		}
+		fmt.Println("\nNever transmitted: the target URL, host or IP, the route, field names, payloads,")
+		fmt.Println("target responses, canary values, paths, source code, secrets, or the trace itself.")
+		return 0
+	}
 	if err := intel.PrintAllowlist(os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "nox intel: %v\n", err)
 		return 1
@@ -110,11 +126,25 @@ func runIntelPreview(args []string) int {
 		fmt.Fprintf(os.Stderr, "nox intel preview: %v\n", err)
 		return 1
 	}
+	delKey, err := intel.DeletionKey("")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "nox intel preview: %v\n", err)
+		return 1
+	}
+
+	// The terms are printed before the data they govern, on stderr so stdout
+	// stays the JSON an operator can pipe.
+	fmt.Fprint(os.Stderr, intel.Terms)
+	fmt.Fprintln(os.Stderr)
+	_ = consentStatus("", os.Stderr)
+	fmt.Fprintln(os.Stderr, "\nFields that would be sent (nox intel allowlist explains each):")
 
 	obs := intel.Derive(result.Findings.Findings(), intel.DeriveOptions{
-		ReporterID:  reporterID,
-		ObservedAt:  time.Now().UTC().Format(time.RFC3339),
-		ToolVersion: version,
+		ReporterID:       reporterID,
+		ObservedAt:       time.Now().UTC().Format(time.RFC3339),
+		ToolVersion:      version,
+		ConsentVersion:   intel.TermsVersion,
+		DeletionVerifier: intel.DeletionVerifier(delKey),
 	})
 
 	enc := json.NewEncoder(os.Stdout)

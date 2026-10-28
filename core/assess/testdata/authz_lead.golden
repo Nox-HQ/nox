@@ -1,0 +1,20 @@
+
+Nox Security Assessment
+
+1 issue needs attention (1 finding).
+  1. Untrusted input reaches an LLM prompt (prompt injection) at src/routes/assistant.js:9 (high severity, medium confidence).
+
+Checks completed: secrets, application code, dependencies (123 packages), infrastructure configuration, AI integrations, sensitive-data handling, supply chain and authorization (Express, Fastify, Flask, FastAPI routes; leads only).
+
+Not determined by this scan:
+  - Exploitability: the finding was neither confirmed exploitable nor shown to be prevented; it is a potential issue.
+
+Additional verification recommended:
+  - Runtime testing for src/routes/assistant.js:9 (TAINT-AI-001): 2 attack hypotheses (PI-DIRECT, PI-INDIRECT), e.g. make the model obey an instruction supplied through untrusted input.
+  - Authorization: GET /api/invoices/:id (src/routes/invoices.js:14) loads a record by a caller-supplied id with no visible ownership check. Test it with two user accounts: request user A's record while signed in as user B.
+
+Next steps:
+  - See what nox can fix, what needs your review, and what it cannot: nox fix plan --input ./findings.json
+  - Plan the runtime tests (offline, sends nothing): nox attack plan . --findings ./findings.json
+  - Record a reviewed, accepted risk as a waiver: nox vex init --input ./findings.json
+  - Catch new issues before they are committed: nox install-hook

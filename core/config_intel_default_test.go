@@ -39,10 +39,18 @@ func TestIntelligenceEndpoint_Resolution(t *testing.T) {
 // mirror; it is the one source that is never the intelligence service, because
 // it is what the intelligence service is checked against.
 func TestOSVReferenceBaseURL(t *testing.T) {
+	t.Setenv(OSVBaseURLEnv, "") // the hermetic test environment sets it
 	if got := (OSVConfig{}).ReferenceBaseURL(); got != osvsource.DefaultBaseURL {
 		t.Fatalf("empty base_url = %q, want %q", got, osvsource.DefaultBaseURL)
 	}
 	if got := (OSVConfig{BaseURL: " https://osv.mirror.test/ "}).ReferenceBaseURL(); got != "https://osv.mirror.test" {
 		t.Fatalf("base_url = %q, want the trimmed mirror", got)
+	}
+	t.Setenv(OSVBaseURLEnv, "https://env.mirror.test/")
+	if got := (OSVConfig{}).ReferenceBaseURL(); got != "https://env.mirror.test" {
+		t.Fatalf("env = %q, want the env mirror", got)
+	}
+	if got := (OSVConfig{BaseURL: "https://cfg.test"}).ReferenceBaseURL(); got != "https://cfg.test" {
+		t.Fatalf("config must beat the environment, got %q", got)
 	}
 }

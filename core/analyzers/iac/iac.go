@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"path/filepath"
 
@@ -15,6 +16,7 @@ import (
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/infra"
 	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/parallel"
 	"github.com/nox-hq/nox/core/reasoning"
@@ -44,6 +46,19 @@ type Analyzer struct {
 	// remediation text on its findings, any join by rule ID — without being
 	// offered to a matcher at all.
 	catalog *rules.RuleSet
+	// inventory is the deployment resources the last ScanArtifacts read,
+	// including the ones no rule fired on.
+	inventoryMu sync.Mutex
+	inventory   infra.Inventory
+}
+
+// Inventory returns the deployment resources read by the last ScanArtifacts:
+// hardened ones as well as the ones that produced findings. It is context for
+// a system model and for change-over-time, never a finding.
+func (a *Analyzer) Inventory() infra.Inventory {
+	a.inventoryMu.Lock()
+	defer a.inventoryMu.Unlock()
+	return a.inventory
 }
 
 // NewAnalyzer creates an Analyzer with built-in IaC security rules loaded
@@ -141,9 +156,17 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	out := dropArtifactsWhenAlways(results, content, drop)
 	out = dropMatchesInComments(path, out, content, drop)
 	out = dropKindReferences(path, out, content, drop)
+	// A seccomp profile on the pod is inherited by its containers. See
+	// seccomp_inherit.go.
+	out = dropSeccompInheritedFromPod(out, content, drop)
+	// IAC-296's claim is checked against the parsed Ingress. See ingress_tls.go.
+	out = dropIngressTLSNotEstablished(out, content, drop)
 	// Applicability is decided by the document, not by its name. See
 	// document_kind.go.
 	out = dropRulesOutsideTheirDocumentKind(path, out, content, a.engine.Rules(), drop)
+	// One finding per resource for IAC-504, not one per switch. See
+	// s3_public_access_block.go.
+	out = collapsePublicAccessBlock(out, content, drop)
 	// Compose resolves `${VAR:-default}` before it reads an image reference,
 	// so this one is decided by parsing the document rather than by a pattern.
 	out = append(out, scanComposeImages(path, content)...)
@@ -424,6 +447,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	// file's bytes until the merge held 722 MB on llama_index.
 	type scanned struct {
 		resources []structural.Resource
+		infra     fileInfra
 		content   []byte // nil unless refuteCompanionsFoundInOtherFiles needs it
 		results   []findings.Finding
 	}
@@ -437,7 +461,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if err != nil {
 			return scanned{}, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
 		}
-		out := scanned{resources: structural.ParseResources(content), results: results}
+		parsed := structural.ParseResources(content)
+		out := scanned{resources: parsed, results: results, infra: extractFileInfra(artifact.Path, content, parsed)}
 		if a.hasCompanionFinding(results) {
 			out.content = content
 		}
@@ -447,6 +472,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		return nil, err
 	}
 	var collected []findings.Finding
+	perInfra := make([]fileInfra, len(artifacts))
+	for i := range artifacts {
+		perInfra[i] = perFile[i].infra
+	}
+	inv := assembleInventory(perInfra)
+	a.inventoryMu.Lock()
+	a.inventory = inv
+	a.inventoryMu.Unlock()
 	for i, artifact := range artifacts {
 		index.AddResources(artifact.Path, perFile[i].resources)
 		if perFile[i].content != nil {

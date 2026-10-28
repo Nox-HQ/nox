@@ -1,7 +1,9 @@
 package fix
 
 import (
+	"context"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -53,6 +55,22 @@ type UpgradeAction struct {
 	// decides where the package manager runs; without it a monorepo gets
 	// upgraded at its root, a directory no dependency lives in.
 	Manifest string `json:"manifest,omitempty"`
+	// PolicyTarget is set on a held move that exists only because no version
+	// inside the allowed upgrade policy clears every advisory: the highest
+	// in-policy version considered, and Remaining the advisories that would
+	// still affect it. To then names the version that clears them, which needs
+	// IncludeMajor.
+	PolicyTarget string   `json:"policy_target,omitempty"`
+	Remaining    []string `json:"remaining,omitempty"`
+	// Unverified is set when the target was not checked against the advisory
+	// source (it was unreachable), so To is only what the findings name.
+	Unverified bool `json:"unverified,omitempty"`
+	// Findings are the positions, in the slice PlanUpgrades was given, of the
+	// findings this move resolves: every advisory for the package in its
+	// manifest directory, since the move goes to the highest fix. It lets a
+	// summary say "one upgrade fixes 33 advisories" without re-deriving the
+	// planner's grouping. Not serialised: it indexes a caller's slice.
+	Findings []int `json:"-"`
 }
 
 // Command returns the operator-runnable upgrade command for the action, the
@@ -86,6 +104,11 @@ type Options struct {
 	// default, because a major bump can break the build and a security PR is the
 	// wrong place to force one.
 	IncludeMajor bool
+	// Checker, when set, is asked what each candidate target is still
+	// vulnerable to, so the plan names a version that clears every known
+	// advisory and not merely every advisory the installed version has. Nil
+	// plans from the findings alone.
+	Checker Checker
 }
 
 // Plan is the result of planning upgrades over a finding set.
@@ -101,6 +124,14 @@ type Plan struct {
 	// MajorSkipped counts upgrades held back only because they cross a major
 	// boundary and IncludeMajor was not set.
 	MajorSkipped int
+	// Held are the upgrades counted in MajorSkipped, as the moves they would
+	// be with IncludeMajor, so a summary can name them instead of a count.
+	Held []UpgradeAction
+	// Unplanned are the positions of the VULN-001 findings no action and no
+	// held action resolves: no fixed version, an ecosystem nox fix cannot
+	// drive, or a fix that is not a forward upgrade. Each is counted in
+	// Skipped; this names them, in input order.
+	Unplanned []int
 }
 
 // PlanUpgrades decides which packages to move from a finding set. It is the one
@@ -129,6 +160,7 @@ func PlanUpgrades(items []findings.Finding, opts Options) Plan {
 		manifest  string
 		pkg       string
 		fixes     []string
+		findings  []int
 	}
 	order := []string{}
 	byPkg := map[string]*candidate{}
@@ -145,10 +177,12 @@ func PlanUpgrades(items []findings.Finding, opts Options) Plan {
 		from := f.Metadata["version"]
 		if fixed == "" || pkg == "" {
 			plan.Skipped++
+			plan.Unplanned = append(plan.Unplanned, i)
 			continue
 		}
 		if _, ok := ecosystemCommands[eco]; !ok {
 			plan.Skipped++
+			plan.Unplanned = append(plan.Unplanned, i)
 			continue
 		}
 		// Keyed by directory as well as package: two workspaces on the same
@@ -162,31 +196,40 @@ func PlanUpgrades(items []findings.Finding, opts Options) Plan {
 			order = append(order, key)
 		}
 		c.fixes = append(c.fixes, fixed)
+		c.findings = append(c.findings, i)
 	}
 
 	for _, key := range order {
 		c := byPkg[key]
 		target := BestFix(c.fixes)
-		if target == "" {
+		if target == "" || !IsUpgrade(c.from, target) {
 			plan.Skipped++
+			plan.Unplanned = append(plan.Unplanned, c.findings...)
 			continue
 		}
-		if !IsUpgrade(c.from, target) {
-			plan.Skipped++
-			continue
+		res := resolveTarget(context.Background(), opts.Checker, c.ecosystem, c.pkg, c.from, target)
+		target = res.Target
+		action := UpgradeAction{
+			RuleID:     c.ruleID,
+			Package:    c.pkg,
+			From:       c.from,
+			To:         target,
+			Unverified: res.Unverified,
+			Remaining:  res.Remaining,
+			Ecosystem:  c.ecosystem,
+			Manifest:   c.manifest,
+			Findings:   c.findings,
 		}
 		if !opts.IncludeMajor && IsMajorBump(c.from, target) {
+			if res.PolicyTarget != "" {
+				action.PolicyTarget, action.Remaining = res.PolicyTarget, res.PolicyRemaining
+			}
 			plan.MajorSkipped++
+			plan.Held = append(plan.Held, action)
 			continue
 		}
-		plan.Actions = append(plan.Actions, UpgradeAction{
-			RuleID:    c.ruleID,
-			Package:   c.pkg,
-			From:      c.from,
-			To:        target,
-			Ecosystem: c.ecosystem,
-			Manifest:  c.manifest,
-		})
+		plan.Actions = append(plan.Actions, action)
 	}
+	sort.Ints(plan.Unplanned)
 	return plan
 }

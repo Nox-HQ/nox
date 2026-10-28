@@ -103,7 +103,21 @@ nox scan . --only secrets
 
 # Everything except dependency lookups
 nox scan . --skip deps
+
+# Byte-identical reports: pin every timestamp (Unix seconds)
+SOURCE_DATE_EPOCH=1700000000 nox scan . --offline --format all
 ```
+
+#### Reproducible output
+
+Reports carry the time they were written (`generated_at` in `findings.json`,
+the SBOM creation timestamps, the HTML report). Set `SOURCE_DATE_EPOCH` to a
+Unix time in seconds and every one of them uses it instead, so two scans of the
+same tree write byte-identical `findings.json`, `results.sarif`,
+`sbom.cdx.json`, `sbom.spdx.json`, `ai.inventory.json` and `report.html`. An
+unparseable value is ignored. The other input a scan reads from outside the tree
+is vulnerability data; `--offline` removes it, so a run with both is a pure
+function of the files. `nox scan --help` lists the variable under Environment.
 
 #### Scopes
 
@@ -396,11 +410,20 @@ digest.
 
 ### diff
 
-Show findings only in files changed relative to a git base ref.
+Say what a range of commits changed in the project's security state: what is
+new, what is no longer present, what got worse, which agents gained or lost a
+tool or capability, and which routes became authorization leads.
 
 ```
 nox diff [path] [flags]
 ```
+
+The tree at the merge-base of `--base` and `--head`, and the tree at `--head`,
+are each read from git's object database into a temporary directory and scanned
+the same way; the two are compared by `core/change`. Nothing is checked out and
+uncommitted changes are not part of either side. Exit 1 means the head made
+findings worse (a new finding or a raised severity). Resolved items, leads and
+agent changes are listed but do not fail the command.
 
 **Flags:**
 
@@ -408,20 +431,62 @@ nox diff [path] [flags]
 |------|---------|-------------|
 | `--base` | `main` | Base ref for comparison |
 | `--head` | `HEAD` | Head ref for comparison |
-| `--json` | `false` | Output as JSON |
+| `--json` | `false` | Output as JSON: `findings` (new, the old shape), `changed_files`, `base`, `head`, `change` (the full delta) |
+| `--offline` | `false` | No network in either scan (no dependency advisory lookups) |
+| `--no-osv` | `false` | Skip the OSV.dev lookup in both scans |
+| `--verbose` | `false` | List every line instead of the first five per section |
+
+**What counts as the same thing in both states:**
+
+| Kind | Identity |
+|------|----------|
+| Dependency advisory | manifest + ecosystem + package + advisory id (any alias). Not the version, so an upgrade that leaves a package still affected is neither resolved nor new |
+| Any other finding | rule + file + message (the line-independent fingerprint), so a finding that only moved is neither new nor resolved |
+| Authorization lead | route + file |
+| Agent capability | agent + server + tool + capability |
+| AI component | type + name |
+
+A finding that was baselined, suppressed or cleared by VEX between the refs is
+listed as waived, never as resolved. A comparison that cannot be made (an
+earlier run that did not record leads or the AI inventory, an incomplete or
+differently scoped run) is stated under "Not compared / caution".
 
 **Examples:**
 
 ```bash
-# Show findings in files changed vs main
+# What did this branch change versus main?
 nox diff --base main
 
-# JSON output for CI
+# JSON for CI
 nox diff --base main --json
 
 # Compare specific refs
 nox diff --base v1.0.0 --head feature-branch
 ```
+
+`nox scan --previous <findings.json>` makes the same comparison against an
+earlier run instead of a ref, and leads the assessment with it. The
+`ai.inventory.json` beside that file is compared too when present. The MCP
+`scan` tool takes `previous` for the same purpose and otherwise compares with
+the last scan of the same path in the session; its result and the `diff` tool's
+carry the delta as a structured `change`.
+
+`findings.json` records authorization leads under `leads` and `lead_checks`,
+never among `findings`. `lead_checks` is present whenever the check had routes
+to read, even with no leads, so a later run can tell "looked, none" from "an
+older nox". An earlier file without it cannot be compared for leads, and the
+comparison says so.
+
+`findings.json` also records the deployment resources it read from infrastructure
+as code under `infrastructure` (`version`, and `resources`: `kind`, `name`,
+`namespace`, `file`, `class`, `line`, `end_line` and a `properties` map). A
+hardened resource has no finding, so findings alone cannot say that one stopped
+being hardened; the inventory can. The change summary lists, per resource, the
+properties that got weaker or stronger since the earlier state under
+"Infrastructure assumptions weakened" and "... strengthened", and `nox model
+--previous` shows the same for deployment elements. These are context, not
+findings: they reach no gate, exit code or SARIF output. An earlier file without
+`infrastructure` cannot be compared, and the comparison says so.
 
 ### watch
 
@@ -525,10 +590,16 @@ one later). Drift is emitted as findings, flowing into `findings.json` /
 `results.sarif` and gating CI like any scan.
 
 ```bash
+nox mcp pin                        # approve the MCP server definitions in this repo (commit .nox/mcp-pins.json)
 nox mcp baseline -- nox serve      # capture .nox/mcp-baseline.json (commit it)
 nox mcp drift    -- nox serve      # re-capture and report drift (exit 1 on drift)
 nox mcp show                       # print the stored baseline
 ```
+
+`nox mcp pin` is the offline half: it writes `.nox/mcp-pins.json`, a hash of each
+server definition in the repo's MCP configs. `nox scan` reports **MCP-015** for a
+changed or unpinned server on every run until you re-pin, and reports a missing
+pin file instead of staying silent. A scan never writes the file.
 
 The baseline is local, sorted JSON — diff it, commit it, review drift in PRs.
 **Security:** these commands launch the server as a subprocess; never run an
@@ -538,7 +609,58 @@ mapping, and sandbox guidance.
 
 ### fix
 
-Generate remediations from a prior scan's `findings.json`.
+Answers "can you fix these?" for a prior scan's `findings.json`: it plans the
+changes, applies the ones you allow, and then runs the checks again to see
+whether they worked.
+
+```bash
+nox fix plan                      # what nox can fix, what needs you; writes nothing
+nox fix apply                     # apply the safe set, re-run the checks, report
+nox fix apply --include-major     # ...and major-version upgrades
+nox fix apply --include-review    # ...and every change that needs review
+nox fix verify                    # re-run the checks after a change you made by hand
+```
+
+`plan` lists every issue the assessment showed, with the assessment's numbers,
+in one of three classes:
+
+- **Safe to apply**: a published dependency fix on the same major version, a
+  GitHub Action pin, a configuration change that cannot alter what is deployed
+  (`continue-on-error: true` to `false`).
+- **Needs your review**: a major-version upgrade, or a one-line settings change
+  that alters how a deployed system behaves (`privileged: true` to `false`, a
+  Terraform `storage_encrypted`, an `ADD` to `COPY`). The item says what could
+  break.
+- **Needs information, or cannot be fixed automatically**: a vulnerable package
+  with no fixed version, an upgrade nox cannot drive, a code finding with no
+  deterministic fixer (prompt injection, SQL injection, ...), or an
+  authorization hint that only a two-account test settles. The item says
+  exactly what is needed.
+
+`apply` changes nothing outside the safe set unless you pass `--include-major`
+or `--include-review`. It then re-runs the checks that produced the targeted
+findings (the dependency check for upgrades, the infrastructure check for
+patched configuration) and reports, per change:
+
+- **Verified fixed**: the check ran to completion and no longer reports the
+  finding. This is the only status that claims success.
+- **Still present**: the change was made and the finding is still reported
+  (for example, an upgrade to a version the advisory still affects).
+- **New finding introduced**: the re-run reports a finding on the package or
+  files the change touched that the original scan did not.
+- **Could not verify**: the check could not run again (`--offline` cannot
+  look up dependency vulnerabilities; a failed lookup is the same), so nothing
+  is claimed.
+- **Not applied**: the change could not be made, with the reason.
+
+The exit code is 0 only when every attempted change is verified fixed.
+`--format json` writes one JSON document for CI and agents; `--no-verify`
+skips the re-run (the changes are then unverified, and the output says so).
+The MCP `fix_plan` tool and the LSP show the same plan. They plan and explain;
+applying stays a command a person runs.
+
+The flag-driven forms below are unchanged; a bare `nox fix` still applies
+dependency upgrades at once.
 
 ```bash
 # Dependency upgrades for VULN findings (applies unless --dry-run)
@@ -748,6 +870,22 @@ nox fix --actions --input findings.json --root .
 nox fix --outdated --root .
 ```
 
+### advisories
+
+Decide what to do about a dependency advisory that was disclosed after the code
+was merged: report it, prepare a fix, or carry the fix as far as your policy
+allows.
+
+```bash
+nox install-ci      # writes .github/workflows/nox.yml: PR scan + scheduled advisory watch
+nox advisories --input findings.json --previous last-run/findings.json
+```
+
+The policy is the `advisories` block in `.nox.yaml` and defaults to `report`.
+Undetermined relevance is never read as "not affected". Full semantics, the
+decision table and how "new" is determined are in
+[advisory-policy.md](./advisory-policy.md).
+
 ### variants
 
 Report first-party code that reproduces the root-cause pattern of a known CVE —
@@ -906,13 +1044,28 @@ scan:
       - "IAC-002"      # We use floating base image tags intentionally
 
     # Turn on opt-in rules, which do not run otherwise. `nox rules` tags them
-    # `opt-in`. One ships opt-in today: TAINT-011, untrusted request data
-    # stored in the server-side session (CWE-501, low severity). It is correct
-    # by definition and common in ordinary login code, so it is off unless
-    # named here. SEC-951, the generic "credential-named key with a
+    # `opt-in`. TAINT-011 is untrusted request data stored in the server-side
+    # session (CWE-501, low severity). It is correct by definition and common
+    # in ordinary login code, so it is off unless named here. AUTHZ-001 is a
+    # possible IDOR in an Express, Fastify, Flask or FastAPI route:
+    # authenticated, a record looked up by a caller-supplied id, and no
+    # visible check that it belongs to the caller
+    # (CWE-639, medium severity, low confidence). It cannot tell a resource
+    # shared by design from an owned one, so without this line those routes
+    # are not findings: the assessment lists them under "Additional
+    # verification recommended" as a two-account test, and no machine output,
+    # exit code or gate sees them. Named here, each is a finding. Its body
+    # analysis covers Express, Fastify, Flask and FastAPI. AUTHN-001 is the
+    # same arrangement, over Express, Fastify, Flask, FastAPI, Next.js, NestJS and Django
+    # routes, for a route with no visible authentication (an
+    # administrative or account route, or any DELETE, PUT or PATCH, with no
+    # auth middleware, decorator, dependency or check on the caller): a lead
+    # by default, a finding when named here (CWE-306). WEBHOOK-001, a Stripe,
+    # GitHub or Slack webhook payload accepted without signature
+    # verification, is not opt-in: it reports by default. SEC-951, the generic "credential-named key with a
     # random-looking value" rule, runs by default at medium severity and low
     # confidence; `disable` above switches it off.
-    enable: []   # e.g. [TAINT-011]
+    enable: []   # e.g. [TAINT-011, AUTHZ-001, AUTHN-001]
 
     # Override severity for specific rules
     severity_override:
@@ -957,6 +1110,13 @@ Exclude patterns follow gitignore syntax:
 | `testdata/` | Exclude test data directories |
 
 Exclude patterns from `.nox.yaml` are combined with `.gitignore` patterns. Both are applied during file discovery.
+
+**Nested repositories and worktrees.** The parent's `.gitignore` keeps applying beneath a directory it ignores:
+
+- A linked worktree (`git worktree add`, `.git` is a file pointing into `.git/worktrees/`) under an ignored directory such as `.claude/worktrees/<name>/` is not scanned, even if the parent's index names it.
+- A nested clone (`.git` is a directory) under an ignored directory is not scanned, because its files are not in the parent's index. The `.git` directory itself is never scanned.
+- A submodule the parent tracks is still scanned, as git-tracked files are.
+- Neither is skipped when it sits in a directory that is *not* ignored; ignore it, or add it to `scan.exclude`, to leave it out.
 
 ### Exclude Artifact Types
 
@@ -1015,7 +1175,8 @@ scan:
 Resolution order for the endpoint is `disabled` > `scan.intelligence.endpoint`
 > `NOX_INTEL_ENDPOINT` > the compiled-in public service. `--offline` turns off
 every lookup regardless. Contribution is a separate decision from querying and
-is off until `scan.intelligence.contribute: true` is set; only `nox scan`
+is off until `scan.intelligence.contribute: true` is set AND this machine has
+accepted the terms (`nox intel consent accept`; `nox intel forget` erases); only `nox scan`
 contributes (never `diff`, `bench` or `intel preview`), and
 `nox intel preview <path>` shows exactly what would be sent.
 
@@ -1032,22 +1193,35 @@ to hallucinate that were verified *unregistered (squattable)* when the feed was
 generated. When an imported name matches a high-risk entry, `SLOP-002` fires with
 a severity derived from the entry's risk tier.
 
-It is **opt-in and off by default**: with no feed configured the analyzer's
-`SLOP-001` behavior is unchanged. Enabling a feed is purely additive.
+It is **on by default** when NOX Intelligence is enabled and the scan is online:
+nox fetches the signed feed and verifies it under the key built into nox
+(`slopfeed-key-v1`). `scan.slop.disabled: true` opts out; a configured
+`signature_key_path` overrides the built-in key. The feed is purely additive.
 
 ```yaml
 scan:
   slop:
+    # disabled: true             # opt out of the default NOX Intelligence feed
     feed: bundled                 # ship-in-binary feed; or a path to a feed JSON
     require_signature: false      # reject unsigned/bad-signature feeds
     signature_key_path: keys/slopsquat.pub.pem   # PEM Ed25519 public key
 ```
 
-No network is touched at scan time — only the out-of-band generator
-(`cmd/slopfeed`) queries registries. A malformed, tampered, or digest-mismatched
+Only the out-of-band generator (`cmd/slopfeed`) queries registries; `--offline`
+makes no request at all. A malformed, tampered, or digest-mismatched
 feed fails closed (predictive dimension off, a visible `slop_feed` degradation
 recorded). See [docs/slopsquat-feed.md](slopsquat-feed.md) for the feed format,
 trust model, regeneration, and the responsible-disclosure note.
+
+### MCP advisory feed
+
+`scan.mcp_feed` joins the MCP servers a scan finds with NOX Intelligence's
+signed feed of public advisories for MCP packages and reports `MCP-026`, "an
+advisory affects this MCP server package", for a server whose pinned version an
+advisory's own interval contains. It is on by default (online, intelligence
+enabled), verified under the key built into nox; `signature_key_path` overrides
+it and `scan.mcp_feed.disabled: true` opts out. See
+[docs/mcp-advisory-feed.md](mcp-advisory-feed.md).
 
 ### Conditional Severity
 
@@ -1783,15 +1957,26 @@ Generated from dependency lockfile analysis. Supported ecosystems:
 
 ### AI Inventory
 
-`ai.inventory.json` is automatically generated when AI components are detected. It catalogs:
+`ai.inventory.json` is written on every scan, next to the other reports. It catalogs:
 
 - MCP server configurations (`mcp.json`)
 - Prompt files (`.prompt`, `.prompt.md`)
 - Components in `/prompts/` and `/agents/` directories
+- Agent frameworks and vector stores used from source
+- Models the code calls (`model_provenance`), e.g. `openai.chat.completions.create({model: "gpt-4o"})`
+
+The console count is components plus distinct models:
+`[results] 44 findings, 123 dependencies, 1 AI component (1 model: gpt-4o via openai)`.
+The same models appear in `sbom.cdx.json` as `machine-learning-model` components.
+
+`checks` lists the AI checks that ran. An inventory with empty `components`
+and non-empty `checks` means nox looked and found nothing; empty `checks`
+means the AI scope did not run (for example `--skip ai`), so the empty
+inventory is not an all-clear.
 
 ```json
 {
-  "schema_version": "1.0.0",
+  "schema_version": "2.1.0",
   "components": [
     {
       "name": "mcp.json",
@@ -1805,7 +1990,19 @@ Generated from dependency lockfile analysis. Supported ecosystems:
       "path": "prompts/system.prompt",
       "details": {}
     }
-  ]
+  ],
+  "model_provenance": [
+    {
+      "name": "gpt-4o",
+      "license": "Proprietary (OpenAI)",
+      "registry": "openai",
+      "path": "src/routes/assistant.js",
+      "line": 9,
+      "auth_env_var": "OPENAI_API_KEY",
+      "pinned": false
+    }
+  ],
+  "checks": ["ai_security_rules", "agent_tool_lattice", "mcp_config", "prompt_and_agent_files", "model_references", "sdk_invocations", "prompt_templates", "tool_permissions", "agent_frameworks"]
 }
 ```
 
@@ -1814,6 +2011,9 @@ Generated from dependency lockfile analysis. Supported ecosystems:
 ## CI/CD Integration
 
 ### GitHub Actions
+
+To wire up everything below, including a scheduled watch for newly disclosed
+advisories, run `nox install-ci` (see [advisory-policy.md](./advisory-policy.md)).
 
 #### Using the Nox Action (recommended)
 
@@ -2040,10 +2240,19 @@ nox serve --allowed-paths /path/to/project
 | `list_findings` | List findings with filters | `severity`, `rule`, `file`, `limit` (default: 50) |
 | `baseline_status` | Show baseline statistics | `path` (absolute path to project root) |
 | `baseline_add` | Add a finding to the baseline | `path`, `fingerprint` (required), `reason` |
+| `advisories` | Decide what to do about the dependency advisories in the last scan, as `nox advisories` does (new vs. a previous run, relevance, what the policy permits). Never opens a pull request or merges | `previous` (findings.json of the last run), `policy` (`report`, `prepare`, `remediate`) |
 | `plugin.list` | List registered plugins | (none) |
 | `plugin.call_tool` | Invoke a plugin tool | `tool`, `input` (object), `workspace_root` |
 
-All tools are **read-only**. Output is truncated at **1 MB**.
+Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
+`idempotentHint`, `openWorldHint`), so a client can decide what to ask a person
+about without calling it. Almost all are **read-only** and closed-world;
+`scan`, `diff` and `plugin.call_tool` are read-only but open-world (they may
+look up advisories on the network). The exceptions: `baseline_add` and
+`baseline_add_many` write the baseline file (additive, idempotent, not
+destructive), and `plugin_install` fetches and registers code that runs on your
+machine (open-world, destructive, requires `confirmed: true`). Output is
+truncated at **1 MB**.
 
 Requests are rate-limited in two tiers, so a runaway or steered agent cannot
 turn the host into a scanning farm. Every request shares a ceiling of 20 per

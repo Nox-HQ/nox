@@ -5,6 +5,7 @@ package report
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/infra"
 )
 
 // GeneratedAt returns the report timestamp. It honors SOURCE_DATE_EPOCH (the
@@ -49,6 +51,16 @@ type Meta struct {
 	// the artifact — "this report was produced without the scanner touching the
 	// network" — backed by the enforced egress test, not just a claim.
 	Offline bool `json:"offline"`
+	// AdvisoryLookup is AdvisoryLookupIncomplete when the source reported a
+	// partial answer for some packages, and AdvisoryLookupSkipped when the scan did not look its
+	// dependencies up in a vulnerability source although it was not offline
+	// (--no-osv, osv.disabled, or no dependency scope). Omitted otherwise, which
+	// is also how a report from before the field reads: looked up.
+	//
+	// A comparison between two scans needs it. A scan that did not look has no
+	// advisories because it did not ask, and comparing it with one that did
+	// reports every advisory as new.
+	AdvisoryLookup string `json:"advisory_lookup,omitempty"`
 	// SASTLanguages records the resolved per-language SAST depth applied to the
 	// scan (language name → deep|standard|off). It makes the depth strategy
 	// auditable straight from the artifact: a reviewer can see that, say,
@@ -156,6 +168,16 @@ type CapabilityCoverage struct {
 	Inconclusive int `json:"inconclusive"`
 }
 
+// AdvisoryLookupSkipped is Meta.AdvisoryLookup for a scan that did not look
+// its dependencies up.
+const AdvisoryLookupSkipped = "skipped"
+
+// AdvisoryLookupIncomplete is Meta.AdvisoryLookup for a scan whose
+// vulnerability source said it did not fully check some packages. The lookup
+// ran, so its advisories are real; an absent one is not evidence of absence.
+// The degradations name the packages.
+const AdvisoryLookupIncomplete = "incomplete"
+
 // Degradation is a single incomplete check, as recorded in the artifact.
 type Degradation struct {
 	Kind   string `json:"kind"`
@@ -184,6 +206,64 @@ type JSONReport struct {
 	// Enrichments are plugin annotations keyed to a finding's fingerprint.
 	// Omitted when empty so scans without post-scan plugins are unchanged.
 	Enrichments []findings.Enrichment `json:"enrichments,omitempty"`
+	// Leads are the scan's authorization leads: routes worth testing that the
+	// scan does not report as findings. They sit under their own key, never in
+	// Findings, so no finding consumer (SARIF, baseline, VEX, gates, exit
+	// codes) can mistake a hint for a verdict. Present only when the scan
+	// found at least one.
+	Leads []Lead `json:"leads,omitempty"`
+	// LeadChecks names each check that produced leads and had something to
+	// read. It is present whenever the lead check ran, even with zero leads, so
+	// a later run can tell "this nox looked and found none" from "this nox
+	// predates leads". Omitted when the check read nothing.
+	LeadChecks []string `json:"lead_checks,omitempty"`
+	// Infrastructure is the deployment resources the scan read from
+	// infrastructure as code, with the security-relevant properties of each,
+	// hardened resources included. It is context, never findings: a resource
+	// that is configured correctly has no finding, so findings alone cannot say
+	// that an earlier assumption no longer holds. Present only when the scan
+	// read at least one resource.
+	Infrastructure *infra.Inventory `json:"infrastructure,omitempty"`
+	// Routes are the HTTP entry points the authorization reader found, with
+	// the access-control middleware it could see in front of each. They are
+	// descriptive context for a system model, never findings: no consumer of
+	// Findings (SARIF, baseline, VEX, gates, exit codes) reads them. Present
+	// only when the reader found at least one route. An absent key therefore
+	// means "no routes read", and a findings.json written before this
+	// key existed cannot be told apart from one with no routes; consumers must
+	// treat the two as "not recorded".
+	Routes []Route `json:"routes,omitempty"`
+}
+
+// Route is the serialised form of one route the authorization reader saw.
+// Authn and Authz are middleware text as written in the source, and an empty
+// Authn means no authentication middleware was visible, not that none exists.
+type Route struct {
+	Method   string `json:"method"`
+	Path     string `json:"path"`
+	FilePath string `json:"file_path"`
+	Line     int    `json:"line"`
+	Authn    string `json:"authn,omitempty"`
+	Authz    string `json:"authz,omitempty"`
+	// Reader is the framework reader that found the registration.
+	Reader string `json:"reader,omitempty"`
+}
+
+// Lead is the serialised form of core.Lead: one thing a scan found worth
+// verifying by hand, carried beside the findings rather than among them.
+type Lead struct {
+	Category  string `json:"category"`
+	RuleID    string `json:"rule_id"`
+	Route     string `json:"route"`
+	FilePath  string `json:"file_path"`
+	Line      int    `json:"line"`
+	Statement string `json:"statement"`
+	Test      string `json:"test"`
+	// IDSource is where the caller-supplied identifier comes from ("path",
+	// "query", "body", or several joined by commas). Set for object-level
+	// authorization leads; it is what lets `nox attack plan` name the
+	// parameter that selects the object.
+	IDSource string `json:"id_source,omitempty"`
 }
 
 // ActiveFindings returns the report's findings that are still active — not
@@ -230,6 +310,25 @@ func LoadFindingsFileReport(path string) (JSONReport, error) {
 		return JSONReport{}, err
 	}
 	return rep, nil
+}
+
+// LoadPreviousFindings reads the findings of an earlier run. A missing or
+// unreadable file is "no previous run", reported as have=false, never as a
+// previous run that found nothing. warning is non-empty when the file existed
+// but could not be read, so the caller can say why it was treated as absent.
+// Shared by `nox advisories` and the MCP advisories tool.
+func LoadPreviousFindings(path string) (prev []findings.Finding, have bool, warning string) {
+	if path == "" {
+		return nil, false, ""
+	}
+	rep, err := LoadFindingsFileReport(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, ""
+		}
+		return nil, false, fmt.Sprintf("previous run %s is unreadable (%v); treating it as absent", path, err)
+	}
+	return rep.Findings, true, ""
 }
 
 // DegradationsFrom converts scan degradations into their report form.
@@ -290,6 +389,8 @@ type JSONReporter struct {
 	// Offline is recorded in the report Meta as the proof-of-offline
 	// attestation. Set it to the scan's `--offline` state before Generate.
 	Offline bool
+	// AdvisoryLookup is Meta.AdvisoryLookup; core's JSONReporter sets it.
+	AdvisoryLookup string
 	// Prioritize orders findings by priority (severity, then reachability, then
 	// confidence) instead of the canonical deterministic order — the most
 	// actionable findings first, likely-false-positive unreachable vulns last.
@@ -319,6 +420,15 @@ type JSONReporter struct {
 	// StageAccounting is what each rule family produced and what became of it.
 	// Set from ScanResult.Stages, and likewise best left to the constructor.
 	StageAccounting []StageCount
+	// Leads and LeadChecks are the scan's authorization leads, set by
+	// core.ScanResult.JSONReporter. They are written beside the findings, not
+	// among them.
+	Leads      []Lead
+	LeadChecks []string
+	// Infrastructure is the deployment inventory, written beside the findings.
+	Infrastructure *infra.Inventory
+	// Routes are the entry points the authorization reader found.
+	Routes []Route
 }
 
 // NewJSONReporter returns a JSONReporter configured with the given tool version
@@ -362,7 +472,14 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 		},
 		Findings:    f,
 		Enrichments: r.Enrichments,
+		Leads:       r.Leads,
+		LeadChecks:  r.LeadChecks,
+		Routes:      r.Routes,
+
+		Infrastructure: r.Infrastructure,
 	}
+
+	report.Meta.AdvisoryLookup = r.AdvisoryLookup
 
 	return json.MarshalIndent(report, "", "  ")
 }

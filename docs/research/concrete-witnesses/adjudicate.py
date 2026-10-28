@@ -144,7 +144,6 @@ def load(path):
 
 
 def main():
-    # nox:ignore TAINT-004 -- a local research CLI: the person running it names the files it reads; there is no other party to the path
     outcomes, httpv, smt = (load(p) for p in sys.argv[1:4])
 
     totals = collections.Counter(o["direction"] for o in outcomes)

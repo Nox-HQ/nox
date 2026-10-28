@@ -294,6 +294,14 @@ type ExploitEvidence struct {
 	Deterministic  bool   `json:"deterministic"`
 	Reproduced     bool   `json:"reproduced"`
 	ObservedAt     string `json:"observed_at"`
+	// EvidenceKind is the nox-core evidence kind the run produced. The service
+	// derives the verdict from it and does not trust Exploitability as sent:
+	// only dynamic_exploit or controlled_reproduction, with Deterministic and
+	// Reproduced, can reach CONFIRMED. Older clients omit it and upload as
+	// INCONCLUSIVE.
+	EvidenceKind string `json:"evidence_kind,omitempty"`
+	// ControlSound is false when the benign control tripped. Omitted means sound.
+	ControlSound *bool `json:"control_sound,omitempty"`
 }
 
 // fingerprintPattern is a full candidate fingerprint as the service keys it.

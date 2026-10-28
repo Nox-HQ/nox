@@ -439,8 +439,8 @@ func TestInventory_JSONSerialization(t *testing.T) {
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("failed to parse inventory JSON: %v", err)
 	}
-	if parsed.SchemaVersion != "2.0.0" {
-		t.Fatalf("expected schema version 2.0.0, got %q", parsed.SchemaVersion)
+	if parsed.SchemaVersion != schemaVersion {
+		t.Fatalf("expected schema version %s, got %q", schemaVersion, parsed.SchemaVersion)
 	}
 	if len(parsed.Components) != 1 {
 		t.Fatalf("expected 1 component, got %d", len(parsed.Components))
@@ -1408,9 +1408,11 @@ func TestAllAIRules_Count(t *testing.T) {
 	// security findings (see tuning_params_retired_test.go).
 	// 85 -> 81 withdrew AI-022, AI-023, AI-028 and AI-037 on the same standard
 	// (see reliability_rules_retired_test.go).
+	// 81 -> 82 added MCP-025, an MCP server launched from a package registry
+	// without a pinned version (see false_allclear_test.go).
 	rules := builtinAIRules()
-	if got := len(rules); got != 81 {
-		t.Errorf("expected 81 AI rules, got %d", got)
+	if got := len(rules); got != 82 {
+		t.Errorf("expected 82 AI rules, got %d", got)
 	}
 }
 

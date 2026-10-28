@@ -1,0 +1,1798 @@
+{
+  "meta": {
+    "schema_version": "1.1.0",
+    "tool_name": "nox",
+    "tool_version": "9.9.9",
+    "report": "threat-model"
+  },
+  "notice": "This is a system description and threat evidence assembled from an automated scan, offered as input to a threat model that people make. It lists what nox can evidence and what it cannot see. A category with no evidence is not evidenced either way, and that is not an assurance. Nothing here decides whether a threat is real or what should be done about it.",
+  "provenance": {
+    "scan_tool_version": "1.2.3",
+    "scan_generated_at": "2026-10-24T17:18:36Z",
+    "scan_offline": false,
+    "scopes_scanned": [
+      "all"
+    ],
+    "degradations": 0,
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "coverage": {
+      "routes": true,
+      "ai_inventory": true,
+      "sbom": true,
+      "infrastructure": false
+    },
+    "artifacts": [
+      {
+        "name": "findings.json",
+        "kind": "findings",
+        "sha256": "aa"
+      },
+      {
+        "name": "sbom.cdx.json",
+        "kind": "sbom",
+        "sha256": "bb"
+      },
+      {
+        "name": "ai.inventory.json",
+        "kind": "ai-inventory",
+        "sha256": "cc"
+      }
+    ]
+  },
+  "summary": {
+    "elements": 19,
+    "flows": 16,
+    "boundaries": 12,
+    "cells_open_issues": 9,
+    "cells_leads_to_verify": 3,
+    "cells_limited_evidence": 6,
+    "cells_not_evidenced": 54,
+    "unattributed_findings": 2,
+    "questions": 13
+  },
+  "elements": [
+    {
+      "id": "actor:caller",
+      "kind": "actor",
+      "name": "Callers (untrusted input)",
+      "zone": "untrusted",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "statement": "origin of untrusted input; present because a flow starts here"
+        }
+      ]
+    },
+    {
+      "id": "actor:internet",
+      "kind": "actor",
+      "name": "Internet (untrusted)",
+      "zone": "untrusted",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "statement": "origin of untrusted traffic; present because a deployment resource is reachable from it"
+        }
+      ]
+    },
+    {
+      "id": "agent:src/routes/assistant.js",
+      "kind": "agent",
+      "name": "assistant.js",
+      "zone": "application",
+      "location": "src/routes/assistant.js",
+      "attributes": {
+        "agent": "assistant.js",
+        "tools": "query_db (capability not classified); run_shell (shell_exec); send_email (email_send)",
+        "unclassified_tools": "query_db"
+      },
+      "evidence": [
+        {
+          "artifact": "ai.inventory.json",
+          "ref": "src/routes/assistant.js",
+          "statement": "agent exposes 3 tool(s) to the model: query_db (capability not classified); run_shell (shell_exec); send_email (email_send)"
+        }
+      ]
+    },
+    {
+      "id": "app",
+      "kind": "application",
+      "name": "Application code",
+      "zone": "application",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "statement": "the repository that was scanned"
+        }
+      ]
+    },
+    {
+      "id": "dependencies",
+      "kind": "dependencies",
+      "name": "Third-party dependencies (4 packages)",
+      "zone": "application",
+      "attributes": {
+        "packages": "4",
+        "sbom": "CycloneDX 1.5"
+      },
+      "evidence": [
+        {
+          "artifact": "sbom.cdx.json",
+          "statement": "4 packages in CycloneDX 1.5"
+        }
+      ]
+    },
+    {
+      "id": "deploy:bucket@deploy/tf/main.tf",
+      "kind": "data_store",
+      "name": "Storage bucket (deploy/tf/main.tf)",
+      "zone": "data",
+      "location": "deploy/tf/main.tf:3",
+      "attributes": {
+        "file": "deploy/tf/main.tf",
+        "resource": "bucket"
+      },
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "deploy/tf/main.tf:3",
+          "statement": "IAC-040: S3 bucket with public ACL",
+          "rule_id": "IAC-040",
+          "severity": "high",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "deploy:database@deploy/tf/main.tf",
+      "kind": "data_store",
+      "name": "Database instance (deploy/tf/main.tf)",
+      "zone": "data",
+      "location": "deploy/tf/main.tf:31",
+      "attributes": {
+        "file": "deploy/tf/main.tf",
+        "resource": "database"
+      },
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "deploy/tf/main.tf:31",
+          "statement": "IAC-037: RDS storage encryption disabled",
+          "rule_id": "IAC-037",
+          "severity": "medium",
+          "count": 1
+        },
+        {
+          "artifact": "findings.json",
+          "ref": "deploy/tf/main.tf:32",
+          "statement": "IAC-036: RDS or database instance is publicly accessible",
+          "rule_id": "IAC-036",
+          "severity": "high",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "deploy:ingress@deploy/k8s/ingress.yaml",
+      "kind": "ingress",
+      "name": "Ingress web (deploy/k8s/ingress.yaml)",
+      "zone": "deploy",
+      "location": "deploy/k8s/ingress.yaml:2",
+      "attributes": {
+        "file": "deploy/k8s/ingress.yaml"
+      },
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "deploy/k8s/ingress.yaml:2",
+          "statement": "IAC-149: Kubernetes Ingress without TLS configuration",
+          "rule_id": "IAC-149",
+          "severity": "high",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "effect:outbound",
+      "kind": "host_capability",
+      "name": "Outbound network (HTTP, email, webhooks)",
+      "zone": "host",
+      "evidence": [
+        {
+          "artifact": "ai.inventory.json",
+          "ref": "src/routes/assistant.js",
+          "statement": "tool registration in the AI inventory"
+        }
+      ]
+    },
+    {
+      "id": "effect:shell",
+      "kind": "host_capability",
+      "name": "Host shell",
+      "zone": "host",
+      "evidence": [
+        {
+          "artifact": "ai.inventory.json",
+          "ref": "src/routes/assistant.js",
+          "statement": "tool registration in the AI inventory"
+        },
+        {
+          "artifact": "findings.json",
+          "ref": "src/routes/assistant.js:40",
+          "statement": "reached by a taint finding"
+        }
+      ]
+    },
+    {
+      "id": "effect:unclassified",
+      "kind": "host_capability",
+      "name": "Effect nox could not classify",
+      "zone": "host",
+      "evidence": [
+        {
+          "artifact": "ai.inventory.json",
+          "ref": "src/routes/assistant.js",
+          "statement": "tool registration in the AI inventory"
+        }
+      ]
+    },
+    {
+      "id": "mcp-client:.mcp.json",
+      "kind": "mcp_client",
+      "name": "MCP client configured by .mcp.json",
+      "zone": "application",
+      "location": ".mcp.json",
+      "evidence": [
+        {
+          "artifact": "ai.inventory.json",
+          "ref": ".mcp.json",
+          "statement": "MCP configuration file naming the servers an agent runtime launches"
+        }
+      ]
+    },
+    {
+      "id": "mcp:shell@.mcp.json",
+      "kind": "mcp_server",
+      "name": "MCP server shell",
+      "zone": "third_party",
+      "location": ".mcp.json",
+      "attributes": {
+        "args": "-y mcp-server-shell",
+        "command": "npx",
+        "server": "shell",
+        "tools": "*"
+      },
+      "evidence": [
+        {
+          "artifact": "ai.inventory.json",
+          "ref": ".mcp.json",
+          "statement": "MCP server `shell` is configured"
+        },
+        {
+          "artifact": "ai.inventory.json",
+          "ref": ".mcp.json",
+          "statement": "MCP server `shell` is configured, launched as `npx -y mcp-server-shell`"
+        }
+      ]
+    },
+    {
+      "id": "model:gpt-4o@src/routes/assistant.js",
+      "kind": "model",
+      "name": "gpt-4o (openai)",
+      "zone": "model_provider",
+      "location": "src/routes/assistant.js:28",
+      "attributes": {
+        "credential_env_var": "OPENAI_API_KEY",
+        "model": "gpt-4o",
+        "pinned": "false",
+        "provider": "openai"
+      },
+      "evidence": [
+        {
+          "artifact": "ai.inventory.json",
+          "ref": "src/routes/assistant.js:28",
+          "statement": "model `gpt-4o` is referenced by the application code"
+        }
+      ]
+    },
+    {
+      "id": "route:GET /api/invoices/:id",
+      "kind": "route",
+      "name": "GET /api/invoices/:id",
+      "zone": "application",
+      "location": "src/routes/invoices.js:13",
+      "attributes": {
+        "authentication_middleware": "requireAuth",
+        "authorization_lead": "yes",
+        "method": "GET",
+        "path": "/api/invoices/:id"
+      },
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "src/routes/invoices.js:13",
+          "statement": "route registration read by the Express or Fastify reader"
+        }
+      ]
+    },
+    {
+      "id": "route:POST /api/assistant/summarise",
+      "kind": "route",
+      "name": "POST /api/assistant/summarise",
+      "zone": "application",
+      "location": "src/routes/assistant.js:27",
+      "attributes": {
+        "authentication_middleware": "requireAuth",
+        "method": "POST",
+        "path": "/api/assistant/summarise"
+      },
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "src/routes/assistant.js:27",
+          "statement": "route registration read by the Express or Fastify reader"
+        }
+      ]
+    },
+    {
+      "id": "route:POST /login",
+      "kind": "route",
+      "name": "POST /login",
+      "zone": "application",
+      "location": "src/server.js:6",
+      "attributes": {
+        "authentication_middleware": "none visible",
+        "method": "POST",
+        "path": "/login"
+      },
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "src/server.js:6",
+          "statement": "route registration read by the Express or Fastify reader"
+        }
+      ]
+    },
+    {
+      "id": "service:stripe",
+      "kind": "external_service",
+      "name": "Stripe (payments API)",
+      "zone": "third_party",
+      "attributes": {
+        "basis": "dependency"
+      },
+      "evidence": [
+        {
+          "artifact": "sbom.cdx.json",
+          "ref": "stripe@17.4.0",
+          "statement": "package stripe@17.4.0 is in the dependency set; the SBOM does not say whether it is direct or transitive"
+        }
+      ]
+    },
+    {
+      "id": "store:postgresql",
+      "kind": "data_store",
+      "name": "PostgreSQL",
+      "zone": "data",
+      "attributes": {
+        "basis": "dependency"
+      },
+      "evidence": [
+        {
+          "artifact": "sbom.cdx.json",
+          "ref": "pg@8.13.1",
+          "statement": "package pg@8.13.1 is in the dependency set; the SBOM does not say whether it is direct or transitive"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "data-access",
+      "label": "application → data store",
+      "from": "application",
+      "to": "data",
+      "flows": 1
+    },
+    {
+      "id": "exposure",
+      "label": "internet → exposed deployment resource",
+      "from": "untrusted",
+      "to": "deploy",
+      "flows": 3
+    },
+    {
+      "id": "model-call",
+      "label": "application → model provider",
+      "from": "application",
+      "to": "model_provider",
+      "flows": 1
+    },
+    {
+      "id": "prompt",
+      "label": "untrusted input → LLM prompt",
+      "from": "untrusted",
+      "to": "model_provider",
+      "flows": 1
+    },
+    {
+      "id": "request",
+      "label": "untrusted caller → route",
+      "from": "untrusted",
+      "to": "application",
+      "flows": 3
+    },
+    {
+      "id": "taint:command_injection",
+      "label": "untrusted input → shell command",
+      "from": "untrusted",
+      "to": "host",
+      "flows": 1
+    },
+    {
+      "id": "third-party",
+      "label": "application → third-party service",
+      "from": "application",
+      "to": "third_party",
+      "flows": 1
+    },
+    {
+      "id": "tool-dispatch",
+      "label": "model output → agent tool dispatch",
+      "from": "model_provider",
+      "to": "application",
+      "flows": 1
+    },
+    {
+      "id": "tool:mcp-server",
+      "label": "model output → MCP server tool",
+      "from": "model_provider",
+      "to": "third_party",
+      "flows": 1
+    },
+    {
+      "id": "tool:outbound",
+      "label": "model output → outbound network",
+      "from": "model_provider",
+      "to": "host",
+      "flows": 1
+    },
+    {
+      "id": "tool:shell",
+      "label": "model output → shell",
+      "from": "model_provider",
+      "to": "host",
+      "flows": 1
+    },
+    {
+      "id": "tool:unclassified",
+      "label": "model output → tool with a capability nox could not classify",
+      "from": "model_provider",
+      "to": "host",
+      "flows": 1
+    }
+  ],
+  "flows": [
+    {
+      "id": "actor:caller -> route:GET /api/invoices/:id [request]",
+      "from": "actor:caller",
+      "to": "route:GET /api/invoices/:id",
+      "label": "request reaches GET /api/invoices/:id (authentication middleware: requireAuth)",
+      "boundary": "request",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "src/routes/invoices.js:13",
+          "statement": "route registration read by the Express or Fastify reader"
+        }
+      ]
+    },
+    {
+      "id": "actor:caller -> route:POST /api/assistant/summarise [request]",
+      "from": "actor:caller",
+      "to": "route:POST /api/assistant/summarise",
+      "label": "request reaches POST /api/assistant/summarise (authentication middleware: requireAuth)",
+      "boundary": "request",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "src/routes/assistant.js:27",
+          "statement": "route registration read by the Express or Fastify reader"
+        }
+      ]
+    },
+    {
+      "id": "actor:caller -> route:POST /login [request]",
+      "from": "actor:caller",
+      "to": "route:POST /login",
+      "label": "request reaches POST /login (no authentication middleware visible)",
+      "boundary": "request",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "src/server.js:6",
+          "statement": "route registration read by the Express or Fastify reader"
+        }
+      ]
+    },
+    {
+      "id": "actor:internet -> deploy:bucket@deploy/tf/main.tf [exposure]",
+      "from": "actor:internet",
+      "to": "deploy:bucket@deploy/tf/main.tf",
+      "label": "Storage bucket (deploy/tf/main.tf) is reachable from outside",
+      "boundary": "exposure",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "deploy/tf/main.tf:3",
+          "statement": "IAC-040: S3 bucket with public ACL",
+          "rule_id": "IAC-040",
+          "severity": "high",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "actor:internet -> deploy:database@deploy/tf/main.tf [exposure]",
+      "from": "actor:internet",
+      "to": "deploy:database@deploy/tf/main.tf",
+      "label": "Database instance (deploy/tf/main.tf) is reachable from outside",
+      "boundary": "exposure",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "deploy/tf/main.tf:32",
+          "statement": "IAC-036: RDS or database instance is publicly accessible",
+          "rule_id": "IAC-036",
+          "severity": "high",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "actor:internet -> deploy:ingress@deploy/k8s/ingress.yaml [exposure]",
+      "from": "actor:internet",
+      "to": "deploy:ingress@deploy/k8s/ingress.yaml",
+      "label": "Ingress web (deploy/k8s/ingress.yaml) is reachable from outside",
+      "boundary": "exposure",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "deploy/k8s/ingress.yaml:2",
+          "statement": "IAC-149: Kubernetes Ingress without TLS configuration",
+          "rule_id": "IAC-149",
+          "severity": "high",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "agent:src/routes/assistant.js -> effect:outbound [tool:outbound]",
+      "from": "agent:src/routes/assistant.js",
+      "to": "effect:outbound",
+      "label": "model output may invoke send_email (email_send)",
+      "boundary": "tool:outbound",
+      "evidence": [
+        {
+          "artifact": "ai.inventory.json",
+          "ref": "src/routes/assistant.js",
+          "statement": "agent registers tool(s) send_email with capability email_send"
+        }
+      ]
+    },
+    {
+      "id": "agent:src/routes/assistant.js -> effect:shell [tool:shell]",
+      "from": "agent:src/routes/assistant.js",
+      "to": "effect:shell",
+      "label": "model output may invoke run_shell (shell_exec)",
+      "boundary": "tool:shell",
+      "evidence": [
+        {
+          "artifact": "ai.inventory.json",
+          "ref": "src/routes/assistant.js",
+          "statement": "agent registers tool(s) run_shell with capability shell_exec"
+        }
+      ]
+    },
+    {
+      "id": "agent:src/routes/assistant.js -> effect:unclassified [tool:unclassified]",
+      "from": "agent:src/routes/assistant.js",
+      "to": "effect:unclassified",
+      "label": "model output may invoke query_db (capability not classified)",
+      "boundary": "tool:unclassified",
+      "evidence": [
+        {
+          "artifact": "ai.inventory.json",
+          "ref": "src/routes/assistant.js",
+          "statement": "agent registers tool(s) query_db with no capability nox recognises"
+        }
+      ]
+    },
+    {
+      "id": "app -> model:gpt-4o@src/routes/assistant.js [model-call]",
+      "from": "app",
+      "to": "model:gpt-4o@src/routes/assistant.js",
+      "label": "the application calls model gpt-4o",
+      "boundary": "model-call",
+      "evidence": [
+        {
+          "artifact": "ai.inventory.json",
+          "ref": "src/routes/assistant.js:28",
+          "statement": "model `gpt-4o` is referenced by the application code"
+        }
+      ]
+    },
+    {
+      "id": "app -> service:stripe [third-party]",
+      "from": "app",
+      "to": "service:stripe",
+      "label": "a package for Stripe (payments API) is in the dependency set",
+      "boundary": "third-party",
+      "evidence": [
+        {
+          "artifact": "sbom.cdx.json",
+          "ref": "stripe@17.4.0",
+          "statement": "package stripe@17.4.0 is in the dependency set; the SBOM does not say whether it is direct or transitive"
+        }
+      ]
+    },
+    {
+      "id": "app -> store:postgresql [data-access]",
+      "from": "app",
+      "to": "store:postgresql",
+      "label": "a package for PostgreSQL is in the dependency set",
+      "boundary": "data-access",
+      "evidence": [
+        {
+          "artifact": "sbom.cdx.json",
+          "ref": "pg@8.13.1",
+          "statement": "package pg@8.13.1 is in the dependency set; the SBOM does not say whether it is direct or transitive"
+        }
+      ]
+    },
+    {
+      "id": "mcp-client:.mcp.json -> mcp:shell@.mcp.json [tool:mcp-server]",
+      "from": "mcp-client:.mcp.json",
+      "to": "mcp:shell@.mcp.json",
+      "label": "model output may call tools on MCP server shell",
+      "boundary": "tool:mcp-server",
+      "evidence": [
+        {
+          "artifact": "ai.inventory.json",
+          "ref": ".mcp.json",
+          "statement": "MCP server `shell` is configured"
+        },
+        {
+          "artifact": "ai.inventory.json",
+          "ref": ".mcp.json",
+          "statement": "MCP server `shell` is configured, launched as `npx -y mcp-server-shell`"
+        }
+      ]
+    },
+    {
+      "id": "model:gpt-4o@src/routes/assistant.js -> agent:src/routes/assistant.js [tool-dispatch]",
+      "from": "model:gpt-4o@src/routes/assistant.js",
+      "to": "agent:src/routes/assistant.js",
+      "label": "model output drives the agent's tool calls (prompt call and agent are registered in the same file; nox does not trace the call)",
+      "boundary": "tool-dispatch",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "src/routes/assistant.js:28",
+          "statement": "TAINT-AI-001: Untrusted input reaches prompt_injection sink \"openai.chat.completions.create\"",
+          "rule_id": "TAINT-AI-001",
+          "severity": "high",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "route:POST /api/assistant/summarise -> effect:shell [taint:command_injection]",
+      "from": "route:POST /api/assistant/summarise",
+      "to": "effect:shell",
+      "label": "untrusted input (http_query) reaches a shell command sink",
+      "boundary": "taint:command_injection",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "src/routes/assistant.js:40",
+          "statement": "TAINT-001: Untrusted input reaches command_injection sink",
+          "rule_id": "TAINT-001",
+          "severity": "high",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "route:POST /api/assistant/summarise -> model:gpt-4o@src/routes/assistant.js [prompt]",
+      "from": "route:POST /api/assistant/summarise",
+      "to": "model:gpt-4o@src/routes/assistant.js",
+      "label": "untrusted input reaches the LLM prompt call at src/routes/assistant.js:28",
+      "boundary": "prompt",
+      "evidence": [
+        {
+          "artifact": "findings.json",
+          "ref": "src/routes/assistant.js:28",
+          "statement": "TAINT-AI-001: Untrusted input reaches prompt_injection sink \"openai.chat.completions.create\"",
+          "rule_id": "TAINT-AI-001",
+          "severity": "high",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "stride": [
+    {
+      "element": "agent:src/routes/assistant.js",
+      "cells": [
+        {
+          "category": "spoofing",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "tampering",
+          "status": "open_issues",
+          "findings": 3,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:1",
+              "statement": "AI-AGENT-001: Agent exposes shell_exec",
+              "rule_id": "AI-AGENT-001",
+              "severity": "critical",
+              "count": 1
+            },
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:40",
+              "statement": "TAINT-001: Untrusted input reaches command_injection sink",
+              "rule_id": "TAINT-001",
+              "severity": "high",
+              "count": 1
+            },
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:28",
+              "statement": "TAINT-AI-001: Untrusted input reaches prompt_injection sink \"openai.chat.completions.create\"",
+              "rule_id": "TAINT-AI-001",
+              "severity": "high",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "category": "repudiation",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "information_disclosure",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "denial_of_service",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "elevation_of_privilege",
+          "status": "open_issues",
+          "findings": 3,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:1",
+              "statement": "AI-AGENT-001: Agent exposes shell_exec",
+              "rule_id": "AI-AGENT-001",
+              "severity": "critical",
+              "count": 1
+            },
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:40",
+              "statement": "TAINT-001: Untrusted input reaches command_injection sink",
+              "rule_id": "TAINT-001",
+              "severity": "high",
+              "count": 1
+            },
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:28",
+              "statement": "TAINT-AI-001: Untrusted input reaches prompt_injection sink \"openai.chat.completions.create\"",
+              "rule_id": "TAINT-AI-001",
+              "severity": "high",
+              "count": 1
+            },
+            {
+              "artifact": "ai.inventory.json",
+              "ref": "src/routes/assistant.js",
+              "statement": "the agent exposes these tools to the model: query_db (capability not classified); run_shell (shell_exec); send_email (email_send)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "element": "dependencies",
+      "cells": [
+        {
+          "category": "spoofing",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "tampering",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "repudiation",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "information_disclosure",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "denial_of_service",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "elevation_of_privilege",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        }
+      ],
+      "other_findings": [
+        {
+          "artifact": "findings.json",
+          "ref": "package-lock.json:1",
+          "statement": "VULN-001: Known vulnerability GHSA-xxxx in axios@1.7.4",
+          "rule_id": "VULN-001",
+          "severity": "high",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "element": "deploy:bucket@deploy/tf/main.tf",
+      "cells": [
+        {
+          "category": "spoofing",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "tampering",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "repudiation",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "information_disclosure",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "denial_of_service",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "elevation_of_privilege",
+          "status": "open_issues",
+          "findings": 1,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "deploy/tf/main.tf:3",
+              "statement": "IAC-040: S3 bucket with public ACL",
+              "rule_id": "IAC-040",
+              "severity": "high",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "element": "deploy:database@deploy/tf/main.tf",
+      "cells": [
+        {
+          "category": "spoofing",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "tampering",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "repudiation",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "information_disclosure",
+          "status": "limited_evidence",
+          "findings": 0,
+          "waived": 1,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "deploy/tf/main.tf:31",
+              "statement": "IAC-037: RDS storage encryption disabled",
+              "rule_id": "IAC-037",
+              "severity": "medium",
+              "count": 1,
+              "waived": true
+            }
+          ]
+        },
+        {
+          "category": "denial_of_service",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "elevation_of_privilege",
+          "status": "open_issues",
+          "findings": 1,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "deploy/tf/main.tf:32",
+              "statement": "IAC-036: RDS or database instance is publicly accessible",
+              "rule_id": "IAC-036",
+              "severity": "high",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "element": "deploy:ingress@deploy/k8s/ingress.yaml",
+      "cells": [
+        {
+          "category": "spoofing",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "tampering",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "repudiation",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "information_disclosure",
+          "status": "open_issues",
+          "findings": 1,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "deploy/k8s/ingress.yaml:2",
+              "statement": "IAC-149: Kubernetes Ingress without TLS configuration",
+              "rule_id": "IAC-149",
+              "severity": "high",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "category": "denial_of_service",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "elevation_of_privilege",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        }
+      ]
+    },
+    {
+      "element": "mcp:shell@.mcp.json",
+      "cells": [
+        {
+          "category": "spoofing",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "tampering",
+          "status": "limited_evidence",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "ai.inventory.json",
+              "ref": ".mcp.json",
+              "statement": "launched with `npx` from package `mcp-server-shell` with no version pinned, so what runs is whatever the registry serves at launch"
+            }
+          ]
+        },
+        {
+          "category": "repudiation",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "information_disclosure",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "denial_of_service",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "elevation_of_privilege",
+          "status": "limited_evidence",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "ai.inventory.json",
+              "ref": ".mcp.json",
+              "statement": "the configuration does not limit which of the server's tools the client may call (tool list `*`)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "element": "model:gpt-4o@src/routes/assistant.js",
+      "cells": [
+        {
+          "category": "spoofing",
+          "status": "limited_evidence",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "ai.inventory.json",
+              "ref": "src/routes/assistant.js:28",
+              "statement": "the call authenticates with the credential in environment variable `OPENAI_API_KEY`; where it is stored and who can read it is outside the scan"
+            }
+          ]
+        },
+        {
+          "category": "tampering",
+          "status": "open_issues",
+          "findings": 2,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:40",
+              "statement": "TAINT-001: Untrusted input reaches command_injection sink",
+              "rule_id": "TAINT-001",
+              "severity": "high",
+              "count": 1
+            },
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:28",
+              "statement": "TAINT-AI-001: Untrusted input reaches prompt_injection sink \"openai.chat.completions.create\"",
+              "rule_id": "TAINT-AI-001",
+              "severity": "high",
+              "count": 1
+            },
+            {
+              "artifact": "ai.inventory.json",
+              "ref": "src/routes/assistant.js:28",
+              "statement": "the model reference is not pinned to a revision, so the provider may change its behaviour without a change here"
+            }
+          ]
+        },
+        {
+          "category": "repudiation",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "information_disclosure",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "denial_of_service",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "elevation_of_privilege",
+          "status": "open_issues",
+          "findings": 2,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:40",
+              "statement": "TAINT-001: Untrusted input reaches command_injection sink",
+              "rule_id": "TAINT-001",
+              "severity": "high",
+              "count": 1
+            },
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:28",
+              "statement": "TAINT-AI-001: Untrusted input reaches prompt_injection sink \"openai.chat.completions.create\"",
+              "rule_id": "TAINT-AI-001",
+              "severity": "high",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "element": "route:GET /api/invoices/:id",
+      "cells": [
+        {
+          "category": "spoofing",
+          "status": "limited_evidence",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/invoices.js:13",
+              "statement": "authentication middleware `requireAuth` is on the route's chain; nox reads middleware by name and does not evaluate that it works"
+            }
+          ]
+        },
+        {
+          "category": "tampering",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "repudiation",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "information_disclosure",
+          "status": "leads_to_verify",
+          "findings": 0,
+          "waived": 0,
+          "leads": 1,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/invoices.js:14",
+              "statement": "lead: GET /api/invoices/:id loads a record by a caller-supplied id with no visible ownership check. Test it with two user accounts.",
+              "rule_id": "AUTHZ-001"
+            }
+          ]
+        },
+        {
+          "category": "denial_of_service",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "elevation_of_privilege",
+          "status": "leads_to_verify",
+          "findings": 0,
+          "waived": 0,
+          "leads": 1,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/invoices.js:14",
+              "statement": "lead: GET /api/invoices/:id loads a record by a caller-supplied id with no visible ownership check. Test it with two user accounts.",
+              "rule_id": "AUTHZ-001"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "element": "route:POST /api/assistant/summarise",
+      "cells": [
+        {
+          "category": "spoofing",
+          "status": "limited_evidence",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:27",
+              "statement": "authentication middleware `requireAuth` is on the route's chain; nox reads middleware by name and does not evaluate that it works"
+            }
+          ]
+        },
+        {
+          "category": "tampering",
+          "status": "open_issues",
+          "findings": 2,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:40",
+              "statement": "TAINT-001: Untrusted input reaches command_injection sink",
+              "rule_id": "TAINT-001",
+              "severity": "high",
+              "count": 1
+            },
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:28",
+              "statement": "TAINT-AI-001: Untrusted input reaches prompt_injection sink \"openai.chat.completions.create\"",
+              "rule_id": "TAINT-AI-001",
+              "severity": "high",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "category": "repudiation",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "information_disclosure",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "denial_of_service",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "elevation_of_privilege",
+          "status": "open_issues",
+          "findings": 2,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:40",
+              "statement": "TAINT-001: Untrusted input reaches command_injection sink",
+              "rule_id": "TAINT-001",
+              "severity": "high",
+              "count": 1
+            },
+            {
+              "artifact": "findings.json",
+              "ref": "src/routes/assistant.js:28",
+              "statement": "TAINT-AI-001: Untrusted input reaches prompt_injection sink \"openai.chat.completions.create\"",
+              "rule_id": "TAINT-AI-001",
+              "severity": "high",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "element": "route:POST /login",
+      "cells": [
+        {
+          "category": "spoofing",
+          "status": "leads_to_verify",
+          "findings": 0,
+          "waived": 0,
+          "leads": 1,
+          "evidence": [
+            {
+              "artifact": "findings.json",
+              "ref": "src/server.js:6",
+              "statement": "no authentication middleware is visible on the route's chain; this is a route that is either public on purpose or checks the caller somewhere nox does not read"
+            }
+          ]
+        },
+        {
+          "category": "tampering",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "repudiation",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "information_disclosure",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "denial_of_service",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "elevation_of_privilege",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        }
+      ]
+    },
+    {
+      "element": "service:stripe",
+      "cells": [
+        {
+          "category": "spoofing",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "tampering",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "repudiation",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "information_disclosure",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "denial_of_service",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "elevation_of_privilege",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        }
+      ]
+    },
+    {
+      "element": "store:postgresql",
+      "cells": [
+        {
+          "category": "spoofing",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "tampering",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "repudiation",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "information_disclosure",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "denial_of_service",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        },
+        {
+          "category": "elevation_of_privilege",
+          "status": "not_evidenced",
+          "findings": 0,
+          "waived": 0,
+          "leads": 0,
+          "evidence": [],
+          "note": "nox has no evidence either way"
+        }
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "Q1",
+      "question": "assistant.js registers tool query_db (Run a SQL query) and nox does not recognise its capability: what can it reach?",
+      "element": "agent:src/routes/assistant.js",
+      "basis": {
+        "artifact": "ai.inventory.json",
+        "ref": "src/routes/assistant.js",
+        "statement": "tool query_db registered by agent assistant.js"
+      }
+    },
+    {
+      "id": "Q2",
+      "question": "assistant.js exposes shell_exec to the model through tool run_shell: who may trigger it, and what confirms the request is allowed?",
+      "element": "agent:src/routes/assistant.js",
+      "basis": {
+        "artifact": "ai.inventory.json",
+        "ref": "src/routes/assistant.js",
+        "statement": "tool run_shell registered by agent assistant.js"
+      }
+    },
+    {
+      "id": "Q3",
+      "question": "assistant.js exposes email_send to the model through tool send_email: who may trigger it, and what confirms the request is allowed?",
+      "element": "agent:src/routes/assistant.js",
+      "basis": {
+        "artifact": "ai.inventory.json",
+        "ref": "src/routes/assistant.js",
+        "statement": "tool send_email registered by agent assistant.js"
+      }
+    },
+    {
+      "id": "Q4",
+      "question": "Which components may query PostgreSQL, with which credentials and privileges?",
+      "element": "store:postgresql",
+      "basis": {
+        "artifact": "sbom.cdx.json",
+        "ref": "pg@8.13.1",
+        "statement": "package pg@8.13.1 is in the dependency set; the SBOM does not say whether it is direct or transitive"
+      }
+    },
+    {
+      "id": "Q5",
+      "question": "Storage bucket (deploy/tf/main.tf) is reachable from outside according to IAC-040: is that intended, and who needs that access?",
+      "element": "deploy:bucket@deploy/tf/main.tf",
+      "basis": {
+        "artifact": "findings.json",
+        "ref": "deploy/tf/main.tf:3",
+        "statement": "IAC-040: S3 bucket with public ACL",
+        "rule_id": "IAC-040",
+        "severity": "high",
+        "count": 1
+      }
+    },
+    {
+      "id": "Q6",
+      "question": "Database instance (deploy/tf/main.tf) is reachable from outside according to IAC-036: is that intended, and who needs that access?",
+      "element": "deploy:database@deploy/tf/main.tf",
+      "basis": {
+        "artifact": "findings.json",
+        "ref": "deploy/tf/main.tf:32",
+        "statement": "IAC-036: RDS or database instance is publicly accessible",
+        "rule_id": "IAC-036",
+        "severity": "high",
+        "count": 1
+      }
+    },
+    {
+      "id": "Q7",
+      "question": "Ingress web (deploy/k8s/ingress.yaml) is reachable from outside according to IAC-149: is that intended, and who needs that access?",
+      "element": "deploy:ingress@deploy/k8s/ingress.yaml",
+      "basis": {
+        "artifact": "findings.json",
+        "ref": "deploy/k8s/ingress.yaml:2",
+        "statement": "IAC-149: Kubernetes Ingress without TLS configuration",
+        "rule_id": "IAC-149",
+        "severity": "high",
+        "count": 1
+      }
+    },
+    {
+      "id": "Q8",
+      "question": "MCP server shell (`npx -y mcp-server-shell`) is configured in .mcp.json: who approves adding a server like this, and what can it reach on the machine that runs it?",
+      "element": "mcp:shell@.mcp.json",
+      "basis": {
+        "artifact": "ai.inventory.json",
+        "ref": ".mcp.json",
+        "statement": "MCP server `shell` is configured"
+      }
+    },
+    {
+      "id": "Q9",
+      "question": "Model gpt-4o is not pinned to a revision: who notices when the provider changes its behaviour?",
+      "element": "model:gpt-4o@src/routes/assistant.js",
+      "basis": {
+        "artifact": "ai.inventory.json",
+        "ref": "src/routes/assistant.js:28",
+        "statement": "model `gpt-4o` is referenced by the application code"
+      }
+    },
+    {
+      "id": "Q10",
+      "question": "POST /login (src/server.js:6) has no authentication middleware visible: is it meant to be callable without authentication?",
+      "element": "route:POST /login",
+      "basis": {
+        "artifact": "findings.json",
+        "ref": "src/server.js:6",
+        "statement": "route registration read by the Express or Fastify reader"
+      }
+    },
+    {
+      "id": "Q11",
+      "question": "GET /api/invoices/:id (src/routes/invoices.js:14) loads a record by a caller-supplied id with no visible ownership check: how does it make sure a caller reads only their own record? Test it with two accounts.",
+      "element": "route:GET /api/invoices/:id",
+      "basis": {
+        "artifact": "findings.json",
+        "ref": "src/routes/invoices.js:14",
+        "statement": "lead: GET /api/invoices/:id loads a record by a caller-supplied id with no visible ownership check. Test it with two user accounts.",
+        "rule_id": "AUTHZ-001"
+      }
+    },
+    {
+      "id": "Q12",
+      "question": "What data reaches model gpt-4o in prompts, and is any of it data the application promises to keep private?",
+      "element": "model:gpt-4o@src/routes/assistant.js",
+      "basis": {
+        "artifact": "ai.inventory.json",
+        "ref": "src/routes/assistant.js:28",
+        "statement": "model `gpt-4o` is referenced by the application code"
+      }
+    },
+    {
+      "id": "Q13",
+      "question": "What data does the application send to Stripe (payments API), and who holds its credentials?",
+      "element": "service:stripe",
+      "basis": {
+        "artifact": "sbom.cdx.json",
+        "ref": "stripe@17.4.0",
+        "statement": "package stripe@17.4.0 is in the dependency set; the SBOM does not say whether it is direct or transitive"
+      }
+    }
+  ],
+  "limits": [
+    "Business logic and intent. Nox cannot tell a route that is public on purpose from one that is unprotected by mistake, or a record that is shared by design from one that leaks.",
+    "Runtime configuration: environment variables, feature flags, secret stores and anything set outside the repository.",
+    "The identity provider, session handling and token validation behind authentication. Middleware is read by name; nox does not evaluate whether it works.",
+    "Network topology beyond what infrastructure-as-code findings show: firewalls, service meshes, VPNs, peering, and what a load balancer actually forwards.",
+    "Entry points. Routes are read only from Express, Fastify, Next.js and NestJS (JavaScript and TypeScript) and Flask, FastAPI and Django (Python), and authorization leads come from the same readers. Go, Java, Rails and other frameworks are not enumerated, and neither are gRPC services, queue consumers or scheduled jobs.",
+    "Infrastructure. Only the resources nox reads from Terraform, CloudFormation, Kubernetes, Compose and Dockerfiles appear, with the properties it knows how to read. A resource of another kind, or one produced by a template or a module, is not in this model.",
+    "Dependencies. Packages are known from the SBOM, which does not say whether a package is direct or transitive. A data store or service inferred from a package shows the application can reach it, not that it does.",
+    "Data flows are static and name-level. A flow joins two elements because the scan connects them (the same file, a taint finding, a dependency, a configuration entry). Nox does not trace calls between routes, services and stores, and does not see data at rest or in transit.",
+    "Data sensitivity. Nox attaches DATA-* findings to the element in the file they were found in; it does not classify what each store holds.",
+    "Findings are attached to elements by file, and to a route by the nearest registration above them in the same file. A finding in a shared helper is attached to no route, and a finding in a file with no modelled element appears only in the unattributed count.",
+    "STRIDE categories come from the weakness (CWE) a rule declares. A finding with no weakness, or with one the mapping does not cover, is listed apart from the table, not forced into a category.",
+    "Third-party services, model providers and the contents of MCP servers are outside the scan.",
+    "A cell with no evidence means nox has none. It does not mean there is nothing to find."
+  ]
+}

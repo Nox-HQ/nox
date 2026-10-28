@@ -64,6 +64,7 @@ func From(r *nox.ScanResult, root, now string) (*attack.Plan, error) {
 		Root:      root,
 		Findings:  ff,
 		Inventory: r.AIInventory,
+		Leads:     r.ReportLeads(),
 		Now:       now,
 		Evidence:  evidenceFor(r),
 		Unknowns:  UnknownsFor(r),
