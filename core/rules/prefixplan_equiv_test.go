@@ -28,20 +28,28 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 	var planned []compiled
 	total := 0
 	for _, r := range catalog.Rules() {
-		if r.MatcherType != "regex" || r.Pattern == "" {
+		// An absence rule's anchor is located the same way (#736): its
+		// positions decide where a missing property is reported.
+		pattern := r.Pattern
+		if r.MatcherType == "absence" {
+			pattern = r.AbsenceAnchor
+		} else if r.MatcherType != "regex" {
+			continue
+		}
+		if pattern == "" {
 			continue
 		}
 		total++
-		if _, ok := rules.PrefixFindAll(r.Pattern, []byte("x"), false); !ok {
+		if _, ok := rules.PrefixFindAll(pattern, []byte("x"), false); !ok {
 			continue
 		}
 		var kws [][]byte
 		for _, k := range r.Keywords {
 			kws = append(kws, []byte(strings.ToLower(k)))
 		}
-		planned = append(planned, compiled{r.ID, regexp.MustCompile(r.Pattern), kws})
+		planned = append(planned, compiled{r.ID, regexp.MustCompile(pattern), kws})
 	}
-	t.Logf("%d of %d regex rules take the literal-prefix path", len(planned), total)
+	t.Logf("%d of %d regex patterns and absence anchors take the literal-prefix path", len(planned), total)
 	if len(planned) == 0 {
 		t.Fatal("no rule has a plan; the equivalence below checks nothing")
 	}

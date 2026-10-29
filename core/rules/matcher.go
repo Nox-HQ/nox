@@ -407,7 +407,19 @@ func (m *AbsenceMatcher) Match(content []byte, rule *Rule) []MatchResult {
 		return nil
 	}
 
-	anchors := anchorRe.FindAllIndex(content, -1)
+	// Anchors are located like regex matches (see prefixplan.go): an anchor
+	// that starts with a literal, `(?i)containers\s*:`, is tried only where
+	// the literal occurs. The full scan was two-thirds of this matcher's CPU
+	// on crewAI, nearly all of it over YAML cassettes holding no anchor
+	// (#736). Same positions either way.
+	var anchors [][]int
+	planned := false
+	if plan := planFor(rule.AbsenceAnchor); plan != nil {
+		anchors, planned = plan.match(content, false)
+	}
+	if !planned {
+		anchors = anchorRe.FindAllIndex(content, -1)
+	}
 	if len(anchors) == 0 {
 		return nil
 	}
