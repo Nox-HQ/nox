@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Plugin findings on gitignored paths are dropped, as nox's own walk drops those files. A plugin walks the workspace itself, so a directory the core walk skipped came back through it: on tokenops, `nox/triage-agent` reported 475 findings (and the taint plugin 2) from an agent worktree under the gitignored `.claude/`, each a duplicate of the real tree under a random directory name no waiver can stay ahead of. `scan.exclude` already bound plugins, which is why excluding `.claude/` was the workaround. The decision is the walker's own (root and nested `.gitignore`, the tracked-file override, linked-worktree pruning), so a tracked file in an ignored directory keeps its plugin findings. Measured on a tokenops clone with a worktree and no exclusion: 477 findings under `.claude/` to 0; nox's own findings unchanged (#830).
+
 ## [1.55.3] - 2026-10-29
 
 Precision fixes from the pydantic-ai scan of the week: SEC-055 can find a real crates.io token again, base64 images in YAML cassettes no longer fire vendor rules, MCP-011 no longer reports a refusal, and VARIANT-002 resolves a same-file safe loader. Dogfooded on nox and NOX Intelligence (online, answered by NOX Intelligence): findings identical to 1.55.2.
