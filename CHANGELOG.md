@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.4] - 2026-10-29
+
+MCP-018 no longer reports the addresses in a deny-list, plugin findings on gitignored paths are dropped, and rule file patterns are compiled once (about 6% less scan CPU on a large repository). Dogfooded on nox and NOX Intelligence (online, answered by NOX Intelligence): NOX Intelligence identical to 1.55.3; on nox the only change is MCP-018 2 to 0, both entries of nox's own metadata-hostname deny-list.
+
 ### Fixed
 
 - MCP-018 (cloud metadata endpoint) no longer reports an address in a deny-list. pydantic-ai's SSRF guard lists the metadata addresses it blocks, and nothing near the entries says "block" in code (the set is `_CLOUD_METADATA_IPV4`; the word is in a comment, which the rule does not read), so all three entries were reported as SSRF targets. A metadata address that is one entry of a literal collection holding nothing but addresses (IPs, CIDRs, metadata hostnames), or of a map-as-set of them (`"169.254.169.254": true`), is now refuted. A URL, an assignment, a single-entry list, a call argument, a collection mixing in anything else, and an address keyed to a value all still fire. Measured on pydantic-ai's `_ssrf.py` at 9ac853b: 3 to 0. No rule-level change across the 26-repository rule-diff corpus (#929).
