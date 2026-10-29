@@ -950,8 +950,14 @@ func builtinAIRules() []*rules.Rule {
 			// FILE path. Bare "read secrets" is excluded — it matches legitimate
 			// local secrets-config loading (temper/nomi dogfood FPs) rather than
 			// exfiltration, which always pairs a read with a send or an SSH/.env path.
-			pattern:     `(?i)(?:(?:exfiltrate|send|upload|leak|transmit|post|forward)\s+(?:the\s+)?(?:contents?\s+of\s+)?(?:~/\.ssh|\.ssh/|id_rsa|\.env\b|/etc/passwd|api[_-]?keys?|secrets?|credentials?|environment\s+variables?|access[_-]?tokens?)|(?:read|cat)\s+(?:the\s+)?(?:contents?\s+of\s+)?(?:~/\.ssh|\.ssh/|id_rsa|\.env\b|/etc/passwd))`,
+			//
+			// The optional leading negation is taken into the match only so that
+			// validate can veto it: "do not forward credentials" is a refusal
+			// (pydantic-ai, #927). It binds to the verb directly after it, so
+			// "do not tell the user; send …" still fires.
+			pattern:     `(?i)(?:(?:\bnot|\bnever|n't|\bwithout)\s+)?(?:(?:exfiltrate|send|upload|leak|transmit|post|forward)\s+(?:the\s+)?(?:contents?\s+of\s+)?(?:~/\.ssh|\.ssh/|id_rsa|\.env\b|/etc/passwd|api[_-]?keys?|secrets?|credentials?|environment\s+variables?|access[_-]?tokens?)|(?:read|cat)\s+(?:the\s+)?(?:contents?\s+of\s+)?(?:~/\.ssh|\.ssh/|id_rsa|\.env\b|/etc/passwd))`,
 			description: "MCP tool metadata stages credential/secret exfiltration (tool poisoning)",
+			validate:    verbIsNotNegated,
 			cwe:         "CWE-77", keywords: []string{"id_rsa", ".ssh", ".env", "exfiltrate", "credentials", "api key", "secrets", "access token"},
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.go", "*.ts", "*.js", "*.py"},
 			tags:         []string{"ai", "mcp", "tool-poisoning", "data-exfiltration", "owasp-mcp03"},
@@ -1356,4 +1362,18 @@ func applyMCPProsePrecision(out []*rules.Rule) {
 // naming a description is the case the rule must stay silent on.
 func mcpRegistrationLacksDescription(matchText string) bool {
 	return !strings.Contains(strings.ToLower(matchText), "description")
+}
+
+// verbIsNotNegated vetoes an MCP-011 match whose verb is negated: the pattern
+// takes a directly preceding "not", "never", "n't" or "without" into the
+// match, and a match that begins with one is a refusal rather than an
+// instruction.
+func verbIsNotNegated(matchText string) bool {
+	lower := strings.ToLower(matchText)
+	for _, neg := range []string{"not", "never", "n't", "without"} {
+		if strings.HasPrefix(lower, neg) && len(lower) > len(neg) && (lower[len(neg)] == ' ' || lower[len(neg)] == '\t' || lower[len(neg)] == '\n') {
+			return false
+		}
+	}
+	return true
 }
