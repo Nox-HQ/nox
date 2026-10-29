@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -251,14 +252,18 @@ func warnIfIndexIsStale(ctx context.Context, client *registry.Client, now time.T
 // retired plugins. The warning is advisory and never blocks: existing installs
 // must keep working.
 func warnIfDeprecated(p *registry.PluginEntry) {
+	printDeprecation(os.Stderr, p)
+}
+
+func printDeprecation(w io.Writer, p *registry.PluginEntry) {
 	if p == nil || !p.Deprecated {
 		return
 	}
 	if p.DeprecationNote != "" {
-		fmt.Fprintf(os.Stderr, "warning: %s is deprecated — %s\n", p.Name, p.DeprecationNote)
+		_, _ = fmt.Fprintf(w, "warning: %s is deprecated — %s\n", p.Name, p.DeprecationNote)
 		return
 	}
-	fmt.Fprintf(os.Stderr, "warning: %s is deprecated and no longer maintained\n", p.Name)
+	_, _ = fmt.Fprintf(w, "warning: %s is deprecated and no longer maintained\n", p.Name)
 }
 
 // runPluginInfo shows detailed information about a plugin.

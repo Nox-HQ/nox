@@ -172,6 +172,24 @@ func (c *Client) Search(ctx context.Context, query string, opts ...SearchOption)
 	return results, nil
 }
 
+// CachedEntry returns the named plugin's entry from the cached indexes, at any
+// age, and never fetches. A scan uses it to describe the plugins it is about to
+// run, which must work under --offline; with nothing cached it reports false.
+func (c *Client) CachedEntry(name string) (PluginEntry, bool) {
+	for _, src := range c.sources {
+		idx, err := c.cache.load(src)
+		if err != nil {
+			continue
+		}
+		for i := range idx.Plugins {
+			if idx.Plugins[i].Name == name {
+				return idx.Plugins[i], true
+			}
+		}
+	}
+	return PluginEntry{}, false
+}
+
 // matchesQuery checks if a plugin matches a text query by name, description,
 // track, or tags.
 func matchesQuery(p *PluginEntry, query string) bool {
