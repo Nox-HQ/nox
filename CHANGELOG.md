@@ -28,6 +28,7 @@ MCP-018 no longer reports the addresses in a deny-list, plugin findings on gitig
 ### Changed
 
 - Rule file patterns are compiled once instead of globbed per file. The rule loop called `filepath.Match` twice per pattern, per rule, per file, which was 6.6% of scan CPU on crewAI (30,263 files, mostly `.mdx`). A literal pattern (`Dockerfile`) and a `*`-suffix pattern (`*.py`) are now decided by equality and suffix tests, exactly as `filepath.Match` decided them; anything else still uses it. Measured on crewAI at 894898f8 in a 4-CPU Linux container: CPU in pattern matching 14.2 s to 1.4 s, total CPU 216 s to 203 s (profiles under equal load); seven interleaved A/B rounds, median 223 s to 211 s. Findings identical, fingerprints included (#736).
+- A file is parsed once for all of its structural absence rules. Each of the 31 rules that decide by parsing CloudFormation, Kubernetes or ARM documents parsed the file itself, about 7.5 times per YAML file on crewAI; the rule engine now keeps the parsed document for the length of one file's scan and every rule reads it. Evaluation only reads the document, and a test holds every structural rule's result with the shared parse to its result with a parse of its own on every YAML and JSON fixture. Measured on crewAI by CPU profile in a 4-CPU Linux container: absence matching 18.4 s to 4.4 s, YAML parsing 18.7 s to 7.0 s, the second profile taken under heavier load; findings identical in twelve interleaved runs (#736).
 
 ## [1.55.3] - 2026-10-29
 

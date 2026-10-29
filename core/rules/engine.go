@@ -82,6 +82,8 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 	// with keywords gets that far.
 	var present []bool
 	var index *keywordIndex
+	// What every rule can share about this file, worked out at most once.
+	var scope fileScope
 	all := e.rules.Rules()
 	for i, rule := range all {
 		if rule.OptIn && !e.optIn[rule.ID] {
@@ -122,7 +124,12 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 			return nil, fmt.Errorf("no matcher registered for type %q (rule %s)", rule.MatcherType, rule.ID)
 		}
 
-		results := matcher.Match(content, rule)
+		var results []MatchResult
+		if sm, ok := matcher.(scopedMatcher); ok {
+			results = sm.matchScoped(&scope, content, rule)
+		} else {
+			results = matcher.Match(content, rule)
+		}
 		for _, mr := range results {
 			if rule.KeywordTokens {
 				if lineStarts == nil {

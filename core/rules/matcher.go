@@ -90,6 +90,31 @@ type Matcher interface {
 	Match(content []byte, rule *Rule) []MatchResult
 }
 
+// fileScope holds what one ScanFile call works out about a file once and every
+// rule then reuses. It lives for that call only, so nothing in it can outlive
+// or be confused with the content it was computed from.
+type fileScope struct {
+	structural *structural.Document
+}
+
+// structuralDoc parses content for the structural rules, once per file: each
+// rule used to parse it again, 7.5 times per file on crewAI's YAML (#736). A
+// nil scope parses every time.
+func (s *fileScope) structuralDoc(content []byte) *structural.Document {
+	if s == nil {
+		return structural.Load(content)
+	}
+	if s.structural == nil {
+		s.structural = structural.Load(content)
+	}
+	return s.structural
+}
+
+// scopedMatcher is a Matcher that can reuse a file's fileScope.
+type scopedMatcher interface {
+	matchScoped(scope *fileScope, content []byte, rule *Rule) []MatchResult
+}
+
 // RegexMatcher implements Matcher using compiled regular expressions. It
 // caches compiled patterns to avoid redundant compilation across calls.
 // regexCache is a mutex-guarded compiled-pattern cache. Both matcher types
@@ -384,13 +409,17 @@ func stripLineComments(content []byte) []byte {
 // (and, when set, contains AbsenceRequire). The returned MatchResult points at
 // the anchor so the finding lands on the resource declaration.
 func (m *AbsenceMatcher) Match(content []byte, rule *Rule) []MatchResult {
+	return m.matchScoped(nil, content, rule)
+}
+
+func (m *AbsenceMatcher) matchScoped(scope *fileScope, content []byte, rule *Rule) []MatchResult {
 	// A rule carrying a structural descriptor asks the document instead of the
 	// text. The verdict is authoritative only when it was DECIDED — the content
 	// parsed and its schema was recognised — because "I could not read this" is
 	// not "there is nothing here", and a scanner that conflates the two turns
 	// every unreadable file into an all-clear. Everything else falls through to
 	// the patterns below, which is exactly today's behaviour.
-	if v, ok := structuralAbsence(content, rule); ok {
+	if v, ok := structuralAbsence(scope, content, rule); ok {
 		return v
 	}
 
@@ -476,7 +505,7 @@ func (m *AbsenceMatcher) Match(content []byte, rule *Rule) []MatchResult {
 // that must all degrade the same way: the rule has no descriptor, the content
 // did not parse, it parsed into a schema this build does not understand, or —
 // for a cross-resource rule — a companion's binding could not be resolved.
-func structuralAbsence(content []byte, rule *Rule) ([]MatchResult, bool) {
+func structuralAbsence(scope *fileScope, content []byte, rule *Rule) ([]MatchResult, bool) {
 	if len(rule.AbsenceResourceTypes) == 0 {
 		return nil, false
 	}
@@ -486,14 +515,14 @@ func structuralAbsence(content []byte, rule *Rule) ([]MatchResult, bool) {
 	case len(rule.AbsenceCompanionTypes) > 0:
 		// Cross-resource: the requirement is another object bound to the
 		// subject, not a property on it.
-		v = structural.EvaluateCompanionWithSubject(content, rule.AbsenceResourceTypes,
+		v = scope.structuralDoc(content).EvaluateCompanionWithSubject(rule.AbsenceResourceTypes,
 			structural.Companion{
 				Types: rule.AbsenceCompanionTypes,
 				Link:  structural.Link(rule.AbsenceCompanionLink),
 				Path:  rule.AbsenceCompanionPath,
 			}, rule.AbsenceSubjectMinInt)
 	case len(rule.AbsencePropertyPath) > 0:
-		v = structural.EvaluateWithSubject(content, rule.AbsenceResourceTypes,
+		v = scope.structuralDoc(content).EvaluateWithSubject(rule.AbsenceResourceTypes,
 			rule.AbsencePropertyPath, rule.AbsenceRequireAll, rule.AbsenceSubjectMinInt)
 	default:
 		return nil, false

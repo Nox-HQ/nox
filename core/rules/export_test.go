@@ -30,3 +30,15 @@ func KeywordsPresent(keywords []string, content []byte) []bool {
 	}
 	return out
 }
+
+// AbsenceMatchShared runs each rule through one AbsenceMatcher sharing one
+// file scope, as ScanFile does, and returns each rule's results in order.
+func AbsenceMatchShared(rules []*Rule, content []byte) [][]MatchResult {
+	m := NewAbsenceMatcher()
+	var scope fileScope
+	out := make([][]MatchResult, len(rules))
+	for i, r := range rules {
+		out[i] = m.matchScoped(&scope, content, r)
+	}
+	return out
+}
