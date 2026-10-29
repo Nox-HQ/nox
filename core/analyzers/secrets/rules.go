@@ -523,7 +523,7 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-048", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
-			pattern:     `oy2[A-Za-z0-9]{43}`,
+			pattern:     `\boy2[A-Za-z0-9]{43}\b`,
 			description: "NuGet API Key detected",
 			cwe:         "CWE-798", keywords: []string{"oy2"},
 			remediation: "Regenerate the API key on nuget.org.",
@@ -585,7 +585,9 @@ func builtinSecretRules() []*rules.Rule {
 		},
 		{
 			id: "SEC-055", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
-			pattern:     `cio[a-zA-Z0-9]{36,}`,
+			// crates.io: "cio" + exactly 32 alphanumerics (crates_io_database
+			// utils/token.rs). `{36,}` matched no real token, only base64 runs.
+			pattern:     `\bcio[a-zA-Z0-9]{32}\b`,
 			description: "Cargo Registry Token detected",
 			cwe:         "CWE-798", keywords: []string{"cio"},
 			remediation: "Revoke the token on crates.io and generate a new one.",
