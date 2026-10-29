@@ -357,6 +357,17 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) (*fileScan, error) 
 				"the phrase is the value of an agent's input, not tool metadata")
 			continue
 		}
+		// MCP-018 reports a metadata endpoint as an SSRF target. An address
+		// that is one entry of a collection of nothing but addresses is the
+		// list a guard refuses, not a target; see isAddressCatalogue.
+		if results[i].RuleID == "MCP-018" && isAddressCatalogue(lang, content, &results[i]) {
+			// Heuristic: the collection's shape is read deterministically, but
+			// that such a collection is a deny-list rather than a probe list
+			// is an inference from how code is written.
+			a.refute(candidate, evidence.KindHeuristic,
+				"the address is one entry of a literal collection of network addresses, the shape of a deny-list rather than a fetch target")
+			continue
+		}
 		// AI-002 (prompt string concatenation of user input) fires on any
 		// interpolated-format-string-plus-user-variable shape, but that shape
 		// is just as common in a parameterised SQL call as in a real prompt.
