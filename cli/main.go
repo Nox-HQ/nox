@@ -606,8 +606,15 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	// the project opts in (default) and the operator hasn't passed
 	// --no-auto-install. Failures are non-fatal — the scan still runs.
 	if !noAutoInstallFlg && cfg.Plugins.AutoInstallEnabled() && len(cfg.Plugins.Required) > 0 {
-		if rc := autoInstallProjectPlugins(target, &cfg.Plugins, quiet); rc != 0 && verbose {
+		if rc := autoInstallProjectPlugins(target, &cfg.Plugins, quiet, offlineFlag); rc != 0 && verbose {
 			fmt.Fprintf(os.Stderr, "[warn] auto-install returned %d; some plugins may be missing\n", rc)
+		}
+	}
+	// A retired plugin still runs if it is installed, so name it whether or
+	// not auto-install did anything.
+	if !quiet && len(cfg.Plugins.Required) > 0 {
+		if st, err := LoadState(DefaultStatePath()); err == nil {
+			warnDeprecatedRequired(os.Stderr, cfg.Plugins.Required, st)
 		}
 	}
 

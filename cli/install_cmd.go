@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -103,12 +104,26 @@ func runInstall(args []string) int {
 // silently install the project's required plugins before the scan
 // runs. Tolerates partial failure — the scan should still proceed in
 // e.g. offline environments where a plugin can't be fetched.
-func autoInstallProjectPlugins(root string, pcfg *nox.PluginsConfig, quiet bool) int {
+//
+// Only a requirement the installed state does not satisfy is installed, and
+// under --offline nothing is: the plugins still missing are named and the
+// scan runs without them.
+func autoInstallProjectPlugins(root string, pcfg *nox.PluginsConfig, quiet, offline bool) int {
 	_ = root
 	statePath := DefaultStatePath()
 	st, err := LoadState(statePath)
 	if err != nil {
 		return 2
+	}
+
+	missing := unsatisfiedRequired(pcfg.Required, st)
+	if len(missing) == 0 {
+		return 0
+	}
+	if offline {
+		fmt.Fprintf(os.Stderr, "[plugins] --offline: not installing %d required plugin(s), which will not run: %s\n",
+			len(missing), strings.Join(missing, ", "))
+		return 1
 	}
 
 	for _, r := range pcfg.Registries {
@@ -128,29 +143,12 @@ func autoInstallProjectPlugins(root string, pcfg *nox.PluginsConfig, quiet bool)
 		}
 	}
 
-	// Skip network entirely when nothing's missing.
-	missing := 0
-	for _, spec := range pcfg.Required {
-		name, constraint := parseNameVersion(spec)
-		ip := st.FindPlugin(name)
-		if ip == nil {
-			missing++
-			continue
-		}
-		if constraint != "*" && ip.Version != constraint {
-			missing++
-		}
-	}
-	if missing == 0 {
-		return 0
-	}
-
 	if !quiet {
-		fmt.Printf("[plugins] auto-installing %d required plugin(s) from .nox.yaml\n", missing)
+		fmt.Printf("[plugins] auto-installing %d required plugin(s) from .nox.yaml\n", len(missing))
 	}
 
 	failed := 0
-	for _, spec := range pcfg.Required {
+	for _, spec := range missing {
 		name, constraint := parseNameVersion(spec)
 		if err := installOne(name, constraint, st); err != nil {
 			fmt.Fprintf(os.Stderr, "[plugins] %s: %v\n", name, err)
@@ -165,6 +163,51 @@ func autoInstallProjectPlugins(root string, pcfg *nox.PluginsConfig, quiet bool)
 		return 1
 	}
 	return 0
+}
+
+// unsatisfiedRequired returns the plugins.required specs the installed state
+// does not satisfy, in order. The installed version is matched against the
+// constraint; it used to be compared to it as a string, so `^0.7.0` never
+// equalled `0.7.3` and every scan resolved every requirement against the
+// registry again (#936). A constraint that does not parse is satisfied only by
+// that exact version, as before.
+func unsatisfiedRequired(required []string, st *State) []string {
+	var missing []string
+	for _, spec := range required {
+		name, constraint := parseNameVersion(spec)
+		ip := st.FindPlugin(name)
+		if ip == nil || !versionSatisfies(ip.Version, constraint) {
+			missing = append(missing, spec)
+		}
+	}
+	return missing
+}
+
+func versionSatisfies(installed, constraint string) bool {
+	if constraint == "*" || installed == constraint {
+		return true
+	}
+	con, err := registry.ParseConstraint(constraint)
+	if err != nil {
+		return false
+	}
+	v, err := registry.ParseVersion(installed)
+	return err == nil && con.Match(v)
+}
+
+// warnDeprecatedRequired names each required plugin the registry has retired.
+// It reads only the cached index, so it holds under --offline and costs a scan
+// nothing; with no cache it says nothing. It runs on every scan because the
+// projects that need it most installed the plugin before it was retired and
+// never see `nox plugin install` again (#936).
+func warnDeprecatedRequired(w io.Writer, required []string, st *State) {
+	c := newRegistryClient(st)
+	for _, spec := range required {
+		name, _ := parseNameVersion(spec)
+		if p, ok := c.CachedEntry(name); ok {
+			printDeprecation(w, &p)
+		}
+	}
 }
 
 // installOne resolves and installs a single plugin into the given

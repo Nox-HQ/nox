@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `nox scan --offline` no longer contacts the plugin registry. Scan-time auto-install compared a required plugin's installed version with its constraint as a string, so `nox/taint-analysis@^0.7.0` never matched an installed 0.7.3 and every scan resolved every required plugin again, refreshing the registry index whenever the one-hour cache had expired, `--offline` included. The installed version is now matched against the constraint, only the requirements it does not satisfy are installed, and under `--offline` nothing is: the missing plugins are named and the scan runs without them. Measured on tokenops with a stale index: 1.55.4 re-fetched it under `--offline`; this build does not (#936).
+- A required plugin the registry has retired is now named on every scan, from the cached index and without a request. `nox plugin install` warned, but the projects still running a retired plugin installed it before it was retired and never run that command again. tokenops requires `nox/taint-analysis`, retired since 1.33.0 because core supersedes it, and its findings change between identical scans because it walks Go maps: three runs on one tree gave 3, 5 and 3 TAINT findings, all on one file that core's taint engine reports nothing on. The scan now says so, with the registry's note to remove it (#936).
+
 ## [1.55.4] - 2026-10-29
 
 MCP-018 no longer reports the addresses in a deny-list, plugin findings on gitignored paths are dropped, and rule file patterns are compiled once (about 6% less scan CPU on a large repository). Dogfooded on nox and NOX Intelligence (online, answered by NOX Intelligence): NOX Intelligence identical to 1.55.3; on nox the only change is MCP-018 2 to 0, both entries of nox's own metadata-hostname deny-list.
