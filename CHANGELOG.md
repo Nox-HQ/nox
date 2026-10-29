@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- MCP-018 (cloud metadata endpoint) no longer reports an address in a deny-list. pydantic-ai's SSRF guard lists the metadata addresses it blocks, and nothing near the entries says "block" in code (the set is `_CLOUD_METADATA_IPV4`; the word is in a comment, which the rule does not read), so all three entries were reported as SSRF targets. A metadata address that is one entry of a literal collection holding nothing but addresses (IPs, CIDRs, metadata hostnames), or of a map-as-set of them (`"169.254.169.254": true`), is now refuted. A URL, an assignment, a single-entry list, a call argument, a collection mixing in anything else, and an address keyed to a value all still fire. Measured on pydantic-ai's `_ssrf.py` at 9ac853b: 3 to 0. No rule-level change across the 26-repository rule-diff corpus (#929).
+
 ## [1.55.3] - 2026-10-29
 
 Precision fixes from the pydantic-ai scan of the week: SEC-055 can find a real crates.io token again, base64 images in YAML cassettes no longer fire vendor rules, MCP-011 no longer reports a refusal, and VARIANT-002 resolves a same-file safe loader. Dogfooded on nox and NOX Intelligence (online, answered by NOX Intelligence): findings identical to 1.55.2.
