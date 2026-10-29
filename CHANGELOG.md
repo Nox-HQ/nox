@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.5] - 2026-10-29
+
+`--offline` no longer contacts the plugin registry, a retired required plugin is named on every scan, and absence rules cost a fraction of what they did (crewAI scan CPU down 13%). Dogfooded on nox and NOX Intelligence (online, answered by NOX Intelligence): findings identical to 1.55.4, fingerprints included.
+
 ### Changed
 
 - Absence rules find their anchors through the literal-prefix plan regex rules already use. An anchor such as `(?i)containers\s*:` or `(?i)Microsoft\.Web/sites` was found with a full regex scan of every file the rule applies to, and under `(?i)` Go's regexp has no literal to skip ahead with; on crewAI that scan ran over 24 MB of YAML cassettes holding no anchor. It is now tried only where the anchor's literal occurs, falling back to the full scan where that is not exact (a Kelvin sign or long s in the file) or not cheaper. The equivalence test that holds the plan to `FindAll` for every regex rule now covers every absence anchor too. Measured on crewAI at 894898f8 in a 4-CPU Linux container, five interleaved A/B rounds: median CPU 284 s to 246 s (-13%), every round faster; findings identical, fingerprints included (#736).
