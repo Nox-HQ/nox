@@ -1025,11 +1025,13 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}
 		if out != nil {
 			kept, dropped := filterPluginFindingsByScope(out.Findings, target, cfg.Scan.Exclude, cfg.Scan.Include)
+			kept, ignored := dropGitignoredPluginFindings(kept, target, opts)
+			dropped += ignored
 			for i := range kept {
 				allFindings.Add(kept[i])
 			}
 			if dropped > 0 {
-				slog.DebugContext(ctx, "plugin findings dropped by scan.exclude",
+				slog.DebugContext(ctx, "plugin findings dropped by scan.exclude, scan.include or .gitignore",
 					"dropped", dropped, "kept", len(kept))
 			}
 			pluginEnrichments = out.Enrichments
@@ -1436,18 +1438,7 @@ func walkArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]discover
 	// ScanOptions.OutputDir.
 	walker.ExcludePatterns = append(walker.ExcludePatterns, outputArtifactPatterns(target, opts.OutputDir)...)
 	walker.IncludePatterns = cfg.Scan.Include
-	if opts.NoRespectGitignore {
-		walker.RespectGitignore = false
-	} else if tracked, err := git.TrackedFiles(target); err == nil {
-		// git never ignores a tracked file, so a source committed into an
-		// otherwise-ignored directory (e.g. `mobile/` in .gitignore) must still
-		// be scanned. Best-effort: outside a git repo this errors and the walker
-		// applies ignore rules as before.
-		walker.TrackedPaths = make(map[string]bool, len(tracked))
-		for _, f := range tracked {
-			walker.TrackedPaths[f] = true
-		}
-	}
+	applyGitignore(walker, target, opts)
 
 	// --tracked-only: restrict the walk to git-tracked files by seeding the
 	// allow-list with `git ls-files`. Untracked working-tree files and
@@ -1492,6 +1483,48 @@ func walkArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]discover
 	}
 
 	return filterArtifactsByType(artifacts, excludeArtifactTypes(cfg)), nil
+}
+
+// applyGitignore sets the walker's .gitignore handling for a scan of target.
+// The core walk and the plugin-finding filter both take it from here, so a
+// path is ignored or not by one decision whichever analyzer reports it.
+func applyGitignore(walker *discovery.Walker, target string, opts ScanOptions) {
+	if opts.NoRespectGitignore {
+		walker.RespectGitignore = false
+	} else if tracked, err := git.TrackedFiles(target); err == nil {
+		// git never ignores a tracked file, so a source committed into an
+		// otherwise-ignored directory (e.g. `mobile/` in .gitignore) must still
+		// be scanned. Best-effort: outside a git repo this errors and the walker
+		// applies ignore rules as before.
+		walker.TrackedPaths = make(map[string]bool, len(tracked))
+		for _, f := range tracked {
+			walker.TrackedPaths[f] = true
+		}
+	}
+}
+
+// dropGitignoredPluginFindings removes plugin findings on paths the core walk
+// skips under .gitignore. A plugin walks the workspace itself, so without this
+// a gitignored directory came back through it: on tokenops, 475 findings from
+// an agent worktree under .claude/ (#830). Paths are root-relative here, as
+// filterPluginFindingsByScope leaves them; a repository-scoped finding (empty
+// path) or one outside the root is kept.
+func dropGitignoredPluginFindings(in []findings.Finding, target string, opts ScanOptions) (kept []findings.Finding, dropped int) {
+	if len(in) == 0 || opts.NoRespectGitignore {
+		return in, 0
+	}
+	walker := discovery.NewWalker(ConfigRoot(target))
+	applyGitignore(walker, target, opts)
+	kept = make([]findings.Finding, 0, len(in))
+	for i := range in {
+		p := in[i].Location.FilePath
+		if p != "" && !filepath.IsAbs(p) && !strings.HasPrefix(p, "../") && walker.Ignores(p) {
+			dropped++
+			continue
+		}
+		kept = append(kept, in[i])
+	}
+	return kept, dropped
 }
 
 // excludeArtifactTypes flattens the configured artifact-type exclusions.
