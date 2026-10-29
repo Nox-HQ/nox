@@ -226,6 +226,12 @@ type Rule struct {
 	AbsenceCompanionTypes []string `yaml:"absence_companion_types"`
 	AbsenceCompanionLink  string   `yaml:"absence_companion_link"`
 	AbsenceCompanionPath  string   `yaml:"absence_companion_path"`
+
+	// filePatterns and ignorePatterns cache FilePatterns and
+	// IgnoreFilePatterns compiled, populated by RuleSet.Add. fileMatchesRule
+	// recompiles when they no longer match the fields, so a Rule built
+	// directly or edited after Add decides the same way.
+	filePatterns, ignorePatterns []filePattern
 }
 
 // RuleSet is an ordered collection of rules with fast lookup by ID and tag.
@@ -258,6 +264,8 @@ func (rs *RuleSet) Add(r *Rule) {
 	// rules, and it runs before any scan starts — so this is computed once and
 	// only ever read concurrently, never written during a scan.
 	r.keywordsLower = loweredKeywords(r.Keywords)
+	r.filePatterns = compileFilePatterns(r.FilePatterns)
+	r.ignorePatterns = compileFilePatterns(r.IgnoreFilePatterns)
 
 	idx := len(rs.rules)
 	rs.rules = append(rs.rules, r)

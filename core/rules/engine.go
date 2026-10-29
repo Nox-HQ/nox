@@ -496,11 +496,8 @@ func loweredKeywords(keywords []string) [][]byte {
 func fileMatchesRule(path string, rule *Rule) bool {
 	base := filepath.Base(path)
 
-	for _, pattern := range rule.IgnoreFilePatterns {
-		if matched, _ := filepath.Match(pattern, path); matched {
-			return false
-		}
-		if matched, _ := filepath.Match(pattern, base); matched {
+	for _, p := range compiledFor(rule.ignorePatterns, rule.IgnoreFilePatterns) {
+		if p.matches(path, base) {
 			return false
 		}
 	}
@@ -508,11 +505,8 @@ func fileMatchesRule(path string, rule *Rule) bool {
 	if len(rule.FilePatterns) == 0 {
 		return true
 	}
-	for _, pattern := range rule.FilePatterns {
-		if matched, _ := filepath.Match(pattern, path); matched {
-			return true
-		}
-		if matched, _ := filepath.Match(pattern, base); matched {
+	for _, p := range compiledFor(rule.filePatterns, rule.FilePatterns) {
+		if p.matches(path, base) {
 			return true
 		}
 	}
