@@ -15,7 +15,7 @@
     "written against: if it does not match the tag rule-diff resolved, the ledger",
     "is stale as a whole and says so rather than silently passing."
   ],
-  "nox_release": "v1.55.2",
+  "nox_release": "v1.55.3",
   "classifications": {
     "duplicate-retired": "a second rule reported the same condition; one ID was retired into the other, which carries the alias",
     "applicability-narrowed": "the rule does not apply to this subject or resource kind, and now says so",
@@ -29,12 +29,5 @@
     "value-shape-required": "the value must now have the identifier's documented shape (case, digits, a boundary after it); a word or code expression assigned to the key is not the identifier",
     "duplicate-merged": "the vulnerability source reported one vulnerability under two identifiers (nox_same_as, e.g. a Go module advisory and its GitHub advisory); they are now one finding that keeps every id in aliases"
   },
-  "entries": [
-    {
-      "rule": "SEC-055",
-      "classification": "format-bound",
-      "pr": 931,
-      "reason": "crates.io issues cio + exactly 32 alphanumerics (TOKEN_PREFIX and TOKEN_LENGTH in crates_io_database/src/utils/token.rs); the rule required 36+ after the prefix, so it matched no real token. It is now \\bcio[a-zA-Z0-9]{32}\\b. Both corpus drops were read, in crewai-cassettes: TestCrewMultimodalFileUpload.test_pdf_upload_anthropic.yaml:3 sits inside a 1,293,062-character base64 PDF upload, and telemetry/test_end_crew_receives_valid_execution_span.yaml:512 inside base64 protobuf telemetry (VGFzayBDcmVhdGVk right after it decodes to 'Task Created'). In both the alphanumeric run starts before 'cio' and continues past 35 characters, so neither is a token. A real-format token in release.env, missed by 1.55.2, is now reported."
-    }
-  ]
+  "entries": []
 }

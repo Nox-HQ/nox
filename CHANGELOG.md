@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.3] - 2026-10-29
+
+Precision fixes from the pydantic-ai scan of the week: SEC-055 can find a real crates.io token again, base64 images in YAML cassettes no longer fire vendor rules, MCP-011 no longer reports a refusal, and VARIANT-002 resolves a same-file safe loader. Dogfooded on nox and NOX Intelligence (online, answered by NOX Intelligence): findings identical to 1.55.2.
+
 ### Fixed
 
 - SEC-055 (crates.io token) can now find a crates.io token. crates.io issues `cio` plus exactly 32 alphanumerics; the rule required 36 or more after the prefix, so it matched no real token and fired only on `cio` inside base64. It is now `\bcio[a-zA-Z0-9]{32}\b`. SEC-048 (NuGet) gains the same word boundaries, so it no longer matches a 46-character window inside a longer run (#930).
