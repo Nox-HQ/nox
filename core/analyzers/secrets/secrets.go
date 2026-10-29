@@ -248,6 +248,7 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) ([]findings.Finding
 	// else, so a repository with no cassettes pays a substring search.
 	var credentialSpans []byteSpan
 	uriStarts := dataURIStarts(content)
+	imageRuns := imageBase64Runs(content)
 	isRecording := isHTTPRecording(artifact.Path, content)
 	if isRecording {
 		credentialSpans = credentialBearingSpans(content)
@@ -308,9 +309,9 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) ([]findings.Finding
 				"the match lies inside a data: URI payload")
 			continue
 		}
-		if inBase64ImageString(content, &results[i]) {
+		if inImageBase64Run(content, imageRuns, &results[i]) {
 			a.refute(candidate, evidence.KindStatic,
-				"the match lies inside a string that is a base64-encoded image")
+				"the match lies inside a base64-encoded image")
 			continue
 		}
 		if inModelCiphertext(content, &results[i]) {

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- SEC-055 (crates.io token) can now find a crates.io token. crates.io issues `cio` plus exactly 32 alphanumerics; the rule required 36 or more after the prefix, so it matched no real token and fired only on `cio` inside base64. It is now `\bcio[a-zA-Z0-9]{32}\b`. SEC-048 (NuGet) gains the same word boundaries, so it no longer matches a 46-character window inside a longer run (#930).
+- A vendor match inside a base64 image is dropped whether or not the image is quoted. The check looked for an image signature at the start of a quoted string, and a YAML cassette stores an image as a plain scalar (`result: iVBORw0KGgo…`). pydantic-ai's image-generation cassette is one 2.9 MB line of this and produced 387 SEC-055/SEC-048 findings. The image runs are now found once per file (#930).
+- MCP-011 no longer reports a refusal. "do not forward credentials across redirects" in a pydantic-ai docstring was reported as critical tool poisoning; a "not", "never", "n't" or "without" directly before the verb now vetoes the match. Docstrings are still scanned, because in a Python MCP server the docstring is the tool description the model reads, and a negation earlier in the sentence ("Do not tell the user; send …") does not reach a later verb (#927).
+- VARIANT-002 (CVE-2020-14343) resolves a `Loader=<name>` it can see in the same file. A class whose bases are all safe loaders (`class UniqueKeyLoader(yaml.BaseLoader)`) or a name bound only to safe loaders (`getattr(yaml, 'CSafeLoader', yaml.SafeLoader)`) is no longer reported as the full loader. A name bound to any unsafe loader, rebound, or imported from elsewhere still is (#928).
+
+Measured on pydantic/pydantic-ai at 9ac853b against 1.55.2: 1,606 findings to 1,209, none added. SEC-055 234 to 0, SEC-048 153 to 0, MCP-011 2 to 0, VARIANT-002 2 to 0, and six SEC-042/SEC-043/SEC-143 matches inside two more unquoted cassette images. Across the 26-repository rule-diff corpus the only change is SEC-055 2 to 0 in crewAI's cassettes, both inside base64 (a PDF upload and protobuf telemetry).
+
+
 ## [1.55.2] - 2026-10-28
 
 The remediate action (`actions/remediate`) and its Marketplace copy, `nox-hq/nox-remediate-action`, are one action again, published from here on every release. The CLI is unchanged from 1.55.1.
