@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.7] - 2026-10-30
+
+Scans cost about 8% less CPU: on crewAI, median user CPU fell from 105 s to 97 s against 1.55.6 (4 interleaved rounds in a 4-CPU Linux container on a busy host, 3 of 4 rounds lower), with findings, fingerprints and the AI inventory identical in every run. The literal-prefix plan searches case-insensitive literals from their rarest byte, rules scanning one file share their literal searches, and every plan's literals are found in one pass per file. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.6, fingerprints included.
+
 ### Changed
 
 - Every plan's literals are found in one pass per file. Even shared across rules, the literal searches read the file once per literal -- 1,255,315 searches over crewAI, 5.7 s of the engine's 33 s. A `literalIndex`, built once per rule set the way the keyword index is, files each literal of three or more bytes under a hash of its first three bytes, lower-cased, and one pass over the file compares only the literals whose hash it meets: 2.0 s for every occurrence of all 1,332 literals. It returns what the per-literal search returns -- every occurrence, overlapping ones included, in order -- held to it by a seeded test (with literals flush against either end of the file) and a fuzz target, and the equivalence test now runs every crewAI file through the index. On crewAI in a 4-CPU Linux container, four interleaved rounds on a quiet host: user CPU 1.5-3.7% lower in every round (median 99.5 s to 96.7 s); findings, fingerprints and the AI inventory identical (#736).
