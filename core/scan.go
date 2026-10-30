@@ -28,6 +28,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/fileperms"
+	"github.com/nox-hq/nox/core/analyzers/flowunits"
 	"github.com/nox-hq/nox/core/analyzers/hardening"
 	"github.com/nox-hq/nox/core/analyzers/iac"
 	"github.com/nox-hq/nox/core/analyzers/memsafe"
@@ -56,6 +57,7 @@ import (
 	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/suppress"
+	"github.com/nox-hq/nox/core/taint"
 	taintengine "github.com/nox-hq/nox/core/taint/engine"
 	"github.com/nox-hq/nox/core/vex"
 )
@@ -742,6 +744,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// Each analyzer is wrapped as a uniform task so sequential and parallel
 	// execution share one code path. The ai/deps tasks also capture their
 	// inventories into the shared collectors.
+	// Both flow analyzers read the same files' taint units, and extracting
+	// them is most of what either costs, so a scan running both extracts once.
+	flowsTogether := opts.Scopes.RunsAnalyzer("taintflow") && opts.Scopes.RunsAnalyzer("agentflow")
 	all := []struct {
 		analyzer string
 		run      analyzerTask
@@ -841,6 +846,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			return nil
 		}},
 		{"taintflow", func(c context.Context) error {
+			if flowsTogether {
+				return scanFlowsTogether(c, artifacts, taintflowAnalyzer, agentflowAnalyzer, addFindings)
+			}
 			fs, err := taintflowAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
@@ -849,6 +857,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			return nil
 		}},
 		{"agentflow", func(c context.Context) error {
+			if flowsTogether {
+				return nil // the taintflow task ran it
+			}
 			fs, err := agentflowAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
@@ -1783,6 +1794,23 @@ func policyBudget(in map[string]int) map[findings.Severity]int {
 // each analyzer as a uniform task lets sequential and parallel execution share
 // a single runner.
 type analyzerTask func(context.Context) error
+
+// scanFlowsTogether runs taintflow and agentflow over one walk of the source
+// files (see flowunits), each into its own FindingSet, so the findings are
+// what each would report on its own.
+func scanFlowsTogether(ctx context.Context, artifacts []discovery.Artifact, tf *taintflow.Analyzer, af *agentflow.Analyzer, addFindings func(*findings.FindingSet)) error {
+	taintFS, agentFS := findings.NewFindingSet(), findings.NewFindingSet()
+	err := flowunits.Walk(ctx, artifacts, func(path string, units []taint.Unit) {
+		tf.ScanUnits(taintFS, path, units)
+		af.ScanUnits(agentFS, units)
+	})
+	if err != nil {
+		return err
+	}
+	addFindings(taintFS)
+	addFindings(agentFS)
+	return nil
+}
 
 // runAnalyzerTasks executes tasks sequentially (deterministic, for debugging)
 // or in parallel via errgroup, returning the first error and canceling
