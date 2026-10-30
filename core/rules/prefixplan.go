@@ -670,8 +670,12 @@ func (p *prefixPlan) usableIn(lits *fileLiterals, content []byte) bool {
 // is valid UTF-8. Rules share literals -- `(?i)apiversion:` leads 37 IaC
 // rules, and 689 of crewAI's 1,770 literal searches per file repeat one
 // another's -- so each is searched once per file rather than once per rule
-// (#736). A nil *fileLiterals computes every answer afresh.
+// (#736). With an index, the literals it holds are found together, in one
+// pass over the file (see literalindex.go). A nil *fileLiterals computes every
+// answer afresh.
 type fileLiterals struct {
+	index       *literalIndex
+	indexed     [][]int // index.occurrences, once some plan has asked
 	occurrences map[literalPrefix][]int
 	outlier     tristate
 	valid       tristate
@@ -688,6 +692,12 @@ const (
 func (l *fileLiterals) indexAll(content []byte, lp literalPrefix) []int {
 	if l == nil {
 		return indexAll(content, lp)
+	}
+	if n, ok := l.index.lookup(lp); ok {
+		if l.indexed == nil {
+			l.indexed = l.index.occurrences(content)
+		}
+		return l.indexed[n]
 	}
 	if at, ok := l.occurrences[lp]; ok {
 		return at

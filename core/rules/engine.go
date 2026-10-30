@@ -22,6 +22,20 @@ type Engine struct {
 	// (see keywordindex.go). Built on first use, and again if rules were
 	// added since.
 	keywords atomic.Pointer[keywordIndex]
+	// literals finds every plan's literals in one pass per file (see
+	// literalindex.go), built like keywords.
+	literals atomic.Pointer[literalIndex]
+}
+
+// literalIndex returns the index for rules, building it when the rule set has
+// grown since the last build.
+func (e *Engine) literalIndex(rules []*Rule) *literalIndex {
+	if x := e.literals.Load(); x != nil && x.rules == len(rules) {
+		return x
+	}
+	x := newLiteralIndex(rules)
+	e.literals.Store(x)
+	return x
 }
 
 // keywordIndex returns the index for rules, building it when the rule set has
@@ -85,6 +99,7 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 	// What every rule can share about this file, worked out at most once.
 	var scope fileScope
 	all := e.rules.Rules()
+	scope.literals.index = e.literalIndex(all)
 	for i, rule := range all {
 		if rule.OptIn && !e.optIn[rule.ID] {
 			continue
