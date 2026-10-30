@@ -19,19 +19,16 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"os"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/nox-hq/nox-core/evidence"
+	"github.com/nox-hq/nox/core/analyzers/flowunits"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
-	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/reasoning"
 	"github.com/nox-hq/nox/core/rules"
-	"github.com/nox-hq/nox/core/source"
 	"github.com/nox-hq/nox/core/taint"
 	"github.com/nox-hq/nox/core/taint/engine"
 )
@@ -207,45 +204,19 @@ func cweNumber(cwe string) string {
 // the engine sorts flows, so the FindingSet's contents are reproducible.
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
 	fs := findings.NewFindingSet()
-
-	// Process in a stable path order so output never depends on discovery order.
-	ordered := make([]discovery.Artifact, len(artifacts))
-	copy(ordered, artifacts)
-	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Path < ordered[j].Path })
-
-	for i := range ordered {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		art := ordered[i]
-		if art.Type != discovery.Source {
-			continue
-		}
-		lang := lexctx.LangFromPath(art.Path)
-		if lang == lexctx.LangUnknown {
-			continue // unsupported language: skip (LangFromPath gates the set)
-		}
-		content, err := os.ReadFile(art.AbsPath)
-		if err != nil {
-			continue
-		}
-		// A generated or minified file (a bundle, a vendored dist build) is
-		// not code this repository wrote, and the line recognizer reads a
-		// minified line as one enormous statement. The banner must lead the
-		// file: a hand-written tool that emits it as data is not generated.
-		if source.IsGeneratedHeader(content) {
-			continue
-		}
-		a.scanFile(fs, art.Path, lang, content)
+	err := flowunits.Walk(ctx, artifacts, func(path string, units []taint.Unit) {
+		a.ScanUnits(fs, path, units)
+	})
+	if err != nil {
+		return nil, err
 	}
 	return fs, nil
 }
 
-// scanFile extracts units from one file and emits a finding per un-sanitized
-// flow, deduplicated per (rule, line) so a repeated sink call in one statement
-// does not double-report.
-func (a *Analyzer) scanFile(fs *findings.FindingSet, path string, lang lexctx.Lang, content []byte) {
-	units := engine.ExtractUnits(path, lang, content)
+// ScanUnits emits a finding per un-sanitized flow in one file's units (from
+// flowunits.Walk), as the engine deduplicates them, so a repeated sink call in
+// one statement does not double-report.
+func (a *Analyzer) ScanUnits(fs *findings.FindingSet, path string, units []taint.Unit) {
 	// AnalyzeFile runs the whole file at once so it can join a source in one
 	// function to a sink reached through a locally-defined helper (SAME-FILE
 	// interprocedural flow via function summaries), in addition to the
