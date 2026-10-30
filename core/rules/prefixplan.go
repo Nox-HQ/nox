@@ -6,6 +6,7 @@ import (
 	"regexp/syntax"
 	"sort"
 	"sync"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -49,7 +50,9 @@ import (
 // A second shape is the vendor-token template, `(?i)[\w.-]{0,50}?(?:okta)…`:
 // a bounded run of one character class, then a literal. A match starts
 // somewhere in the run of class characters before an occurrence of the
-// literal, so it is found from the literal too (see leadRun).
+// literal, so it is found from the literal too (see leadRun). An optional
+// character is a run of at most one (MCP-016's `(?i)"?(?:forward|…)`), and a
+// run of word characters may follow `\b` (SEC-469's `\b[A-Z0-9_]*(?:TOKEN|…)`).
 //
 // A third shape opens with a character class: DATA-003's card numbers,
 // `\b(?:4[0-9]{12}…|5[1-5][0-9]{14}…)\b`, DATA-002's SSNs. Nothing literal is
@@ -105,6 +108,12 @@ type prefixPlan struct {
 type leadRun struct {
 	runs     []classRun // in pattern order
 	anchored *regexp.Regexp
+	// boundary: the pattern opens with `\b` before its runs, which are all
+	// word characters, as is every literal's first byte. Then a start inside
+	// the run has a word character on both sides, so the furthest start is
+	// the only one `\b` can hold at, and the anchored match, which cannot see
+	// the byte before it, has it checked here.
+	boundary bool
 }
 
 type classRun struct {
@@ -197,21 +206,35 @@ func buildLeadPlan(pattern string) *prefixPlan {
 	if re.Op != syntax.OpConcat || len(re.Sub) < 2 {
 		return nil
 	}
+	subs := re.Sub
+	boundary := subs[0].Op == syntax.OpWordBoundary
+	if boundary {
+		subs = subs[1:]
+	}
 	var runs []classRun
-	for len(runs) < 2 && len(runs) < len(re.Sub)-1 {
-		run := re.Sub[len(runs)]
-		if run.Op != syntax.OpRepeat || run.Min != 0 || run.Sub[0].Op != syntax.OpCharClass {
+	for len(runs) < 2 && len(runs) < len(subs)-1 {
+		run, ok := runOf(subs[len(runs)])
+		if !ok {
 			break
 		}
-		if len(runs) > 0 && !classWithin(runs[0].class, run.Sub[0].Rune) {
+		if len(runs) > 0 && !classWithin(runs[0].class, run.class) {
 			return nil
 		}
-		runs = append(runs, classRun{class: run.Sub[0].Rune, max: run.Max})
+		runs = append(runs, run)
 	}
 	if len(runs) == 0 {
 		return nil
 	}
-	rest := &syntax.Regexp{Op: syntax.OpConcat, Flags: re.Flags, Sub: re.Sub[len(runs):]}
+	if boundary {
+		// `\b` holds at the furthest start only if every byte the walk passes
+		// over is a word character (see leadRun.boundary).
+		for _, run := range runs {
+			if !classWithin(run.class, wordClass) {
+				return nil
+			}
+		}
+	}
+	rest := &syntax.Regexp{Op: syntax.OpConcat, Flags: re.Flags, Sub: subs[len(runs):]}
 	if len(rest.Sub) == 1 {
 		rest = rest.Sub[0]
 	}
@@ -222,6 +245,13 @@ func buildLeadPlan(pattern string) *prefixPlan {
 	if p == nil || p.leadBoundary || p.lead != nil || p.first != nil {
 		return nil
 	}
+	if boundary {
+		for _, lp := range p.prefixes {
+			if !isWordByte(lp.text[0]) {
+				return nil
+			}
+		}
+	}
 	anchored, err := regexp.Compile(`^(?:` + pattern + `)`)
 	if err != nil {
 		return nil
@@ -230,8 +260,36 @@ func buildLeadPlan(pattern string) *prefixPlan {
 		prefixes: p.prefixes,
 		anchored: p.anchored,
 		maxLen:   maxBytes(re),
-		lead:     &leadRun{runs: runs, anchored: anchored},
+		lead:     &leadRun{runs: runs, anchored: anchored, boundary: boundary},
 	}
+}
+
+// wordClass is `\w` as parsed ranges.
+var wordClass = []rune{'0', '9', 'A', 'Z', '_', '_', 'a', 'z'}
+
+// runOf reports an element that is a run of one character class with no
+// minimum: `C{0,n}`, `C*`, or `C?` (a run of at most one). C is a class or a
+// single character that has no other case, so MCP-016's `"?` is a run too.
+func runOf(re *syntax.Regexp) (classRun, bool) {
+	limit := 0
+	switch {
+	case re.Op == syntax.OpRepeat && re.Min == 0:
+		limit = re.Max
+	case re.Op == syntax.OpStar:
+		limit = -1
+	case re.Op == syntax.OpQuest:
+		limit = 1
+	default:
+		return classRun{}, false
+	}
+	sub := re.Sub[0]
+	switch {
+	case sub.Op == syntax.OpCharClass:
+		return classRun{class: sub.Rune, max: limit}, true
+	case sub.Op == syntax.OpLiteral && len(sub.Rune) == 1 && unicode.SimpleFold(sub.Rune[0]) == sub.Rune[0]:
+		return classRun{class: []rune{sub.Rune[0], sub.Rune[0]}, max: limit}, true
+	}
+	return classRun{}, false
 }
 
 // maxFirstBytes bounds how many distinct bytes may start a match for the
@@ -420,7 +478,18 @@ func leadingLiterals(re *syntax.Regexp) ([]literalPrefix, bool) {
 		if c, ok := casePair(re.Rune); ok {
 			return []literalPrefix{{text: string(c), fold: true}}, true
 		}
-		return nil, false
+		// A few ASCII characters, `["']` in AI-002's `f["']`, are one literal
+		// each: after a literal they extend it into as many alternatives.
+		var out []literalPrefix
+		for i := 0; i+1 < len(re.Rune); i += 2 {
+			for r := re.Rune[i]; r <= re.Rune[i+1]; r++ {
+				if r >= utf8.RuneSelf || len(out) == maxClassLiterals {
+					return nil, false
+				}
+				out = append(out, literalPrefix{text: string(r)})
+			}
+		}
+		return out, len(out) > 0
 	case syntax.OpCapture:
 		return leadingLiterals(re.Sub[0])
 	case syntax.OpConcat:
@@ -463,6 +532,10 @@ func leadingLiterals(re *syntax.Regexp) ([]literalPrefix, bool) {
 	}
 	return nil, false
 }
+
+// maxClassLiterals bounds the characters a class may have to be taken as
+// that many literals.
+const maxClassLiterals = 4
 
 // maxBytes bounds the bytes a match of re can span, or -1 when it cannot be
 // bounded.
@@ -729,6 +802,9 @@ func (l *leadRun) findAll(rest *prefixPlan, content []byte, starts []int, submat
 			continue
 		}
 		s := l.runStart(content, t, resume)
+		if l.boundary && s > 0 && isWordByte(content[s-1]) {
+			continue // no start this literal could have has `\b` before it
+		}
 		loc := l.anchored.FindSubmatchIndex(content[s:])
 		if loc == nil {
 			continue // unreachable: R matches at t and content[s:t] is the run

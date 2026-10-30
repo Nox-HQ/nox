@@ -60,6 +60,9 @@ func TestPrefixPathEdgeCases(t *testing.T) {
 		{`(?:foo|foobar)baz`, "foobarbaz foobaz"},
 		{`\bAKIA[0-9A-Z]{4}`, "AKIA1234 xAKIA1234 _AKIA1234 (AKIA1234"},
 		{`(?i)\b(?:eval|exec)\(`, "eval( retrieval( myexec( .EXEC( EvAl("},
+		// A literal and then a small class: one literal per class character.
+		{`(?i)(f["']|\.format\(|%s).*?(user_input|user_query)`, "x = f\"{user_input}\" F'{user_query}' f`user_input` '%S' % user_query"},
+		{`ab[cd]e|ab[x]`, "abce abde abxe abfe"},
 	} {
 		re := regexp.MustCompile(c.pattern)
 		want := re.FindAllSubmatchIndex([]byte(c.content), -1)
@@ -93,6 +96,14 @@ func TestLeadClassPathEdgeCases(t *testing.T) {
 		// Two runs, the first class within the second (SEC-286's shape).
 		{`[\w.-]{0,3}?(?i:[\w.-]{0,2}?(?:okta))=(\w{2})`, "abcdefokta=xy ..okta=zz a-b.c-d.okta=ww"},
 		{`[\w]{0,50}?(?i:[\w.-]{0,3}?(?:[Ss]umo))=(\w{2})`, "abc.-.sumo=xy abc..-.sumo=zz xyz.sumo=ww"},
+		// An optional character is a run of at most one (MCP-016's `"?`).
+		{`(?i)"?(?:forward|relay)[_-]?token"?\s*[:=]\s*true`, `"forward_token": true, relayToken=true ""relay_token"=true`},
+		{`"?okta"?=(\w{2})`, `okta=ab "okta"=cd x"okta=ef ""okta=gh`},
+		// A run after `\b` (SEC-469's shape): only the furthest start of the run
+		// can have a boundary before it, so it is checked there.
+		{`\b[A-Z0-9_]*(?:TOKEN|API_KEY)=([a-z]{2})`, "GH_TOKEN=ab xAPI_KEY=cd x_TOKEN=ef TOKEN=gh .MY_API_KEY=ij"},
+		{`\b[A-Z0-9_]*(?:TOKEN)=([a-z]{2})`, "aTOKEN=ab TOKENTOKEN=cd A_TOKEN=x A_TOKEN=ef"},
+		{`\b[A-Z_]{0,3}TOKEN=([a-z]{2})`, "ABCDEFTOKEN=ab X_TOKEN=cd"},
 	} {
 		re := regexp.MustCompile(c.pattern)
 		want := re.FindAllSubmatchIndex([]byte(c.content), -1)
@@ -123,6 +134,9 @@ func TestLeadClassPathDeclines(t *testing.T) {
 		`[\w]{0,50}?\bokta=x`,           // the literal opens with a boundary
 		`[\w]{0,50}?(?:okta)?=x`,        // the literal is optional
 		`[\w.-]{0,50}?[\w]{0,5}?okta=x`, // two runs, the first class wider
+		`\b[\w.-]*TOKEN=x`,              // \b before a run of non-word characters
+		`\b[A-Z]*\.env`,                 // \b before a run whose literal is not a word
+		`(?i)k?okta=x`,                  // an optional letter that folds: not one byte
 	} {
 		if q := planFor(p); q != nil && q.lead != nil {
 			t.Errorf("%q got a lead-class plan", p)
