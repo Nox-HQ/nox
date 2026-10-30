@@ -70,7 +70,7 @@ func TestPrefixPathEdgeCases(t *testing.T) {
 		if p == nil {
 			t.Fatalf("%q: no plan", c.pattern)
 		}
-		if got := p.findAll([]byte(c.content), true); !reflect.DeepEqual(got, want) {
+		if got := p.findAll(nil, []byte(c.content), true); !reflect.DeepEqual(got, want) {
 			t.Errorf("%q on %q: prefix path %v, FindAll %v", c.pattern, c.content, got, want)
 		}
 	}
@@ -120,7 +120,7 @@ func TestLeadClassPathEdgeCases(t *testing.T) {
 			}
 			continue
 		}
-		if got := p.findAll([]byte(c.content), true); !reflect.DeepEqual(got, want) {
+		if got := p.findAll(nil, []byte(c.content), true); !reflect.DeepEqual(got, want) {
 			t.Errorf("%q on %q: plan %v, FindAll %v", c.pattern, c.content, got, want)
 		}
 	}
@@ -187,7 +187,7 @@ func TestFirstBytePathEdgeCases(t *testing.T) {
 		if p == nil || p.first == nil {
 			t.Fatalf("%q: no first-byte plan", c.pattern)
 		}
-		if got := p.findAll([]byte(c.content), true); !reflect.DeepEqual(got, want) {
+		if got := p.findAll(nil, []byte(c.content), true); !reflect.DeepEqual(got, want) {
 			t.Errorf("%q on %q: plan %v, FindAll %v", c.pattern, c.content, got, want)
 		}
 	}

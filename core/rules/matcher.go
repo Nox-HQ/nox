@@ -95,6 +95,15 @@ type Matcher interface {
 // or be confused with the content it was computed from.
 type fileScope struct {
 	structural *structural.Document
+	literals   fileLiterals
+}
+
+// fileLiterals returns the file's shared literal answers; nil for a nil scope.
+func (s *fileScope) fileLiterals() *fileLiterals {
+	if s == nil {
+		return nil
+	}
+	return &s.literals
 }
 
 // structuralDoc parses content for the structural rules, once per file: each
@@ -169,6 +178,10 @@ func (m *RegexMatcher) compile(pattern string) (*regexp.Regexp, error) {
 // entropy threshold defaults to 3.0 and can be overridden via
 // rule.Metadata["min_entropy"].
 func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
+	return m.matchScoped(nil, content, rule)
+}
+
+func (m *RegexMatcher) matchScoped(scope *fileScope, content []byte, rule *Rule) []MatchResult {
 	re, err := m.compile(rule.Pattern)
 	if err != nil {
 		return nil
@@ -186,7 +199,7 @@ func (m *RegexMatcher) Match(content []byte, rule *Rule) []MatchResult {
 	var locs [][]int
 	planned := false
 	if plan := planFor(rule.Pattern); plan != nil {
-		locs, planned = plan.match(content, shapeGroup > 0)
+		locs, planned = plan.matchIn(scope.fileLiterals(), content, shapeGroup > 0)
 	}
 	switch {
 	case planned:
@@ -444,7 +457,7 @@ func (m *AbsenceMatcher) matchScoped(scope *fileScope, content []byte, rule *Rul
 	var anchors [][]int
 	planned := false
 	if plan := planFor(rule.AbsenceAnchor); plan != nil {
-		anchors, planned = plan.match(content, false)
+		anchors, planned = plan.matchIn(scope.fileLiterals(), content, false)
 	}
 	if !planned {
 		anchors = anchorRe.FindAllIndex(content, -1)

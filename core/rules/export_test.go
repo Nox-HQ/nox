@@ -5,14 +5,18 @@ import (
 	"strings"
 )
 
+// FileLiterals is the per-file literal cache ScanFile shares across rules.
+type FileLiterals = fileLiterals
+
 // PrefixFindAll exposes the literal-prefix path to the equivalence test:
 // the locations it returns for pattern, and whether the pattern has a plan.
-func PrefixFindAll(pattern string, content []byte, submatch bool) ([][]int, bool) {
+// lits, when not nil, is shared with the other patterns run on content.
+func PrefixFindAll(lits *FileLiterals, pattern string, content []byte, submatch bool) ([][]int, bool) {
 	p := planFor(pattern)
-	if p == nil || !p.usable(content) {
+	if p == nil || !p.usableIn(lits, content) {
 		return nil, false
 	}
-	return p.findAll(content, submatch), true
+	return p.findAll(lits, content, submatch), true
 }
 
 // KeywordsPresent exposes the keyword index to the fixture test: for each of

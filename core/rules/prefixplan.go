@@ -651,22 +651,84 @@ func isASCII(s string) bool {
 var foldOutliers = [][]byte{[]byte("\u212a"), []byte("\u017f")}
 
 // usable reports whether the plan is exact for this content.
-func (p *prefixPlan) usable(content []byte) bool {
-	if p.lead != nil && !utf8.Valid(content) {
+func (p *prefixPlan) usable(content []byte) bool { return p.usableIn(nil, content) }
+
+func (p *prefixPlan) usableIn(lits *fileLiterals, content []byte) bool {
+	if p.lead != nil && !lits.validUTF8(content) {
 		return false
 	}
 	for _, lp := range p.prefixes {
-		if !lp.fold {
-			continue
+		if lp.fold {
+			return !lits.hasFoldOutlier(content)
 		}
-		for _, o := range foldOutliers {
-			if bytes.Contains(content, o) {
-				return false
-			}
-		}
-		return true
 	}
 	return true
+}
+
+// fileLiterals remembers, for one file, the answers every plan asks of it:
+// where each literal occurs, whether the file holds a fold outlier, whether it
+// is valid UTF-8. Rules share literals -- `(?i)apiversion:` leads 37 IaC
+// rules, and 689 of crewAI's 1,770 literal searches per file repeat one
+// another's -- so each is searched once per file rather than once per rule
+// (#736). A nil *fileLiterals computes every answer afresh.
+type fileLiterals struct {
+	occurrences map[literalPrefix][]int
+	outlier     tristate
+	valid       tristate
+}
+
+type tristate uint8
+
+const (
+	unknown tristate = iota
+	no
+	yes
+)
+
+func (l *fileLiterals) indexAll(content []byte, lp literalPrefix) []int {
+	if l == nil {
+		return indexAll(content, lp)
+	}
+	if at, ok := l.occurrences[lp]; ok {
+		return at
+	}
+	if l.occurrences == nil {
+		l.occurrences = map[literalPrefix][]int{}
+	}
+	at := indexAll(content, lp)
+	l.occurrences[lp] = at
+	return at
+}
+
+func (l *fileLiterals) hasFoldOutlier(content []byte) bool {
+	if l == nil || l.outlier == unknown {
+		found := no
+		for _, o := range foldOutliers {
+			if bytes.Contains(content, o) {
+				found = yes
+				break
+			}
+		}
+		if l == nil {
+			return found == yes
+		}
+		l.outlier = found
+	}
+	return l.outlier == yes
+}
+
+func (l *fileLiterals) validUTF8(content []byte) bool {
+	if l == nil || l.valid == unknown {
+		v := no
+		if utf8.Valid(content) {
+			v = yes
+		}
+		if l == nil {
+			return v == yes
+		}
+		l.valid = v
+	}
+	return l.valid == yes
 }
 
 // match returns what re.FindAllSubmatchIndex(content, -1) would, or ok=false
@@ -682,7 +744,12 @@ func (p *prefixPlan) usable(content []byte) bool {
 // when that is shorter, and the scan runs when that exceeds the file's length.
 // Both paths return the same locations; this only picks the cheaper.
 func (p *prefixPlan) match(content []byte, submatch bool) ([][]int, bool) {
-	if !p.usable(content) {
+	return p.matchIn(nil, content, submatch)
+}
+
+// matchIn is match sharing lits with the other rules scanning this file.
+func (p *prefixPlan) matchIn(lits *fileLiterals, content []byte, submatch bool) ([][]int, bool) {
+	if !p.usableIn(lits, content) {
 		return nil, false
 	}
 	var starts []int
@@ -692,7 +759,7 @@ func (p *prefixPlan) match(content []byte, submatch bool) ([][]int, bool) {
 			return nil, false
 		}
 	} else {
-		starts = p.candidates(content)
+		starts = p.candidates(lits, content)
 	}
 	if p.cost(content, starts) > len(content) {
 		return nil, false
@@ -750,12 +817,12 @@ func (p *prefixPlan) cost(content []byte, starts []int) int {
 }
 
 // findAll is match without the cost check, for tests.
-func (p *prefixPlan) findAll(content []byte, submatch bool) [][]int {
+func (p *prefixPlan) findAll(lits *fileLiterals, content []byte, submatch bool) [][]int {
 	if p.first != nil {
 		starts, _ := p.firstCandidates(content, -1)
 		return p.findAllFrom(content, starts, submatch)
 	}
-	return p.findAllFrom(content, p.candidates(content), submatch)
+	return p.findAllFrom(content, p.candidates(lits, content), submatch)
 }
 
 // findAllFrom returns what re.FindAllSubmatchIndex(content, -1) would, using
@@ -883,11 +950,11 @@ func inClass(r rune, ranges []rune) bool {
 
 // candidates returns every offset where one of the plan's literals begins, in
 // ascending order.
-func (p *prefixPlan) candidates(content []byte) []int {
+func (p *prefixPlan) candidates(lits *fileLiterals, content []byte) []int {
 	seen := map[int]struct{}{}
 	var out []int
 	for _, lp := range p.prefixes {
-		for _, at := range indexAll(content, lp) {
+		for _, at := range lits.indexAll(content, lp) {
 			if _, dup := seen[at]; !dup {
 				seen[at] = struct{}{}
 				out = append(out, at)
