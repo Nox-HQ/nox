@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A case-insensitive literal is searched for from its rarest byte instead of its first. The literal-prefix plan found each occurrence of `(?i)secret` by visiting every `s` and `S` in the file and comparing the window there; it now visits only the `c`s, and each occurrence still has that byte at one offset, so the same occurrences come back in the same order. Over 3,000 crewAI files and all 1,012 case-insensitive literals the plans search for, the search took 19.9 s instead of 32.5 s, finding the same 950,317 occurrences. In a scan this search was 13.5% of CPU, so the whole-scan saving is about 5%, below what a loaded machine can resolve; findings, fingerprints and the AI inventory are unchanged. A window-by-window oracle holds the search to its definition, by test and in the CI fuzz job (#736).
+
 ## [1.55.6] - 2026-10-30
 
 Scans cost about 40% less CPU: on crewAI, median user CPU fell from 334 s to 198 s against 1.55.5 (4 interleaved rounds in a 4-CPU Linux container, every round 23-52% lower), with findings, fingerprints and the AI inventory identical. Encoded-secret candidates come from a linear scan, framework detection and more rule shapes go through the literal-prefix plan, and taint units are extracted once per file. Dogfooded on nox and NOX Intelligence (online, answered through the NOX Intelligence mirror): findings identical to 1.55.5, fingerprints included.
