@@ -8,6 +8,15 @@ import (
 // FileLiterals is the per-file literal cache ScanFile shares across rules.
 type FileLiterals = fileLiterals
 
+// LiteralIndex is the one-pass index of every plan's literals.
+type LiteralIndex = literalIndex
+
+// NewLiteralIndex builds the index ScanFile would for rules.
+func NewLiteralIndex(rules []*Rule) *LiteralIndex { return newLiteralIndex(rules) }
+
+// NewFileLiterals returns a per-file cache answering from x, as ScanFile's.
+func NewFileLiterals(x *LiteralIndex) *FileLiterals { return &fileLiterals{index: x} }
+
 // PrefixFindAll exposes the literal-prefix path to the equivalence test:
 // the locations it returns for pattern, and whether the pattern has a plan.
 // lits, when not nil, is shared with the other patterns run on content.

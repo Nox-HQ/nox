@@ -27,6 +27,9 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 	}
 	var planned []compiled
 	total := 0
+	// Every file's literals come from one index over the built-in rules, as
+	// ScanFile's do (literalindex.go).
+	index := rules.NewLiteralIndex(catalog.Rules())
 	for _, r := range catalog.Rules() {
 		// An absence rule's anchor is located the same way (#736): its
 		// positions decide where a missing property is reported.
@@ -93,7 +96,7 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 			lower := bytes.ToLower(content)
 			// One cache for the file, shared by every rule, as ScanFile
 			// shares it: a literal one rule searched must answer the next.
-			var lits rules.FileLiterals
+			lits := rules.NewFileLiterals(index)
 			for _, c := range planned {
 				// Only where the engine would run the rule: its keyword
 				// pre-filter passes. That is every case the fast path can
@@ -104,7 +107,7 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 				}
 				// The submatch form carries the whole-match pair too, so it
 				// checks both shapes the matcher asks for.
-				got, ok := rules.PrefixFindAll(&lits, c.re.String(), content, true)
+				got, ok := rules.PrefixFindAll(lits, c.re.String(), content, true)
 				if !ok {
 					continue // a fold outlier in this file: the full scan runs
 				}

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"math/rand"
 	"reflect"
+	"regexp"
+	"slices"
 	"testing"
 )
 
@@ -68,4 +70,76 @@ func FuzzIndexAllMatchesTheOracle(f *testing.F) {
 			assertIndexAll(t, content, lp)
 		}
 	})
+}
+
+// The one-pass index (literalindex.go) must find what indexAll finds, for
+// every literal it holds: the same offsets, overlapping ones included, in the
+// same order. Seeded corpus of patterns and contents, as above.
+func TestLiteralIndexMatchesIndexAll(t *testing.T) {
+	r := rand.New(rand.NewSource(952))
+	held := 0
+	for range 2000 {
+		var rules []*Rule
+		for range 1 + r.Intn(8) {
+			pattern := regexp.QuoteMeta(string(randomBytes(r, 2+r.Intn(5), "aAbB-_:")))
+			if r.Intn(2) == 0 {
+				pattern = "(?i)" + pattern
+			}
+			rules = append(rules, &Rule{MatcherType: "regex", Pattern: pattern + "x"})
+		}
+		x := newLiteralIndex(rules)
+		held += len(x.lits)
+		content := randomBytes(r, r.Intn(200), "aAbB-_:x\n")
+		// A literal flush with either end of the file is the edge of the
+		// pass's last and first windows; random content rarely makes one.
+		if len(x.lits) > 0 && r.Intn(2) == 0 {
+			lit := []byte(x.lits[r.Intn(len(x.lits))].text)
+			if r.Intn(2) == 0 {
+				content = append(content, lit...)
+			} else {
+				content = append(lit, content...)
+			}
+		}
+		assertIndexMatches(t, x, content)
+	}
+	if held == 0 {
+		t.Fatal("the index held no literal; nothing was compared")
+	}
+}
+
+// FuzzLiteralIndexMatchesIndexAll explores beyond the seeded corpus.
+func FuzzLiteralIndexMatchesIndexAll(f *testing.F) {
+	f.Add("Bab-a", true, []byte("xxbAB-ABab-a\nbab"))
+	f.Add("a:b", false, []byte("a:ba:bA:b"))
+	f.Fuzz(func(t *testing.T, needle string, fold bool, content []byte) {
+		pattern := regexp.QuoteMeta(needle)
+		if fold {
+			pattern = "(?i)" + pattern
+			// Plans never search a file holding a fold outlier (usableIn).
+			for _, o := range foldOutliers {
+				if bytes.Contains(content, o) {
+					return
+				}
+			}
+		}
+		assertIndexMatches(t, newLiteralIndex([]*Rule{{MatcherType: "regex", Pattern: pattern}}), content)
+	})
+}
+
+func assertIndexMatches(t *testing.T, x *literalIndex, content []byte) {
+	t.Helper()
+	occ := x.occurrences(content)
+	for n, lp := range x.lits {
+		if got, want := occ[n], indexAll(content, lp); !slices.Equal(got, want) {
+			t.Fatalf("%+v in %q: index %v, indexAll %v", lp, content, got, want)
+		}
+	}
+}
+
+func randomBytes(r *rand.Rand, n int, alphabet string) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = alphabet[r.Intn(len(alphabet))]
+	}
+	return b
 }

@@ -494,6 +494,9 @@ jobs:
       - name: Fuzz literal search against the window-by-window oracle
         run: go test -run '^$' -fuzz '^FuzzIndexAllMatchesTheOracle$' -fuzztime 30s -timeout 120s ./core/rules/
 
+      - name: Fuzz the one-pass literal index against the per-literal search
+        run: go test -run '^$' -fuzz '^FuzzLiteralIndexMatchesIndexAll$' -fuzztime 30s -timeout 120s ./core/rules/
+
   deps-audit:
     name: Nox dependency CVE audit
     runs-on: ubuntu-latest
