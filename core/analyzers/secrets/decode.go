@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -21,15 +20,70 @@ type DecodedSegment struct {
 	StartOffset int    // byte offset in original content
 }
 
-var (
-	reBase64 = regexp.MustCompile(`[A-Za-z0-9+/]{40,}={0,2}`)
-	reHex    = regexp.MustCompile(`(?i)[0-9a-f]{40,}`)
-)
+// minEncodedLen is the shortest run of encoding characters treated as an
+// encoded segment.
+const minEncodedLen = 40
+
+var base64Chars, hexChars [256]bool
+
+func init() {
+	for _, c := range "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" {
+		base64Chars[c] = true
+	}
+	for _, c := range "0123456789abcdefABCDEF" {
+		hexChars[c] = true
+	}
+}
+
+// base64Spans reports the [start, end) spans of base64 candidates: exactly
+// the leftmost-first matches of `[A-Za-z0-9+/]{40,}={0,2}`.
+//
+// It replaced that regular expression, and the expression it replaced is the
+// test oracle. Go's regexp runs an automaton from every position in the file;
+// on crewAI the two segment patterns cost 67s of a 373s scan -- more than the
+// decoding and the rescans of everything they found, which cost 0.3s. A run of
+// one character class needs no automaton: every match is a maximal run.
+func base64Spans(content []byte) [][2]int {
+	return classRuns(content, &base64Chars, 2)
+}
+
+// hexSpans reports the [start, end) spans of hex candidates: exactly the
+// leftmost-first matches of `(?i)[0-9a-f]{40,}`. Case folding adds only A-F;
+// neither fold outlier (U+212A KELVIN SIGN, U+017F LONG S) folds into a-f.
+func hexSpans(content []byte) [][2]int {
+	return classRuns(content, &hexChars, 0)
+}
+
+// classRuns returns every maximal run of class bytes at least minEncodedLen
+// long, each extended by up to maxPad '=' bytes. Byte-wise scanning is exact:
+// both classes are ASCII, and no byte of a multi-byte or invalid UTF-8
+// sequence is in either.
+func classRuns(content []byte, class *[256]bool, maxPad int) [][2]int {
+	var spans [][2]int
+	for i := 0; i < len(content); {
+		if !class[content[i]] {
+			i++
+			continue
+		}
+		start := i
+		for i < len(content) && class[content[i]] {
+			i++
+		}
+		if i-start < minEncodedLen {
+			continue
+		}
+		for pad := 0; pad < maxPad && i < len(content) && content[i] == '='; pad++ {
+			i++
+		}
+		spans = append(spans, [2]int{start, i})
+	}
+	return spans
+}
 
 // decodeBase64Segments finds and decodes base64-encoded strings in content.
 func decodeBase64Segments(content []byte) []DecodedSegment {
 	var segments []DecodedSegment
-	for _, loc := range reBase64.FindAllIndex(content, -1) {
+	for _, loc := range base64Spans(content) {
 		raw := string(content[loc[0]:loc[1]])
 		decoded, err := base64.StdEncoding.DecodeString(raw)
 		if err != nil {
@@ -56,7 +110,7 @@ func decodeBase64Segments(content []byte) []DecodedSegment {
 // decodeHexSegments finds and decodes hex-encoded strings in content.
 func decodeHexSegments(content []byte) []DecodedSegment {
 	var segments []DecodedSegment
-	for _, loc := range reHex.FindAllIndex(content, -1) {
+	for _, loc := range hexSpans(content) {
 		raw := string(content[loc[0]:loc[1]])
 		// Hex strings must have even length.
 		if len(raw)%2 != 0 {
