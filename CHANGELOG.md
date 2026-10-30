@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.6] - 2026-10-30
+
+Scans cost about 40% less CPU: on crewAI, median user CPU fell from 334 s to 198 s against 1.55.5 (4 interleaved rounds in a 4-CPU Linux container, every round 23-52% lower), with findings, fingerprints and the AI inventory identical. Encoded-secret candidates come from a linear scan, framework detection and more rule shapes go through the literal-prefix plan, and taint units are extracted once per file. Dogfooded on nox and NOX Intelligence (online, answered through the NOX Intelligence mirror): findings identical to 1.55.5, fingerprints included.
+
 ### Changed
 
 - Three more pattern shapes take the literal-prefix path: an optional character before the literals (MCP-016's `(?i)"?(?:forward|relay|…)token`), a run of word characters after `\b` (SEC-469's `\b[A-Z0-9_]*(?:TOKEN|API_KEY|SECRET)=`), where only the furthest start of the run can have the boundary before it, and a literal followed by a class of up to four ASCII characters, which becomes one literal per character (AI-002's `f["']`). Over every crewAI file, MCP-016 went from 35.8 s to 9.6 s and SEC-469 from 15.9 s to 5.1 s with the same matches; AI-002's regex had cost 25.9 s. In a scan the keyword prefilter already keeps these rules off most files, so the whole-scan saving is small: findings, fingerprints and the AI inventory are unchanged. The equivalence test holds the new plans to FindAll on every built-in rule and on all of crewAI (#736).
