@@ -22,13 +22,14 @@ func TestPlannedMatchAgreesWithRegexp(t *testing.T) {
 		{`(?i)(?:secret|token)\s*[=:]\s*\S+`, true},
 		{`\b(?:apikey|api_key)\b`, true},
 		{`tmc/langchaingo`, true},
-		{`[a-z]+\d`, false}, // no leading literal: always the full scan
+		{`[a-z]+\d`, true},  // a leading class: planned from its first bytes
+		{`[\w.]+\d`, false}, // too many first bytes: always the full scan
 		{`^import\s+os`, false},
 	}
 	words := []string{
 		"from ", "import ", "langchain", "require('langchain')", "\"langchain\"",
 		"Secret = x", "TOKEN: abc", "apikey", "api_key", "xapikey", "tmc/langchaingo",
-		"\u212aey", "\u017fecret = y", "\n", " ", "abc9", "\u00e9", "\xff",
+		"\u212aey", "\u017fecret = y", "\n", " ", "abc9", "a.b_c7", "\u00e9", "\xff",
 	}
 	r := rand.New(rand.NewSource(736))
 	for _, tc := range patterns {

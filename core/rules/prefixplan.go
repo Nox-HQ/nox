@@ -51,6 +51,12 @@ import (
 // somewhere in the run of class characters before an occurrence of the
 // literal, so it is found from the literal too (see leadRun).
 //
+// A third shape opens with a character class: DATA-003's card numbers,
+// `\b(?:4[0-9]{12}…|5[1-5][0-9]{14}…)\b`, DATA-002's SSNs. Nothing literal is
+// shared, but the bytes a match can start with are known, and with `\b`
+// before them most occurrences are excluded by the byte before. Every match
+// starts at one of those bytes, so they are the candidates (see firstBytes).
+//
 // TestPrefixPlanMatchesFindAll holds the equivalence for every built-in rule.
 
 // prefixPlan is how a pattern can be matched from its literal prefixes.
@@ -68,6 +74,9 @@ type prefixPlan struct {
 	// before its literals; prefixes, anchored and leadBoundary then describe
 	// what follows the run.
 	lead *leadRun
+	// first is set when the pattern opens with a character class: the bytes
+	// a match can start with. They replace prefixes as the candidates.
+	first *[256]bool
 }
 
 // leadRun is a pattern `C{0,max}R` (lazy or greedy) whose rest R opens with
@@ -149,7 +158,10 @@ func buildPlan(pattern string) *prefixPlan {
 	body, leadBoundary := stripLeadingBoundary(re)
 	prefixes, ok := leadingLiterals(body)
 	if !ok || len(prefixes) == 0 {
-		return buildLeadPlan(pattern)
+		if p := buildLeadPlan(pattern); p != nil {
+			return p
+		}
+		return buildFirstBytePlan(pattern, re, body, leadBoundary)
 	}
 	if leadBoundary {
 		for _, p := range prefixes {
@@ -160,7 +172,9 @@ func buildPlan(pattern string) *prefixPlan {
 	}
 	for _, p := range prefixes {
 		if len(p.text) < 2 {
-			return nil // a one-character literal is too common to narrow anything
+			// A one-character literal is too common to search for as a word,
+			// but `4|5[1-5]` is a set of first bytes like any other.
+			return buildFirstBytePlan(pattern, re, body, leadBoundary)
 		}
 	}
 	anchored, err := regexp.Compile(`^(?:` + pattern + `)`)
@@ -203,8 +217,9 @@ func buildLeadPlan(pattern string) *prefixPlan {
 	}
 	p := buildPlan(rest.String())
 	// A rest that opens with `\b` would be checked against the byte before the
-	// run, not before the literal; one that has its own run is not this shape.
-	if p == nil || p.leadBoundary || p.lead != nil {
+	// run, not before the literal; one that has its own run, or opens with a
+	// class rather than literals, is not this shape.
+	if p == nil || p.leadBoundary || p.lead != nil || p.first != nil {
 		return nil
 	}
 	anchored, err := regexp.Compile(`^(?:` + pattern + `)`)
@@ -217,6 +232,141 @@ func buildLeadPlan(pattern string) *prefixPlan {
 		maxLen:   maxBytes(re),
 		lead:     &leadRun{runs: runs, anchored: anchored},
 	}
+}
+
+// maxFirstBytes bounds how many distinct bytes may start a match for the
+// first-byte path: [A-Z0-9] is 36. Beyond that the candidates are most of a
+// file, and trying them one by one costs more than the scan.
+const maxFirstBytes = 36
+
+// buildFirstBytePlan returns the plan for a pattern that opens with a
+// character class (re is the simplified pattern, body the same without a
+// leading `\b`), or nil. It declines whatever it cannot prove every start of:
+//
+//   - a literal prefix, which regexp already skips ahead to;
+//   - case folding, and any first rune outside ASCII: `(?i)[a-z]` includes
+//     KELVIN SIGN, and a negated class includes every multi-byte rune;
+//   - whitespace among the first bytes, or more than maxFirstBytes of them:
+//     too dense to narrow anything;
+//   - `\b` before a first byte that is not a word character, where the
+//     boundary is not "the previous byte is not a word character".
+//
+// buildPlan has already declined `^`, `\A` and patterns matching "".
+func buildFirstBytePlan(pattern string, re, body *syntax.Regexp, leadBoundary bool) *prefixPlan {
+	full, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil
+	}
+	if prefix, _ := full.LiteralPrefix(); prefix != "" {
+		return nil
+	}
+	var first [256]bool
+	if !firstBytes(body, &first) {
+		return nil
+	}
+	n := 0
+	for c, ok := range first {
+		if !ok {
+			continue
+		}
+		n++
+		if isSpaceByte(byte(c)) || (leadBoundary && !isWordByte(byte(c))) {
+			return nil
+		}
+	}
+	if n == 0 || n > maxFirstBytes {
+		return nil
+	}
+	anchored, err := regexp.Compile(`^(?:` + pattern + `)`)
+	if err != nil {
+		return nil
+	}
+	return &prefixPlan{first: &first, anchored: anchored, leadBoundary: leadBoundary, maxLen: maxBytes(re)}
+}
+
+// firstBytes adds to set every byte a match of re can start with, or reports
+// false when that cannot be stated exactly as ASCII bytes. Widening is safe,
+// as for literals: a byte that cannot start a match costs a failed match.
+func firstBytes(re *syntax.Regexp, set *[256]bool) bool {
+	switch re.Op {
+	case syntax.OpLiteral:
+		if len(re.Rune) == 0 || re.Flags&syntax.FoldCase != 0 || re.Rune[0] >= utf8.RuneSelf {
+			return false
+		}
+		set[re.Rune[0]] = true
+		return true
+	case syntax.OpCharClass:
+		if len(re.Rune) == 0 {
+			return false
+		}
+		for i := 0; i+1 < len(re.Rune); i += 2 {
+			lo, hi := re.Rune[i], re.Rune[i+1]
+			if hi >= utf8.RuneSelf {
+				return false
+			}
+			for c := lo; c <= hi; c++ {
+				set[c] = true
+			}
+		}
+		return true
+	case syntax.OpCapture, syntax.OpStar, syntax.OpPlus, syntax.OpQuest:
+		return firstBytes(re.Sub[0], set)
+	case syntax.OpRepeat:
+		return re.Max != 0 && firstBytes(re.Sub[0], set)
+	case syntax.OpAlternate:
+		for _, sub := range re.Sub {
+			if !firstBytes(sub, set) {
+				return false
+			}
+		}
+		return true
+	case syntax.OpConcat:
+		// The first non-optional element ends the set; everything optional
+		// before it can be skipped, so its first bytes are starts too.
+		for _, sub := range re.Sub {
+			if !firstBytes(sub, set) {
+				return false
+			}
+			if !canBeEmpty(sub) {
+				return true
+			}
+		}
+		return false
+	}
+	return false
+}
+
+// canBeEmpty reports whether re can match without consuming input. Only the
+// operators firstBytes accepts need an answer; anything else is reported as
+// possibly empty, which makes firstBytes keep going and then decline.
+func canBeEmpty(re *syntax.Regexp) bool {
+	switch re.Op {
+	case syntax.OpLiteral, syntax.OpCharClass:
+		return false
+	case syntax.OpCapture, syntax.OpPlus:
+		return canBeEmpty(re.Sub[0])
+	case syntax.OpRepeat:
+		return re.Min == 0 || canBeEmpty(re.Sub[0])
+	case syntax.OpConcat:
+		for _, sub := range re.Sub {
+			if !canBeEmpty(sub) {
+				return false
+			}
+		}
+		return true
+	case syntax.OpAlternate:
+		for _, sub := range re.Sub {
+			if canBeEmpty(sub) {
+				return true
+			}
+		}
+		return false
+	}
+	return true
+}
+
+func isSpaceByte(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v'
 }
 
 // stripLeadingBoundary returns the pattern without a leading `\b`, and whether
@@ -462,12 +612,44 @@ func (p *prefixPlan) match(content []byte, submatch bool) ([][]int, bool) {
 	if !p.usable(content) {
 		return nil, false
 	}
-	starts := p.candidates(content)
+	var starts []int
+	if p.first != nil {
+		var ok bool
+		if starts, ok = p.firstCandidates(content, len(content)/maxFirstDensity+1); !ok {
+			return nil, false
+		}
+	} else {
+		starts = p.candidates(content)
+	}
 	if p.cost(content, starts) > len(content) {
 		return nil, false
 	}
 	return p.findAllFrom(content, starts, submatch), true
 }
+
+// firstCandidates returns the offsets of the plan's first bytes, skipping
+// those `\b` rules out by the byte before. It gives up -- false, take the
+// scan -- once there are more than limit (-1: no limit). match passes one in
+// maxFirstDensity bytes: each candidate costs a call into regexp, so past that
+// the plan is no cheaper, and a file of digits would otherwise build a
+// candidate list as long as itself.
+func (p *prefixPlan) firstCandidates(content []byte, limit int) ([]int, bool) {
+	var out []int
+	for i, c := range content {
+		if !p.first[c] || (p.leadBoundary && i > 0 && isWordByte(content[i-1])) {
+			continue
+		}
+		if len(out) == limit {
+			return nil, false
+		}
+		out = append(out, i)
+	}
+	return out, true
+}
+
+// maxFirstDensity: the first-byte path is used while at most one byte in this
+// many is a candidate.
+const maxFirstDensity = 16
 
 // cost estimates the bytes the anchored matches from starts will read.
 func (p *prefixPlan) cost(content []byte, starts []int) int {
@@ -496,6 +678,10 @@ func (p *prefixPlan) cost(content []byte, starts []int) int {
 
 // findAll is match without the cost check, for tests.
 func (p *prefixPlan) findAll(content []byte, submatch bool) [][]int {
+	if p.first != nil {
+		starts, _ := p.firstCandidates(content, -1)
+		return p.findAllFrom(content, starts, submatch)
+	}
 	return p.findAllFrom(content, p.candidates(content), submatch)
 }
 

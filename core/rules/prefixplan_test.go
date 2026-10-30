@@ -40,7 +40,7 @@ func TestAPatternWithoutALiteralStartHasNoPlan(t *testing.T) {
 		`a`,                           // single-character literal
 		`(?:secret)?\s*[=:]\s*x`,      // optional literal: a match can start elsewhere
 	} {
-		if planFor(p) != nil {
+		if q := planFor(p); q != nil && q.first == nil {
 			t.Errorf("%q got a literal-prefix plan", p)
 		}
 	}
@@ -124,8 +124,8 @@ func TestLeadClassPathDeclines(t *testing.T) {
 		`[\w]{0,50}?(?:okta)?=x`,        // the literal is optional
 		`[\w.-]{0,50}?[\w]{0,5}?okta=x`, // two runs, the first class wider
 	} {
-		if planFor(p) != nil {
-			t.Errorf("%q got a plan", p)
+		if q := planFor(p); q != nil && q.lead != nil {
+			t.Errorf("%q got a lead-class plan", p)
 		}
 	}
 }
@@ -149,5 +149,65 @@ func TestDenseCandidatesOnALongLineTakeTheScan(t *testing.T) {
 	got := NewRegexMatcher().Match(long, &Rule{ID: "T", Pattern: pattern, MatcherType: "regex"})
 	if want := re.FindAllIndex(long, -1); len(got) != len(want) {
 		t.Errorf("Match found %d, FindAll %d", len(got), len(want))
+	}
+}
+
+// A pattern that opens with a character class instead of a literal is
+// matched from the offsets where its first byte can occur (DATA-003's card
+// numbers, DATA-002's SSNs): every match starts at such a byte, so trying
+// each in order returns what FindAll returns, as for a literal start.
+func TestFirstBytePathEdgeCases(t *testing.T) {
+	for _, c := range []struct{ pattern, content string }{
+		{`\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14})\b`, "card 4111111111111111, x4111111111111111 5500000000000004 41111111111111"},
+		{`\b\d{3}-\d{2}-\d{4}\b`, "ssn 123-45-6789 a123-45-6789 1234-56-7890 \u00e9123-45-6789"},
+		{`\b[A-Z]{2}\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{0,2}\b`, "DE89 3704 0044 0532 0130 00 xDE89370400440532013000 GB82WEST"},
+		{`key.*|[0-9]+`, "a key here 123 and k9 key"},
+		{`[0-9]+[a-z]`, "12345678x 99 7y"},
+	} {
+		re := regexp.MustCompile(c.pattern)
+		want := re.FindAllSubmatchIndex([]byte(c.content), -1)
+		if len(want) == 0 {
+			t.Fatalf("test premise: FindAll should match %q in %q", c.pattern, c.content)
+		}
+		p := planFor(c.pattern)
+		if p == nil || p.first == nil {
+			t.Fatalf("%q: no first-byte plan", c.pattern)
+		}
+		if got := p.findAll([]byte(c.content), true); !reflect.DeepEqual(got, want) {
+			t.Errorf("%q on %q: plan %v, FindAll %v", c.pattern, c.content, got, want)
+		}
+	}
+}
+
+// The first-byte path is taken only where its first bytes are provably all
+// the starts, and few enough to be worth trying one by one.
+func TestFirstBytePathDeclines(t *testing.T) {
+	for _, p := range []string{
+		`\s*[=:]\s*\d+`,     // whitespace starts: on nearly every line
+		`(?i)[a-z]{2}\d{4}`, // case folding brings in KELVIN SIGN and LONG S
+		`[^"]{8}x`,          // a negated class can start with any rune
+		`[\w.-]{4}x`,        // too many possible first bytes to narrow anything
+		`\b[.$]env`,         // \b before a byte that is not a word character
+		`(?m)^[0-9]{3}`,     // start-of-line anchor
+		`[0-9]*`,            // matches the empty string
+		`abc[0-9]`,          // a literal prefix, which regexp already skips to
+	} {
+		if q := planFor(p); q != nil && q.first != nil {
+			t.Errorf("%q got a first-byte plan", p)
+		}
+	}
+}
+
+// Dense candidates give up on the plan before building a candidate list as
+// long as the file, and the full scan's result is returned.
+func TestDenseFirstBytesTakeTheScan(t *testing.T) {
+	pattern := `[0-9]{3}-[0-9]{4}`
+	content := []byte(strings.Repeat("0123456789", 1000) + " 555-1234")
+	p := planFor(pattern)
+	if p == nil || p.first == nil {
+		t.Fatalf("%q: no first-byte plan", pattern)
+	}
+	if _, ok := p.match(content, false); ok {
+		t.Errorf("a file of digits took the first-byte plan")
 	}
 }
