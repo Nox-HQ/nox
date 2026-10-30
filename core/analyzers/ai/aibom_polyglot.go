@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/nox-hq/nox/core/lexctx"
+	"github.com/nox-hq/nox/core/rules"
 )
 
 // isSourceFile reports whether path is a code file we should consider for
@@ -215,31 +216,31 @@ func extractSDKInvocations(path string, content []byte) []ModelReference {
 type frameworkPattern struct {
 	componentName string
 	componentType string
-	pattern       *regexp.Regexp
+	pattern       *rules.PlannedRegexp
 }
 
 var frameworkPatterns = []frameworkPattern{
 	// Agent frameworks.
-	{componentName: "langchain", componentType: "agent_framework", pattern: regexp.MustCompile(`(?m)(?:from\s+langchain|import\s+langchain|require\s*\(\s*['"]langchain|"langchain")`)},
-	{componentName: "llamaindex", componentType: "agent_framework", pattern: regexp.MustCompile(`(?m)(?:from\s+llama_index|import\s+llama_index|llamaindex|@llamaindex/)`)},
-	{componentName: "autogen", componentType: "agent_framework", pattern: regexp.MustCompile(`(?m)(?:from\s+autogen|import\s+autogen|"autogen")`)},
-	{componentName: "crewai", componentType: "agent_framework", pattern: regexp.MustCompile(`(?m)(?:from\s+crewai|import\s+crewai|CrewAI)`)},
-	{componentName: "semantic-kernel", componentType: "agent_framework", pattern: regexp.MustCompile(`(?m)(?:Microsoft\.SemanticKernel|semantic_kernel|@microsoft/semantic-kernel)`)},
-	{componentName: "haystack", componentType: "agent_framework", pattern: regexp.MustCompile(`(?m)(?:from\s+haystack|import\s+haystack)`)},
-	{componentName: "vercel-ai", componentType: "agent_framework", pattern: regexp.MustCompile(`(?m)(?:from\s+['"]ai['"]|require\s*\(\s*['"]ai['"]|import\s+\{[^}]+\}\s+from\s+['"]ai['"])`)},
-	{componentName: "agent-go", componentType: "agent_framework", pattern: regexp.MustCompile(`agent-go|felixgeelhaar/agent-go`)},
-	{componentName: "praxis", componentType: "agent_framework", pattern: regexp.MustCompile(`felixgeelhaar/praxis|praxis\.Capability|capability\.Registry`)},
-	{componentName: "langchaingo", componentType: "agent_framework", pattern: regexp.MustCompile(`tmc/langchaingo`)},
+	{componentName: "langchain", componentType: "agent_framework", pattern: rules.MustCompilePlanned(`(?m)(?:from\s+langchain|import\s+langchain|require\s*\(\s*['"]langchain|"langchain")`)},
+	{componentName: "llamaindex", componentType: "agent_framework", pattern: rules.MustCompilePlanned(`(?m)(?:from\s+llama_index|import\s+llama_index|llamaindex|@llamaindex/)`)},
+	{componentName: "autogen", componentType: "agent_framework", pattern: rules.MustCompilePlanned(`(?m)(?:from\s+autogen|import\s+autogen|"autogen")`)},
+	{componentName: "crewai", componentType: "agent_framework", pattern: rules.MustCompilePlanned(`(?m)(?:from\s+crewai|import\s+crewai|CrewAI)`)},
+	{componentName: "semantic-kernel", componentType: "agent_framework", pattern: rules.MustCompilePlanned(`(?m)(?:Microsoft\.SemanticKernel|semantic_kernel|@microsoft/semantic-kernel)`)},
+	{componentName: "haystack", componentType: "agent_framework", pattern: rules.MustCompilePlanned(`(?m)(?:from\s+haystack|import\s+haystack)`)},
+	{componentName: "vercel-ai", componentType: "agent_framework", pattern: rules.MustCompilePlanned(`(?m)(?:from\s+['"]ai['"]|require\s*\(\s*['"]ai['"]|import\s+\{[^}]+\}\s+from\s+['"]ai['"])`)},
+	{componentName: "agent-go", componentType: "agent_framework", pattern: rules.MustCompilePlanned(`agent-go|felixgeelhaar/agent-go`)},
+	{componentName: "praxis", componentType: "agent_framework", pattern: rules.MustCompilePlanned(`felixgeelhaar/praxis|praxis\.Capability|capability\.Registry`)},
+	{componentName: "langchaingo", componentType: "agent_framework", pattern: rules.MustCompilePlanned(`tmc/langchaingo`)},
 	// Vector stores.
-	{componentName: "pinecone", componentType: "vector_store", pattern: regexp.MustCompile(`(?m)(?:import\s+pinecone|from\s+pinecone|pinecone-database/pinecone|pinecone-io/go-pinecone)`)},
-	{componentName: "qdrant", componentType: "vector_store", pattern: regexp.MustCompile(`(?m)(?:qdrant_client|@qdrant/js-client-rest|qdrant/go-client)`)},
-	{componentName: "weaviate", componentType: "vector_store", pattern: regexp.MustCompile(`(?m)(?:weaviate-client|weaviate-ts-client|weaviate\.io)`)},
-	{componentName: "chroma", componentType: "vector_store", pattern: regexp.MustCompile(`(?m)(?:import\s+chromadb|from\s+chromadb|chromadb\b)`)},
-	{componentName: "lancedb", componentType: "vector_store", pattern: regexp.MustCompile(`(?m)(?:import\s+lancedb|@lancedb/)`)},
-	{componentName: "pgvector", componentType: "vector_store", pattern: regexp.MustCompile(`(?m)(?:pgvector\b|pgvector-go|pgvector/pgvector)`)},
-	{componentName: "milvus", componentType: "vector_store", pattern: regexp.MustCompile(`(?m)(?:pymilvus|milvus-sdk-go|@zilliz/milvus2-sdk-node)`)},
+	{componentName: "pinecone", componentType: "vector_store", pattern: rules.MustCompilePlanned(`(?m)(?:import\s+pinecone|from\s+pinecone|pinecone-database/pinecone|pinecone-io/go-pinecone)`)},
+	{componentName: "qdrant", componentType: "vector_store", pattern: rules.MustCompilePlanned(`(?m)(?:qdrant_client|@qdrant/js-client-rest|qdrant/go-client)`)},
+	{componentName: "weaviate", componentType: "vector_store", pattern: rules.MustCompilePlanned(`(?m)(?:weaviate-client|weaviate-ts-client|weaviate\.io)`)},
+	{componentName: "chroma", componentType: "vector_store", pattern: rules.MustCompilePlanned(`(?m)(?:import\s+chromadb|from\s+chromadb|chromadb\b)`)},
+	{componentName: "lancedb", componentType: "vector_store", pattern: rules.MustCompilePlanned(`(?m)(?:import\s+lancedb|@lancedb/)`)},
+	{componentName: "pgvector", componentType: "vector_store", pattern: rules.MustCompilePlanned(`(?m)(?:pgvector\b|pgvector-go|pgvector/pgvector)`)},
+	{componentName: "milvus", componentType: "vector_store", pattern: rules.MustCompilePlanned(`(?m)(?:pymilvus|milvus-sdk-go|@zilliz/milvus2-sdk-node)`)},
 	// MCP.
-	{componentName: "mcp", componentType: "mcp_runtime", pattern: regexp.MustCompile(`(?m)(?:modelcontextprotocol|mcp-go|@modelcontextprotocol/sdk)`)},
+	{componentName: "mcp", componentType: "mcp_runtime", pattern: rules.MustCompilePlanned(`(?m)(?:modelcontextprotocol|mcp-go|@modelcontextprotocol/sdk)`)},
 }
 
 // extractFrameworkComponents returns one Component per framework detected
