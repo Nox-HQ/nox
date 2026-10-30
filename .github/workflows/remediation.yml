@@ -39,6 +39,6 @@ jobs:
       # upgrades, reading fix.outdated.directories/hold from .nox.yaml, and
       # refreshing base images and composite actions. Bump both lines together;
       # the sha256 is of nox_<version>_linux_amd64.tar.gz, checked on download.
-      nox-version: '1.55.5'
-      nox-sha256: '2e66b1126cc4e45a9b96f5a96e9e7de06b3c37d307b788ad56dd38ff37c14754'
+      nox-version: '1.55.6'
+      nox-sha256: 'e1779a83e841fa722034a67e2dee985149d8ded62a1e32d3a81260a7f1dedd28'
       outdated-fixes: true
