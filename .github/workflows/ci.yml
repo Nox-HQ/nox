@@ -488,6 +488,9 @@ jobs:
       - name: Fuzz secrets analyzer
         run: go test -run '^$' -fuzz '^FuzzScanArtifacts$' -fuzztime 30s -timeout 120s ./core/analyzers/secrets/
 
+      - name: Fuzz encoded-segment spans against the regex they replaced
+        run: go test -run '^$' -fuzz '^FuzzSpansMatchRegex$' -fuzztime 30s -timeout 120s ./core/analyzers/secrets/
+
   deps-audit:
     name: Nox dependency CVE audit
     runs-on: ubuntu-latest

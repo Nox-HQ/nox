@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Encoded-secret detection finds its base64 and hex candidates with a linear scan instead of two regular expressions. `[A-Za-z0-9+/]{40,}={0,2}` and `(?i)[0-9a-f]{40,}` were run over every file, and with no literal to skip ahead with Go's regexp tries a match from every byte; on crewAI the two cost 67 s of a 373 s scan profile, while decoding and rescanning everything they found cost 0.3 s. Every match of a single-class pattern is a maximal run of that class, so a byte scan reports exactly the same spans; the replaced expressions are kept as the test oracle, checked on a seeded corpus of 20,000 generated files and by a new fuzz target in CI. Measured on crewAI at 894898f8 in a 4-CPU Linux container, three interleaved A/B rounds on a loaded host: user CPU down 15-26%, every round faster; findings identical, fingerprints included (#736).
+
 ## [1.55.5] - 2026-10-29
 
 `--offline` no longer contacts the plugin registry, a retired required plugin is named on every scan, and absence rules cost a fraction of what they did (crewAI scan CPU down 13%). Dogfooded on nox and NOX Intelligence (online, answered by NOX Intelligence): findings identical to 1.55.4, fingerprints included.
