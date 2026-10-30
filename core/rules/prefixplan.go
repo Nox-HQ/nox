@@ -913,25 +913,30 @@ func indexAll(content []byte, lp literalPrefix) []int {
 			from += i + 1
 		}
 	}
-	// Case-insensitive ASCII: walk the occurrences of each case of the first
-	// byte (IndexByte is vectorised), keeping the next position of each so
-	// neither is rescanned, and confirm the rest with EqualFold.
-	lo, up := needle[0], needle[0]
+	// Case-insensitive ASCII: walk the occurrences of each case of one byte of
+	// the needle (IndexByte is vectorised), keeping the next position of each
+	// so neither is rescanned, and confirm the window around it with
+	// EqualFold. Every occurrence has that byte at the same offset, so each is
+	// found exactly once and in order. The byte is the needle's rarest, not its
+	// first: `secret` is walked from its `c`, not from every `s` and `S` in
+	// the file (#736).
+	k := rarestByte(needle)
+	lo, up := needle[k], needle[k]
 	if lo >= 'a' && lo <= 'z' {
 		up = lo - 'a' + 'A'
 	}
-	nextLo := nextByte(content, 0, lo)
+	nextLo := nextByte(content, k, lo)
 	nextUp := nextLo
 	if up != lo {
-		nextUp = nextByte(content, 0, up)
+		nextUp = nextByte(content, k, up)
 	}
 	for nextLo >= 0 || nextUp >= 0 {
 		i := nextLo
 		if i < 0 || (nextUp >= 0 && nextUp < i) {
 			i = nextUp
 		}
-		if i+len(needle) <= len(content) && bytes.EqualFold(content[i:i+len(needle)], needle) {
-			out = append(out, i)
+		if start := i - k; start+len(needle) <= len(content) && bytes.EqualFold(content[start:start+len(needle)], needle) {
+			out = append(out, start)
 		}
 		if i == nextLo {
 			nextLo = nextByte(content, i+1, lo)
@@ -941,6 +946,36 @@ func indexAll(content []byte, lp literalPrefix) []int {
 		}
 	}
 	return out
+}
+
+// byteRank orders bytes by how often they occur in source and config files,
+// most often first; a byte not listed ranks after all that are. Letters are
+// listed in lower case and rank for both cases. It only picks which byte of
+// a needle to search for, so a poor guess costs time, never a result.
+var byteRank = func() (rank [256]int) {
+	const common = " e\nt\"a.o_si:rn,l/-c=d()u\tp0m'1h2g{}fb#[]y;3w4v5<>89x67k*+jq@z&|?!%$\\~^`"
+	for c := range rank {
+		rank[c] = len(common)
+	}
+	for i := len(common) - 1; i >= 0; i-- {
+		rank[common[i]] = i
+		if c := common[i]; c >= 'a' && c <= 'z' {
+			rank[c-'a'+'A'] = i
+		}
+	}
+	return rank
+}()
+
+// rarestByte returns the offset of the needle's least common byte, the first
+// such when several tie.
+func rarestByte(needle []byte) int {
+	k := 0
+	for i := 1; i < len(needle); i++ {
+		if byteRank[needle[i]] > byteRank[needle[k]] {
+			k = i
+		}
+	}
+	return k
 }
 
 // nextByte returns the offset of the first c at or after from, or -1.
