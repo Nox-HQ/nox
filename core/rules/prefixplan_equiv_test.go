@@ -40,7 +40,7 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 			continue
 		}
 		total++
-		if _, ok := rules.PrefixFindAll(pattern, []byte("x"), false); !ok {
+		if _, ok := rules.PrefixFindAll(nil, pattern, []byte("x"), false); !ok {
 			continue
 		}
 		var kws [][]byte
@@ -91,6 +91,9 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 			}
 			files++
 			lower := bytes.ToLower(content)
+			// One cache for the file, shared by every rule, as ScanFile
+			// shares it: a literal one rule searched must answer the next.
+			var lits rules.FileLiterals
 			for _, c := range planned {
 				// Only where the engine would run the rule: its keyword
 				// pre-filter passes. That is every case the fast path can
@@ -101,7 +104,7 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 				}
 				// The submatch form carries the whole-match pair too, so it
 				// checks both shapes the matcher asks for.
-				got, ok := rules.PrefixFindAll(c.re.String(), content, true)
+				got, ok := rules.PrefixFindAll(&lits, c.re.String(), content, true)
 				if !ok {
 					continue // a fold outlier in this file: the full scan runs
 				}
