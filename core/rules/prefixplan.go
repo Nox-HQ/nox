@@ -374,7 +374,7 @@ func buildOptionalLeadPlan(pattern string, body *syntax.Regexp) *prefixPlan {
 	if !ok {
 		return nil
 	}
-	prefixes := append(head, tail...)
+	prefixes := slices.Concat(head, tail)
 	for _, lp := range prefixes {
 		if len(lp.text) < 2 {
 			return nil
