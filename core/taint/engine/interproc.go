@@ -281,7 +281,21 @@ func summaryEqual(a, b *funcSummary) bool {
 // function has none. A return is source-returning when it names a source
 // directly (`return $_GET['q']`) or returns a variable the unseeded pass
 // leaves tainted by a real source.
+//
+// Most functions are answered before that pass, which is the cost here (2.0 s
+// of a 58 s crewAI scan profile): one with no return, and one with a return
+// that names no source and reads no variable (`return None`, `return 1`), can
+// only be nil whatever the pass finds. On crewAI that is 12,184 of 15,618
+// functions.
 func (e *StructuralEngine) getterSource(lang string, u *taint.Unit, summaries map[string]*funcSummary) *taintInfo {
+	if !e.mayReturnASource(lang, u) {
+		return nil
+	}
+	return e.passGetterSource(lang, u, summaries)
+}
+
+// passGetterSource is getterSource answered by the unseeded pass alone.
+func (e *StructuralEngine) passGetterSource(lang string, u *taint.Unit, summaries map[string]*funcSummary) *taintInfo {
 	res := e.forwardPass(lang, u, map[string]taintInfo{}, summaries)
 	var first *taintInfo
 	returns := 0
@@ -314,4 +328,23 @@ func (e *StructuralEngine) getterSource(lang string, u *taint.Unit, summaries ma
 		return nil
 	}
 	return first
+}
+
+// mayReturnASource reports whether u has a return, and every return either
+// names a source or reads a variable the pass could have tainted.
+func (e *StructuralEngine) mayReturnASource(lang string, u *taint.Unit) bool {
+	returns := 0
+	for i := range u.Stmts {
+		st := &u.Stmts[i]
+		if !st.IsReturn {
+			continue
+		}
+		returns++
+		if len(st.Returns) == 0 {
+			if _, ok := e.resolveSource(lang, st); !ok {
+				return false
+			}
+		}
+	}
+	return returns > 0
 }
