@@ -93,6 +93,10 @@ type prefixPlan struct {
 	// DATA-007's `\b[A-Z]{2}\d{2}\s?…` gives [A-Z], [0-9], [0-9]. A first
 	// byte not followed by bytes of these sets cannot start a match.
 	follow []*[256]bool
+	// back is set when the pattern opens with runs of pairwise disjoint
+	// classes before a literal: each start is found by walking back from an
+	// occurrence of the literal (see backWalk).
+	back *backWalk
 	// ctx is `^(?s:.)(?:pattern)`, set when an assertion at a match's start
 	// must see the byte before it: the match is tried from one byte earlier,
 	// that byte consumed, so `\b` there is decided as the full scan decides it
@@ -200,7 +204,7 @@ func buildPlan(pattern string) *prefixPlan {
 		if p := buildLeadPlan(pattern); p != nil {
 			return p
 		}
-		return buildFirstBytePlan(pattern, re, body, leadBoundary)
+		return withBackWalk(buildFirstBytePlan(pattern, re, body, leadBoundary), pattern, re, body, leadBoundary)
 	}
 	if leadBoundary {
 		for _, p := range prefixes {
@@ -212,8 +216,9 @@ func buildPlan(pattern string) *prefixPlan {
 	for _, p := range prefixes {
 		if len(p.text) < 2 {
 			// A one-character literal is too common to search for as a word,
-			// but `4|5[1-5]` is a set of first bytes like any other.
-			return buildFirstBytePlan(pattern, re, body, leadBoundary)
+			// but `4|5[1-5]` is a set of first bytes like any other; and
+			// DATA-001's `["'=:]` start is better found back from its `@`.
+			return withBackWalk(buildFirstBytePlan(pattern, re, body, leadBoundary), pattern, re, body, leadBoundary)
 		}
 	}
 	anchored, err := regexp.Compile(`^(?:` + pattern + `)`)
@@ -269,7 +274,7 @@ func lineLiterals(subs []*syntax.Regexp, flags syntax.Flags) ([]literalPrefix, b
 		if len(rest.Sub) == 1 {
 			rest = rest.Sub[0]
 		}
-		if p := buildPlan(rest.String()); p != nil && p.lead == nil && p.first == nil && !p.line {
+		if p := buildPlan(rest.String()); p != nil && p.lead == nil && p.first == nil && p.back == nil && !p.line {
 			return p.prefixes, true
 		}
 		alt := subs[k]
@@ -484,7 +489,7 @@ func buildLeadPlan(pattern string) *prefixPlan {
 	// run, not before the literal; one that has its own run, opens with a
 	// class rather than literals, or with an optional group (ctx), is not
 	// this shape.
-	if p == nil || p.leadBoundary || p.lead != nil || p.first != nil || p.ctx != nil {
+	if p == nil || p.leadBoundary || p.lead != nil || p.first != nil || p.ctx != nil || p.back != nil {
 		return nil
 	}
 	if boundary {
@@ -628,6 +633,224 @@ func runOf(re *syntax.Regexp) (classRun, bool) {
 		return classRun{class: []rune{sub.Rune[0], sub.Rune[0]}, max: limit}, true
 	}
 	return classRun{}, false
+}
+
+// backWalk is a pattern `E1…Ek L R`: runs E of classes no two of which share
+// a rune, then a literal L. DATA-001's `(?i)["'=:]\s*[a-zA-Z0-9._%+\-]+@…`
+// is one, whose quote-or-`=` start is too common to try at every
+// occurrence while its `@` is rare.
+//
+// A match's start is determined by the occurrence of L that follows its
+// runs. Walking back from it, the last run must take every rune of its class
+// up to its maximum: a rune left over could belong to no other run, since no
+// other class holds it. The same holds for each run before, so the walk gives
+// the one start that occurrence can have, or none when a run falls short of
+// its minimum. The search resumes where the last match ended, so the walk
+// stops there too: `[A-C0-2]*-[A-C0-2]+` finds `-122` right after `2-BB2`,
+// its run empty. Trying the occurrences in order with the anchored match
+// then finds what the full scan finds, because the starts rise with the
+// occurrences. No rune of the literal may be in a run's class: a walk from a
+// later occurrence then cannot pass an earlier one, which keeps that ordering
+// plain. (It is a conservative restriction; no failing case is known
+// without it.) Walking back needs rune boundaries that agree with the
+// forward match, so the plan is used only on valid UTF-8.
+type backWalk struct {
+	runs []backRun // in pattern order
+	lit  literalPrefix
+	// foldLetter: the literal is case-insensitive and holds a letter, so a
+	// file with a fold outlier could spell it without the ASCII bytes.
+	foldLetter bool
+}
+
+type backRun struct {
+	class    []rune
+	min, max int // max -1 for no bound
+}
+
+// withBackWalk adds a back-walk to the first-byte plan fp when the pattern
+// has one, or returns the back-walk plan alone when fp is nil. Both find
+// every start; per file, matchIn takes the back-walk's when they are few
+// enough and the file valid UTF-8, and the first bytes otherwise.
+func withBackWalk(fp *prefixPlan, pattern string, re, body *syntax.Regexp, leadBoundary bool) *prefixPlan {
+	if leadBoundary {
+		return fp
+	}
+	bp := buildBackPlan(pattern, re, body)
+	switch {
+	case bp == nil:
+		return fp
+	case fp == nil:
+		return bp
+	}
+	fp.back = bp.back
+	return fp
+}
+
+// buildBackPlan returns the plan for a pattern opening with disjoint class
+// runs before a literal (see backWalk), or nil.
+func buildBackPlan(pattern string, re, _ *syntax.Regexp) *prefixPlan {
+	// Parsed again, unsimplified: Simplify writes `[a-z]{1,3}` out as nested
+	// optional copies, and the walk needs the run and its bounds.
+	body, err := syntax.Parse(pattern, syntax.Perl)
+	if err != nil {
+		return nil
+	}
+	for body.Op == syntax.OpCapture {
+		body = body.Sub[0]
+	}
+	if body.Op != syntax.OpConcat {
+		return nil
+	}
+	var runs []backRun
+	k := 0
+	for ; k < len(body.Sub); k++ {
+		run, ok := backRunOf(body.Sub[k])
+		if !ok {
+			break
+		}
+		runs = append(runs, run)
+	}
+	if len(runs) == 0 || k == len(body.Sub) {
+		return nil
+	}
+	lits, ok := leadingLiterals(concatOf(body.Sub[k:], body.Flags))
+	if !ok || len(lits) != 1 {
+		return nil
+	}
+	for i := range runs {
+		for j := i + 1; j < len(runs); j++ {
+			if classesOverlap(runs[i].class, runs[j].class) {
+				return nil
+			}
+		}
+	}
+	anchored, err := regexp.Compile(`^(?:` + pattern + `)`)
+	if err != nil {
+		return nil
+	}
+	lp := lits[0]
+	for _, run := range runs {
+		for _, r := range lp.text {
+			if inClass(r, run.class) || (lp.fold && inClass(unicode.ToUpper(r), run.class)) {
+				return nil
+			}
+		}
+	}
+	foldLetter := lp.fold && strings.ContainsFunc(lp.text, func(r rune) bool { return r >= 'a' && r <= 'z' })
+	return &prefixPlan{anchored: anchored, maxLen: maxBytes(re), back: &backWalk{runs: runs, lit: lp, foldLetter: foldLetter}}
+}
+
+// backRunOf reports an element that is a run of one class, or a repeated
+// rune with no other case: `C`, `C*`, `C+`, `C?`, `C{n,m}`, `x?`. A bare
+// literal is not a run: it is where the runs end.
+func backRunOf(re *syntax.Regexp) (backRun, bool) {
+	for re.Op == syntax.OpCapture {
+		re = re.Sub[0]
+	}
+	if re.Op == syntax.OpLiteral {
+		return backRun{}, false
+	}
+	lo, hi := 1, 1
+	switch re.Op {
+	case syntax.OpStar:
+		lo, hi, re = 0, -1, re.Sub[0]
+	case syntax.OpPlus:
+		lo, hi, re = 1, -1, re.Sub[0]
+	case syntax.OpQuest:
+		lo, hi, re = 0, 1, re.Sub[0]
+	case syntax.OpRepeat:
+		lo, hi, re = re.Min, re.Max, re.Sub[0]
+	}
+	switch {
+	case re.Op == syntax.OpCharClass && len(re.Rune) > 0:
+		return backRun{class: re.Rune, min: lo, max: hi}, true
+	case re.Op == syntax.OpLiteral && len(re.Rune) == 1 && re.Flags&syntax.FoldCase == 0:
+		return backRun{class: []rune{re.Rune[0], re.Rune[0]}, min: lo, max: hi}, true
+	}
+	return backRun{}, false
+}
+
+// classesOverlap reports whether two parsed classes share a rune.
+func classesOverlap(a, b []rune) bool {
+	for i := 0; i+1 < len(a); i += 2 {
+		for j := 0; j+1 < len(b); j += 2 {
+			if a[i] <= b[j+1] && b[j] <= a[i+1] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// occurrences returns the literal's offsets that have a start, and those
+// starts, walking back to the start of the content. The starts estimate the
+// cost; findAll walks again, from where the last match ended.
+func (w *backWalk) occurrences(lits *fileLiterals, content []byte) (ts, ss []int) {
+	for _, t := range lits.indexAll(content, w.lit) {
+		if s := w.startBefore(content, t, 0); s >= 0 {
+			ts = append(ts, t)
+			ss = append(ss, s)
+		}
+	}
+	return ts, ss
+}
+
+// findAll is prefixPlan.findAll from the literal's occurrences ts.
+func (w *backWalk) findAll(p *prefixPlan, content []byte, ts []int, submatch bool) [][]int {
+	var out [][]int
+	resume := 0
+	for _, t := range ts {
+		if t < resume {
+			continue
+		}
+		s := w.startBefore(content, t, resume)
+		if s < 0 {
+			continue
+		}
+		loc := p.anchored.FindSubmatchIndex(content[s:])
+		if loc == nil {
+			continue
+		}
+		for i := range loc {
+			if loc[i] >= 0 {
+				loc[i] += s
+			}
+		}
+		if !submatch {
+			loc = loc[:2]
+		}
+		out = append(out, loc)
+		resume = loc[1]
+	}
+	return out
+}
+
+// startBefore walks back from t over the runs, last first, each taking every
+// rune of its class up to its maximum and none before floor, and returns
+// where the first begins, or -1 when a run is shorter than its minimum.
+func (w *backWalk) startBefore(content []byte, t, floor int) int {
+	pos := t
+	for i := len(w.runs) - 1; i >= 0; i-- {
+		run := w.runs[i]
+		n := 0
+		for (run.max < 0 || n < run.max) && pos > floor {
+			r, size := utf8.DecodeLastRune(content[floor:pos])
+			if !inClass(r, run.class) {
+				break
+			}
+			pos -= size
+			n++
+		}
+		if n < run.min {
+			return -1
+		}
+	}
+	return pos
+}
+
+// usable reports whether the walk is exact for this content.
+func (w *backWalk) usable(lits *fileLiterals, content []byte) bool {
+	return lits.validUTF8(content) && (!w.foldLetter || !lits.hasFoldOutlier(content))
 }
 
 // maxFirstBytes bounds how many distinct bytes may start a match for the
@@ -1078,6 +1301,9 @@ func (p *prefixPlan) usableIn(lits *fileLiterals, content []byte) bool {
 	if p.lead != nil && !lits.validUTF8(content) {
 		return false
 	}
+	if p.back != nil && p.first == nil {
+		return p.back.usable(lits, content)
+	}
 	for _, lp := range p.prefixes {
 		if lp.fold {
 			return !lits.hasFoldOutlier(content)
@@ -1218,17 +1444,15 @@ func (p *prefixPlan) matchIn(lits *fileLiterals, content []byte, submatch bool) 
 	if !p.usableIn(lits, content) {
 		return nil, false
 	}
-	var starts []int
-	if p.first != nil {
-		var ok bool
-		if starts, ok = p.firstCandidates(content, len(content)/maxFirstDensity+1); !ok {
+	if ts, ss, ok := p.backStarts(lits, content, len(content)/maxFirstDensity+1); ok {
+		if p.cost(content, ss) > len(content) {
 			return nil, false
 		}
-	} else {
-		starts = p.candidates(lits, content)
-		if p.line {
-			starts = lineStarts(content, starts)
-		}
+		return p.back.findAll(p, content, ts, submatch), true
+	}
+	starts, ok := p.starts(lits, content, len(content)/maxFirstDensity+1)
+	if !ok {
+		return nil, false
 	}
 	if p.cost(content, starts) > len(content) {
 		return nil, false
@@ -1301,15 +1525,43 @@ func (p *prefixPlan) cost(content []byte, starts []int) int {
 
 // findAll is match without the cost check, for tests.
 func (p *prefixPlan) findAll(lits *fileLiterals, content []byte, submatch bool) [][]int {
-	if p.first != nil {
-		starts, _ := p.firstCandidates(content, -1)
-		return p.findAllFrom(content, starts, submatch)
+	if ts, _, ok := p.backStarts(lits, content, -1); ok {
+		return p.back.findAll(p, content, ts, submatch)
+	}
+	starts, _ := p.starts(lits, content, -1)
+	return p.findAllFrom(content, starts, submatch)
+}
+
+// backStarts returns the back-walk's occurrences and their starts, or false
+// when the plan has none, it is not exact for this content, or it has more
+// than limit (-1: no limit) and another path remains.
+func (p *prefixPlan) backStarts(lits *fileLiterals, content []byte, limit int) (ts, ss []int, ok bool) {
+	if p.back == nil || !p.back.usable(lits, content) {
+		return nil, nil, false
+	}
+	ts, ss = p.back.occurrences(lits, content)
+	if limit >= 0 && len(ts) > limit && p.first != nil {
+		return nil, nil, false
+	}
+	return ts, ss, true
+}
+
+// starts returns the candidate starts of every path but the back-walk, in
+// ascending order. A first-byte plan gives up -- false, take the scan --
+// past limit starts (-1: no limit), as does a back-walk plan backStarts
+// refused.
+func (p *prefixPlan) starts(lits *fileLiterals, content []byte, limit int) ([]int, bool) {
+	switch {
+	case p.first != nil:
+		return p.firstCandidates(content, limit)
+	case p.back != nil:
+		return nil, false
 	}
 	starts := p.candidates(lits, content)
 	if p.line {
 		starts = lineStarts(content, starts)
 	}
-	return p.findAllFrom(content, starts, submatch)
+	return starts, true
 }
 
 // findAllFrom returns what re.FindAllSubmatchIndex(content, -1) would, using
