@@ -501,12 +501,27 @@ func isSpaceByte(c byte) bool {
 }
 
 // stripLeadingBoundary returns the pattern without a leading `\b`, and whether
-// there was one. Only the form `\b` + rest at the top of the pattern (through
-// capture groups) is recognised; `\b` inside some alternatives only, or `\B`,
-// leaves the pattern as it is, and leadingLiterals then declines it.
+// there was one. The form `\b` + rest at the top of the pattern (through
+// capture groups) is recognised, and so is an alternation every branch of
+// which opens with `\b`: SEC-254's `(?:\bkind:…|\bdata:…)`, which the parser
+// does not factor. A boundary is a property of the position, so a match at s
+// of any branch needs `\b` at s, and given it the pattern is the alternation
+// of what follows. `\b` inside some alternatives only, or `\B`, leaves the
+// pattern as it is, and leadingLiterals then declines it.
 func stripLeadingBoundary(re *syntax.Regexp) (*syntax.Regexp, bool) {
 	for re.Op == syntax.OpCapture {
 		re = re.Sub[0]
+	}
+	if re.Op == syntax.OpAlternate {
+		subs := make([]*syntax.Regexp, len(re.Sub))
+		for i, sub := range re.Sub {
+			rest, ok := stripLeadingBoundary(sub)
+			if !ok {
+				return re, false
+			}
+			subs[i] = rest
+		}
+		return &syntax.Regexp{Op: syntax.OpAlternate, Flags: re.Flags, Sub: subs}, true
 	}
 	if re.Op != syntax.OpConcat || len(re.Sub) < 2 || re.Sub[0].Op != syntax.OpWordBoundary {
 		return re, false
