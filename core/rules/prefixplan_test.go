@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"math/rand"
 	"reflect"
 	"regexp"
 	"strings"
@@ -177,6 +178,13 @@ func TestFirstBytePathEdgeCases(t *testing.T) {
 		{`\b[A-Z]{2}\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{0,2}\b`, "DE89 3704 0044 0532 0130 00 xDE89370400440532013000 GB82WEST"},
 		{`key.*|[0-9]+`, "a key here 123 and k9 key"},
 		{`[0-9]+[a-z]`, "12345678x 99 7y"},
+		// The fixed opening (follow): positions cut off by the end of the
+		// file, a literal inside it, a capture, a repeat with room to vary.
+		{`[A-Z]{2}[0-9]{2}`, "AB12 A1 AB1 XY9"},
+		{`[A-Z]{2}-[0-9]+`, "AB-1 AB- A-1 ZZ-99"},
+		{`([A-Z][0-9]){2}[a-z]?`, "A1B2c A1B A1B2"},
+		{`[A-Z]{1,3}[0-9]`, "A1 ABC2 ABCD3 AB"},
+		{`[0-9](?i:x)[0-9]`, "1X2 1x2 1y2"},
 	} {
 		re := regexp.MustCompile(c.pattern)
 		want := re.FindAllSubmatchIndex([]byte(c.content), -1)
@@ -205,6 +213,7 @@ func TestFirstBytePathDeclines(t *testing.T) {
 		`(?m)^[0-9]{3}`,     // start-of-line anchor
 		`[0-9]*`,            // matches the empty string
 		`abc[0-9]`,          // a literal prefix, which regexp already skips to
+		`\b[A-C0-2]*`,       // matches "" at a boundary, which no first byte marks
 	} {
 		if q := planFor(p); q != nil && q.first != nil {
 			t.Errorf("%q got a first-byte plan", p)
@@ -216,12 +225,70 @@ func TestFirstBytePathDeclines(t *testing.T) {
 // long as the file, and the full scan's result is returned.
 func TestDenseFirstBytesTakeTheScan(t *testing.T) {
 	pattern := `[0-9]{3}-[0-9]{4}`
-	content := []byte(strings.Repeat("0123456789", 1000) + " 555-1234")
+	// Every "123-4567" fits the pattern's fixed opening, so each is a
+	// candidate: one in eight bytes.
+	content := []byte(strings.Repeat("123-4567", 1250) + " 555-1234")
 	p := planFor(pattern)
 	if p == nil || p.first == nil {
 		t.Fatalf("%q: no first-byte plan", pattern)
 	}
 	if _, ok := p.match(content, false); ok {
 		t.Errorf("a file of digits took the first-byte plan")
+	}
+}
+
+// A first-byte plan with a fixed opening drops a candidate whose next bytes
+// do not fit it. Seeded patterns and contents: the plan must find what the
+// full scan finds wherever it applies.
+func TestFirstBytePathFollowMatchesFindAll(t *testing.T) {
+	atoms := []string{`[A-C]`, `[0-2]`, `x`, `-`, `[A-C0-2]`}
+	reps := []string{"", "", "{2}", "{1,2}", "+", "?", "*"}
+	r := rand.New(rand.NewSource(957))
+	followed := 0
+	for range 3000 {
+		var b strings.Builder
+		if r.Intn(3) == 0 {
+			b.WriteString(`\b`)
+		}
+		for n := 1 + r.Intn(5); n > 0; n-- {
+			atom := atoms[r.Intn(len(atoms))]
+			if r.Intn(6) == 0 {
+				atom = "(" + atom + atoms[r.Intn(len(atoms))] + ")"
+			}
+			b.WriteString(atom + reps[r.Intn(len(reps))])
+		}
+		pattern := b.String()
+		p := planFor(pattern)
+		if p == nil || p.first == nil {
+			continue
+		}
+		if len(p.follow) > 0 {
+			followed++
+		}
+		re := regexp.MustCompile(pattern)
+		for range 5 {
+			content := randomBytes(r, r.Intn(40), "ABC012x- \n")
+			want := re.FindAllSubmatchIndex(content, -1)
+			if got := p.findAll(nil, content, true); !reflect.DeepEqual(got, want) {
+				t.Fatalf("%q on %q: plan %v, FindAll %v", pattern, content, got, want)
+			}
+		}
+	}
+	if followed < 300 {
+		t.Fatalf("only %d patterns had a fixed opening; the comparison is not exercising it", followed)
+	}
+}
+
+// A first byte too near the end of the file for the fixed opening to fit is
+// not a candidate. The anchored match would reject it anyway; counted, it
+// would push a file over the density limit for nothing.
+func TestFirstBytePathDropsACandidateCutOffByTheEnd(t *testing.T) {
+	p := planFor(`[A-Z]{2}[0-9]{2}`)
+	if p == nil || len(p.follow) != 3 {
+		t.Fatalf("test premise: want a first-byte plan with three follow positions, got %+v", p)
+	}
+	starts, _ := p.firstCandidates([]byte("AB12 AB1"), -1)
+	if !reflect.DeepEqual(starts, []int{0}) {
+		t.Errorf("candidates %v, want [0]: the AB1 at the end cannot start a match", starts)
 	}
 }
