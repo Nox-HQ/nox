@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A literal-prefix plan drops an occurrence of its literal that the rest of the pattern cannot start after. When the plan's literals are exactly what the pattern's opening matches, a match is one of them followed by a match of the rest, so the byte after the literal must be one the rest can start with: whitespace, `=` or `:` for DATA-005's `(?i)(?:ip|host|server|addr)\s*[=:]…`. `ip` occurs all over prose and data, and its candidates outran the plan's cost limit on 146 crewAI files, which then took the full scan; with the filter it declines on 2. The data analyzer over all 30,301 crewAI files is 10-23% faster in each of three interleaved rounds against main, with identical findings; DATA-007, AI-031 and SEC-057 gain too. The plan-equivalence test passed on all of crewAI, and a seeded test compares filtered plans with `FindAll`, including literals that are prefixes of one another (#736).
+
 ## [1.55.9] - 2026-10-31
 
 Scans cost about 12% less CPU: on crewAI, median user CPU fell from 74.1 s to 65.0 s against 1.55.8 (4 interleaved rounds in a 4-CPU Linux container on a loaded host, every round 7-25% lower), with findings, fingerprints and the AI inventory identical in every run. Short keywords are searched from their first byte, entropy candidates come from a byte scan, line-anchored patterns take the literal-prefix path, the taint engine skips its getter pass where the answer can only be no, Python imports resolve through an index (a cost that grew with imports times files: 39.4 s to 0.8 s on a 10,000-file tree), and the literal index rolls its window. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.8, fingerprints included.

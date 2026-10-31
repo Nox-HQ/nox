@@ -6,6 +6,7 @@ import (
 	"regexp/syntax"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"unicode"
 	"unicode/utf8"
@@ -92,6 +93,11 @@ type prefixPlan struct {
 	// DATA-007's `\b[A-Z]{2}\d{2}\s?…` gives [A-Z], [0-9], [0-9]. A first
 	// byte not followed by bytes of these sets cannot start a match.
 	follow []*[256]bool
+	// after, for a plan whose prefixes are exactly what the pattern's opening
+	// literals match, holds the bytes the rest of the pattern can start with:
+	// DATA-005's `(?i)(?:ip|host|server|addr)\s*[=:]…` gives whitespace, `=`
+	// and `:`. An occurrence followed by any other byte cannot start a match.
+	after *[256]bool
 	// line is set for a pattern `(?m)^P R` where P cannot match a newline and
 	// R opens with prefixes: the candidates are the starts of the lines the
 	// prefixes occur on (see buildLinePlan).
@@ -206,7 +212,7 @@ func buildPlan(pattern string) *prefixPlan {
 	if err != nil {
 		return nil
 	}
-	return &prefixPlan{prefixes: prefixes, anchored: anchored, leadBoundary: leadBoundary, maxLen: maxBytes(re)}
+	return &prefixPlan{prefixes: prefixes, anchored: anchored, leadBoundary: leadBoundary, maxLen: maxBytes(re), after: afterPrefixes(body, prefixes)}
 }
 
 // buildLinePlan returns the plan for a line-anchored pattern, `(?m)^P R`, or
@@ -361,6 +367,102 @@ func buildLeadPlan(pattern string) *prefixPlan {
 		maxLen:   maxBytes(re),
 		lead:     &leadRun{runs: runs, anchored: anchored, boundary: boundary},
 	}
+}
+
+// afterPrefixes returns the bytes that can follow a prefix in a match, or nil
+// when that is not known. It is known when body is a concatenation whose
+// first element (or first two) matches exactly the prefixes, each a whole
+// string: then a match is one of them followed by a match of the rest, which
+// cannot be empty and starts with one of firstBytes' bytes. ASCII case
+// folding in the rest, or any byte past ASCII, leaves it unknown.
+func afterPrefixes(body *syntax.Regexp, prefixes []literalPrefix) *[256]bool {
+	for body.Op == syntax.OpCapture {
+		body = body.Sub[0]
+	}
+	if body.Op != syntax.OpConcat {
+		return nil
+	}
+	for k := 1; k < len(body.Sub) && k <= 2; k++ {
+		head, ok := literalSet(&syntax.Regexp{Op: syntax.OpConcat, Sub: body.Sub[:k]})
+		if !ok || !samePrefixes(head, prefixes) {
+			continue
+		}
+		rest := &syntax.Regexp{Op: syntax.OpConcat, Sub: body.Sub[k:]}
+		var set [256]bool
+		if canBeEmpty(rest) || !firstBytes(rest, &set) {
+			return nil
+		}
+		return &set
+	}
+	return nil
+}
+
+// literalSet returns every string re matches when that is a finite set of
+// ASCII literals (literals, captures, alternations and concatenations of
+// them), lower-cased where folded.
+func literalSet(re *syntax.Regexp) ([]literalPrefix, bool) {
+	switch re.Op {
+	case syntax.OpLiteral:
+		s := string(re.Rune)
+		if s == "" || !isASCII(s) {
+			return nil, false
+		}
+		fold := re.Flags&syntax.FoldCase != 0
+		if fold {
+			s = strings.ToLower(s)
+		}
+		return []literalPrefix{{text: s, fold: fold}}, true
+	case syntax.OpCapture:
+		return literalSet(re.Sub[0])
+	case syntax.OpAlternate:
+		var out []literalPrefix
+		for _, sub := range re.Sub {
+			set, ok := literalSet(sub)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, set...)
+		}
+		return out, true
+	case syntax.OpConcat:
+		out := []literalPrefix{{}}
+		for _, sub := range re.Sub {
+			set, ok := literalSet(sub)
+			if !ok || len(out)*len(set) > maxClassLiterals*maxClassLiterals {
+				return nil, false
+			}
+			var next []literalPrefix
+			for _, a := range out {
+				for _, b := range set {
+					fold := a.fold || b.fold
+					text := a.text + b.text
+					if fold {
+						text = strings.ToLower(text)
+					}
+					next = append(next, literalPrefix{text: text, fold: fold})
+				}
+			}
+			out = next
+		}
+		return out, true
+	}
+	return nil, false
+}
+
+// samePrefixes reports whether a and b hold the same literals.
+func samePrefixes(a, b []literalPrefix) bool {
+	in := map[literalPrefix]bool{}
+	for _, lp := range a {
+		in[lp] = true
+	}
+	seen := map[literalPrefix]bool{}
+	for _, lp := range b {
+		if !in[lp] {
+			return false
+		}
+		seen[lp] = true
+	}
+	return len(seen) == len(in)
 }
 
 // wordClass is `\w` as parsed ranges.
@@ -1203,6 +1305,11 @@ func (p *prefixPlan) candidates(lits *fileLiterals, content []byte) []int {
 	var out []int
 	for _, lp := range p.prefixes {
 		for _, at := range lits.indexAll(content, lp) {
+			if p.after != nil {
+				if end := at + len(lp.text); end >= len(content) || !p.after[content[end]] {
+					continue // the rest of the pattern cannot start here
+				}
+			}
 			if _, dup := seen[at]; !dup {
 				seen[at] = struct{}{}
 				out = append(out, at)
