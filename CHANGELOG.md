@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.10] - 2026-10-31
+
+Three rules that took the full regex scan now take the literal-prefix path, timed directly over crewAI: MCP-011 63 s to 31 s on the 9,184 files holding its keywords, IAC-351 4.9 s to 2.3 s on 8,423, and DATA-005's plan, which declined on 146 files, declines on 2 (the data analyzer 10-23% faster). A whole-scan A/B against 1.55.9 (4 interleaved rounds in a 4-CPU Linux container, host load up to 23) did not resolve a difference: medians 53.5 s and 54.1 s user CPU, rounds from +6% to -19%. Findings, fingerprints and the AI inventory were identical in every run. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.9, fingerprints included.
+
 ### Changed
 
 - A pattern that opens with an optional group before its literals takes the literal-prefix path, from the group's literals and the rest's together: a match starts with one when the group is taken and with the other when it is not. MCP-011's `(?i)(?:(?:\bnot|\bnever|n't|\bwithout)\s+)?(?:exfiltrate|send|…)` is this shape, with `\b` opening some of the group's branches and not others. Rather than track a boundary per literal, the anchored match is tried from the byte before the candidate, which it consumes, so every assertion at the start sees the byte the full scan sees. MCP-011 had no plan; over the 9,184 crewAI files holding one of its keywords it takes 31 s instead of 63 s, with the same 28 matches. The plan-equivalence test passed on all 30,992 crewAI files (89,712 rule/file pairs with matches, all identical); findings, fingerprints and the AI inventory are identical on crewAI. A seeded test compares these plans with `FindAll`, putting literals after word bytes, at offset 0 and after invalid UTF-8; trying the match from the candidate itself, or leaving out the group's literals, fails it (#736).
