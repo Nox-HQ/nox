@@ -18,12 +18,9 @@ type Engine struct {
 	// optIn holds the IDs of OptIn rules this scan enabled. An OptIn rule not
 	// in it is skipped outright, so a rule nobody enabled costs nothing.
 	optIn map[string]bool
-	// keywords answers every rule's keyword pre-filter in one pass per file
-	// (see keywordindex.go). Built on first use, and again if rules were
-	// added since.
-	keywords atomic.Pointer[keywordIndex]
-	// literals finds every plan's literals in one pass per file (see
-	// literalindex.go), built like keywords.
+	// literals finds every plan's literals, and answers every rule's keyword
+	// pre-filter, in one pass per file (see literalindex.go). Built on first
+	// use, and again if rules were added since.
 	literals atomic.Pointer[literalIndex]
 }
 
@@ -35,17 +32,6 @@ func (e *Engine) literalIndex(rules []*Rule) *literalIndex {
 	}
 	x := newLiteralIndex(rules)
 	e.literals.Store(x)
-	return x
-}
-
-// keywordIndex returns the index for rules, building it when the rule set has
-// grown since the last build.
-func (e *Engine) keywordIndex(rules []*Rule) *keywordIndex {
-	if x := e.keywords.Load(); x != nil && x.rules == len(rules) {
-		return x
-	}
-	x := newKeywordIndex(rules)
-	e.keywords.Store(x)
 	return x
 }
 
@@ -85,7 +71,8 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 
 	var out []findings.Finding
 
-	// Pre-compute a lowercase copy of content for keyword filtering.
+	// A lowercase copy of content, for KeywordTokens rules and for a file the
+	// one pass cannot answer the keyword pre-filters for.
 	var contentLower []byte
 	// Lazily split lines for the comment / context precision filters.
 	var lines []string
@@ -95,7 +82,6 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 	// Which keywords the file contains, computed once when the first rule
 	// with keywords gets that far.
 	var present []bool
-	var index *keywordIndex
 	// What every rule can share about this file, worked out at most once.
 	var scope fileScope
 	all := e.rules.Rules()
@@ -109,7 +95,7 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 		}
 
 		if len(rule.Keywords) > 0 {
-			if contentLower == nil {
+			if contentLower == nil && rule.KeywordTokens {
 				contentLower = bytes.ToLower(content)
 			}
 			if rule.KeywordTokens {
@@ -125,10 +111,15 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 				}
 			} else {
 				if present == nil {
-					index = e.keywordIndex(all)
-					present = index.present(contentLower)
+					present = scope.literals.keywordsPresent(content)
 				}
-				if !index.anyPresent(present, i) {
+				if present == nil {
+					if contentLower == nil {
+						contentLower = bytes.ToLower(content)
+					}
+					present = scope.literals.index.keywords.present(contentLower)
+				}
+				if !scope.literals.index.keywords.anyPresent(present, i) {
 					continue
 				}
 			}

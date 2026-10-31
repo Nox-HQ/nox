@@ -143,3 +143,66 @@ func randomBytes(r *rand.Rand, n int, alphabet string) []byte {
 	}
 	return b
 }
+
+// The keyword pre-filters are answered from the same pass (literalindex.go).
+// That answer must be the one the keyword index gives over the lower-cased
+// file, or nil where it cannot be: a file holding a lower outlier.
+func TestKeywordsPresentMatchesKeywordIndex(t *testing.T) {
+	pieces := []string{
+		"", " ", "\n", "k", "K", "e", "y", "i", "I", "d", "D", "ſ", "K", "İ", "\xff",
+		"key", "KEY", "Id", "token", "TOKEN", "tok", "en", "_",
+	}
+	words := []string{"key", "KEY", "Key", "id", "ID", "token", "Token", "ke", "k", "en_", "yk"}
+	r := rand.New(rand.NewSource(954))
+	answered := 0
+	for range 5000 {
+		var rules []*Rule
+		for range 1 + r.Intn(4) {
+			var kws []string
+			for range 1 + r.Intn(3) {
+				kws = append(kws, words[r.Intn(len(words))])
+			}
+			rules = append(rules, &Rule{MatcherType: "regex", Pattern: "x", Keywords: kws})
+		}
+		var content []byte
+		for range r.Intn(12) {
+			content = append(content, pieces[r.Intn(len(pieces))]...)
+		}
+		if assertKeywordsPresent(t, newLiteralIndex(rules), content) {
+			answered++
+		}
+	}
+	if answered < 2500 {
+		t.Fatalf("the one pass answered %d of 5000 files; the fallback is hiding the comparison", answered)
+	}
+}
+
+// FuzzKeywordsPresentMatchesKeywordIndex explores beyond the seeded corpus.
+func FuzzKeywordsPresentMatchesKeywordIndex(f *testing.F) {
+	f.Add("key", []byte("KEY = 1"))
+	f.Add("id", []byte("İD_TOKEN"))
+	f.Fuzz(func(t *testing.T, keyword string, content []byte) {
+		assertKeywordsPresent(t, newLiteralIndex([]*Rule{{Keywords: []string{keyword}}}), content)
+	})
+}
+
+// assertKeywordsPresent reports whether the one pass answered.
+func assertKeywordsPresent(t *testing.T, x *literalIndex, content []byte) bool {
+	t.Helper()
+	want := x.keywords.present(bytes.ToLower(content))
+	got := (&fileLiterals{index: x}).keywordsPresent(content)
+	if got == nil {
+		lower := false
+		for _, o := range lowerOutliers {
+			lower = lower || bytes.Contains(content, o)
+		}
+		if !lower && x.kwLit != nil {
+			t.Fatalf("keywords %q in %q: no answer, but nothing prevents one", x.keywords.keywords, content)
+		}
+		return false
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("keywords %q in %q: one pass %v, keyword index %v", x.keywords.keywords, content, got, want)
+	}
+	return true
+}

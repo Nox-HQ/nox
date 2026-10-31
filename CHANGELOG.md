@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The keyword pre-filters are answered by the same one pass that finds the literal-prefix plans' literals, instead of a pass of their own over a lower-cased copy of every file. That pass and the copy cost 2.9 s over crewAI; holding the keywords as case-insensitive literals in the literal index adds 0.35 s. The answer is the one the lower-cased search gave: in a file holding neither of the two non-ASCII runes `bytes.ToLower` turns into ASCII letters (the dotted capital I and the Kelvin sign), an ASCII keyword occurs in the lower-cased file exactly where it occurs, ASCII case ignored, in the file itself. A file holding one, and a rule set with a non-ASCII keyword, take the lower-cased search as before. A seeded test and a CI fuzz target compare the two answers (#736).
+
 ## [1.55.7] - 2026-10-30
 
 Scans cost about 8% less CPU: on crewAI, median user CPU fell from 105 s to 97 s against 1.55.6 (4 interleaved rounds in a 4-CPU Linux container on a busy host, 3 of 4 rounds lower), with findings, fingerprints and the AI inventory identical in every run. The literal-prefix plan searches case-insensitive literals from their rarest byte, rules scanning one file share their literal searches, and every plan's literals are found in one pass per file. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.6, fingerprints included.
