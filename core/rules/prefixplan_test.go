@@ -475,3 +475,73 @@ func TestOptionalLeadPlanMatchesFindAll(t *testing.T) {
 		t.Errorf("MCP-011 has no optional-lead plan")
 	}
 }
+
+// A pattern opening with runs of disjoint classes before a literal is found
+// back from the literal (backWalk). The runs are optional, capped and
+// unbounded; folded classes take in the Kelvin sign and long s; the content
+// holds multi-byte and invalid UTF-8, and literals at both ends.
+func TestBackWalkPlanMatchesFindAll(t *testing.T) {
+	// `[ak]` shares runes with the runs after it: walking back cannot tell
+	// which run a rune belongs to, so it must keep the full scan.
+	leads := []string{`["'=:]`, `[=:]?`, `["']{0,2}`, `x`, `[ak]`}
+	mids := []string{`\s*`, `[ \t]{1,3}`, ``, `-?`}
+	runs := []string{`[a-z0-9._]+`, `[a-k]{1,3}`, `[a-z]*`, `[0-9]{2}`, `[A-C0-2]*`}
+	// `-[A-C0-2]+` after `[A-C0-2]*` is the shape whose next match starts
+	// where the last ended, its run empty: the walk must stop there.
+	lits := []string{`@`, `@#`, `=>`, `@[a-z]+\.[a-z]{2,}`, `-[A-C0-2]+`}
+	r := rand.New(rand.NewSource(973))
+	planned := 0
+	for range 3000 {
+		pattern := leads[r.Intn(len(leads))] + mids[r.Intn(len(mids))] + runs[r.Intn(len(runs))] + lits[r.Intn(len(lits))]
+		if r.Intn(3) == 0 {
+			pattern = "(?i)" + pattern
+		}
+		p := planFor(pattern)
+		if p == nil || p.back == nil {
+			continue
+		}
+		planned++
+		re := regexp.MustCompile(pattern)
+		for range 5 {
+			var content []byte
+			for range r.Intn(14) {
+				content = append(content, []string{"\"", "'", "=", ":", " ", "\t", "\n", "a", "k", "K", "z", "1", "2", ".", "_", "@", "#", "=>", "B", "C", "0", "x", "-", "é", "\u212a", "\xff"}[r.Intn(26)]...)
+			}
+			want := re.FindAllSubmatchIndex(content, -1)
+			if !p.usable(content) {
+				continue
+			}
+			if got := p.findAll(nil, content, true); !reflect.DeepEqual(got, want) {
+				t.Fatalf("%q on %q: plan %v, FindAll %v", pattern, content, got, want)
+			}
+		}
+	}
+	if planned < 300 {
+		t.Fatalf("only %d patterns got a back-walk plan; the comparison is not exercising it", planned)
+	}
+}
+
+// Fixed cases for the back-walk, each a way it has failed or could fail.
+func TestBackWalkPlanEdgeCases(t *testing.T) {
+	for _, c := range []struct{ pattern, content string }{
+		// The next match starts where the last ended, its run empty: a walk
+		// not stopped there starts inside the last match.
+		{`[A-C0-2]*-[A-C0-2]+`, " 2-BB2-122x\n211 x  -x ABC0"},
+		{`[A-C0-2]*-[A-C0-2]+`, "2-B2-0"},
+		// A capped run: the start is the cap back from the literal.
+		{`["']?[a-z]{1,3}@`, `"abcdef@ "x@`},
+		// DATA-001 on the shapes it meets: quoted, assigned, flush at both ends.
+		{`(?i)["'=:]\s*[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`, `email="a.b@example.com" to: x@y.io:z@w.de`},
+		{`(?i)["'=:]\s*[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`, `=a@b.cc`},
+	} {
+		p := planFor(c.pattern)
+		if p == nil || p.back == nil {
+			t.Errorf("%q: no back-walk plan", c.pattern)
+			continue
+		}
+		want := regexp.MustCompile(c.pattern).FindAllSubmatchIndex([]byte(c.content), -1)
+		if got := p.findAll(nil, []byte(c.content), true); !reflect.DeepEqual(got, want) {
+			t.Errorf("%q on %q: plan %v, FindAll %v", c.pattern, c.content, got, want)
+		}
+	}
+}

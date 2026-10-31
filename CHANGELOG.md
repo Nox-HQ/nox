@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A pattern that opens with runs of character classes sharing no rune, before a literal, finds its starts back from the literal. DATA-001's email pattern, `(?i)["'=:]\s*[a-zA-Z0-9._%+\-]+@…`, was planned from its quote-or-`=` first byte, which is dense enough that the plan declined on 4,450 crewAI files and was costly where it ran; its `@` is rare. Walking back from an occurrence of the literal, each run takes every rune of its class up to its maximum, since no other class could hold one, which gives the one start the occurrence can have; the walk stops where the last match ended, as the search resumes there. A pattern keeps its first-byte plan, and each file takes whichever path is usable and within the limit. Over all crewAI files DATA-001 takes 3.3 s instead of 8.0 s (five interleaved passes), declining on 103 files; AI-PI-002 and AI-PI-006 gain the path too. The plan-equivalence test passed on all 30,992 crewAI files (1,440 of 1,455 patterns plan; 89,737 rule/file pairs with matches, all identical), and findings, fingerprints and the AI inventory are identical on crewAI. A seeded test and fixed cases compare the walk with `FindAll`; a walk that does not stop at the last match, takes less than a run's maximum, or crosses overlapping classes fails them (#736).
+
 ## [1.55.10] - 2026-10-31
 
 Three rules that took the full regex scan now take the literal-prefix path, timed directly over crewAI: MCP-011 63 s to 31 s on the 9,184 files holding its keywords, IAC-351 4.9 s to 2.3 s on 8,423, and DATA-005's plan, which declined on 146 files, declines on 2 (the data analyzer 10-23% faster). A whole-scan A/B against 1.55.9 (4 interleaved rounds in a 4-CPU Linux container, host load up to 23) did not resolve a difference: medians 53.5 s and 54.1 s user CPU, rounds from +6% to -19%. Findings, fingerprints and the AI inventory were identical in every run. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.9, fingerprints included.
