@@ -236,25 +236,66 @@ func buildLinePlan(pattern string, re *syntax.Regexp) *prefixPlan {
 	if re.Op != syntax.OpConcat || len(re.Sub) < 2 || re.Sub[0].Op != syntax.OpBeginLine {
 		return nil
 	}
-	for k := 1; k < len(re.Sub); k++ {
-		if k > 1 && !withinLine(re.Sub[k-1]) {
-			return nil
-		}
-		rest := &syntax.Regexp{Op: syntax.OpConcat, Flags: re.Flags, Sub: re.Sub[k:]}
+	prefixes, ok := lineLiterals(re.Sub[1:], re.Flags)
+	if !ok {
+		return nil
+	}
+	anchored, err := regexp.Compile(`^(?:` + pattern + `)`)
+	if err != nil {
+		return nil
+	}
+	return &prefixPlan{prefixes: prefixes, anchored: anchored, maxLen: maxBytes(re), line: true}
+}
+
+// lineLiterals returns literals one of which every match of the concatenation
+// subs holds on its first line, reached only over elements withinLine allows.
+// At each element it first asks whether the rest has a literal plan of its
+// own; failing that, an alternation is followed down each branch with what
+// comes after it (IAC-351's `(?:PASSWORD|SECRET_KEY|(?:[A-Z0-9_]*_)?TOKEN)`,
+// whose last branch reaches its literal over a run), and every branch must
+// yield literals; otherwise the element is skipped if it cannot hold a
+// newline.
+func lineLiterals(subs []*syntax.Regexp, flags syntax.Flags) ([]literalPrefix, bool) {
+	for k := range subs {
+		rest := &syntax.Regexp{Op: syntax.OpConcat, Flags: flags, Sub: subs[k:]}
 		if len(rest.Sub) == 1 {
 			rest = rest.Sub[0]
 		}
-		p := buildPlan(rest.String())
-		if p == nil || p.lead != nil || p.first != nil || p.line {
-			continue
+		if p := buildPlan(rest.String()); p != nil && p.lead == nil && p.first == nil && !p.line {
+			return p.prefixes, true
 		}
-		anchored, err := regexp.Compile(`^(?:` + pattern + `)`)
-		if err != nil {
-			return nil
+		alt := subs[k]
+		for alt.Op == syntax.OpCapture {
+			alt = alt.Sub[0]
 		}
-		return &prefixPlan{prefixes: p.prefixes, anchored: anchored, maxLen: maxBytes(re), line: true}
+		if alt.Op == syntax.OpAlternate {
+			if out, ok := branchLineLiterals(alt, subs[k+1:], flags); ok {
+				return out, true
+			}
+		}
+		if !withinLine(subs[k]) {
+			return nil, false
+		}
 	}
-	return nil
+	return nil, false
+}
+
+// branchLineLiterals is lineLiterals down every branch of alt, each followed
+// by after.
+func branchLineLiterals(alt *syntax.Regexp, after []*syntax.Regexp, flags syntax.Flags) ([]literalPrefix, bool) {
+	var out []literalPrefix
+	for _, b := range alt.Sub {
+		elems := []*syntax.Regexp{b}
+		if b.Op == syntax.OpConcat {
+			elems = slices.Clone(b.Sub)
+		}
+		lits, ok := lineLiterals(append(elems, after...), flags)
+		if !ok {
+			return nil, false
+		}
+		out = append(out, lits...)
+	}
+	return out, true
 }
 
 // withinLine reports whether re matches only text holding no newline, and

@@ -341,7 +341,10 @@ func TestBoundaryOpeningEveryBranchMatchesFindAll(t *testing.T) {
 // at line starts, mid-line, several to a line, and flush against both ends.
 func TestLineAnchoredPlanMatchesFindAll(t *testing.T) {
 	leads := []string{"", "[ \t]*", "-?", "-[ \t]+", "[ \t]*-?[ \t]*", "x?", ".*", "[^\n]{0,3}", "(?:- )?", `\b`, `\s*`, "[^x]*"}
-	words := []string{"ab", "ba", "(?:ab|ba)", "(?:aab|b_a)", "a1"}
+	// The last two words reach a branch's literal over a run (IAC-351's
+	// `(?:PASSWORD|SECRET_KEY|(?:[A-Z0-9_]*_)?TOKEN)`), or over one that can
+	// cross a newline, which must keep the full scan.
+	words := []string{"ab", "ba", "(?:ab|ba)", "(?:aab|b_a)", "a1", "(?:ab|(?:[a-z1]*_)?ba)", `(?:ab|\s*ba)`}
 	tails := []string{"", ":", "[ \t]*:", `\b`, "[^:]*:", "$", `\s*b`}
 	r := rand.New(rand.NewSource(964))
 	planned := 0
@@ -376,16 +379,21 @@ func TestLineAnchoredPlanMatchesFindAll(t *testing.T) {
 // on an earlier line than its literal, or need not reach a literal at all.
 func TestLineAnchoredPlanDeclines(t *testing.T) {
 	for _, pattern := range []string{
-		`(?m)^\s*foo`,     // \s holds a newline
-		`(?m)^(?s:.)*foo`, // so does . under s
-		`(?m)^[^x]*foo`,   // and a negated class
-		`(?m)^foo|bar`,    // the anchor is one branch's
-		`(?m)^[a-z]+=`,    // no literal to find the line by
-		`^foo`,            // start of text, not of a line
+		`(?m)^\s*foo`,       // \s holds a newline
+		`(?m)^(?s:.)*foo`,   // so does . under s
+		`(?m)^[^x]*foo`,     // and a negated class
+		`(?m)^foo|bar`,      // the anchor is one branch's
+		`(?m)^[a-z]+=`,      // no literal to find the line by
+		`^foo`,              // start of text, not of a line
+		`(?m)^(?:ab|\s*ba)`, // one branch reaches its literal across lines
 	} {
 		if planFor(pattern) != nil {
 			t.Errorf("%q: planned, want the full scan", pattern)
 		}
+	}
+	iac351 := `(?im)^[ \t]*(?:PASSWORD|SECRET_KEY|(?:[A-Z0-9_]*_)?TOKEN)[ \t]*:[ \t]*['"]?[A-Za-z0-9]`
+	if p := planFor(iac351); p == nil || !p.line {
+		t.Errorf("%q: want a line plan from its branches' literals", iac351)
 	}
 }
 
