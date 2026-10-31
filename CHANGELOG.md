@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.9] - 2026-10-31
+
+Scans cost about 12% less CPU: on crewAI, median user CPU fell from 74.1 s to 65.0 s against 1.55.8 (4 interleaved rounds in a 4-CPU Linux container on a loaded host, every round 7-25% lower), with findings, fingerprints and the AI inventory identical in every run. Short keywords are searched from their first byte, entropy candidates come from a byte scan, line-anchored patterns take the literal-prefix path, the taint engine skips its getter pass where the answer can only be no, Python imports resolve through an index (a cost that grew with imports times files: 39.4 s to 0.8 s on a 10,000-file tree), and the literal index rolls its window. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.8, fingerprints included.
+
 ### Changed
 
 - The one-pass literal index keeps its three-byte window as a rolling value, lowering each byte once from a table instead of three times per window. The pass reads every byte of every file once per rule set, and was 7.9% of a crewAI scan profile; over all 30,296 crewAI files and the four rule sets it now takes 2.83 ns a byte instead of 3.96, finding the same occurrences in every file. Findings, fingerprints and the AI inventory are identical on crewAI; the index's seeded test and fuzz target, which hold it to the per-literal search, fail if the window is cut to two bytes (#736).
