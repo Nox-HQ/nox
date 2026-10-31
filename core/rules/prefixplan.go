@@ -678,6 +678,7 @@ type fileLiterals struct {
 	indexed     [][]int // index.occurrences, once some plan has asked
 	occurrences map[literalPrefix][]int
 	outlier     tristate
+	lower       tristate // holds a lowerOutlier
 	valid       tristate
 }
 
@@ -725,6 +726,40 @@ func (l *fileLiterals) hasFoldOutlier(content []byte) bool {
 		l.outlier = found
 	}
 	return l.outlier == yes
+}
+
+// keywordsPresent reports, for each keyword of l.index.keywords, whether it
+// occurs in bytes.ToLower(content); nil when the one pass cannot say, and
+// the caller asks the keyword index itself.
+func (l *fileLiterals) keywordsPresent(content []byte) []bool {
+	x := l.index
+	if x == nil || x.kwLit == nil {
+		return nil
+	}
+	if l.lower == unknown {
+		l.lower = no
+		for _, o := range lowerOutliers {
+			if bytes.Contains(content, o) {
+				l.lower = yes
+				break
+			}
+		}
+	}
+	if l.lower == yes {
+		return nil
+	}
+	if l.indexed == nil {
+		l.indexed = x.occurrences(content)
+	}
+	p := make([]bool, len(x.kwLit))
+	for n, id := range x.kwLit {
+		if id >= 0 {
+			p[n] = len(l.indexed[id]) > 0
+		} else {
+			p[n] = asciiFoldContains(content, x.keywords.keywords[n])
+		}
+	}
+	return p
 }
 
 func (l *fileLiterals) validUTF8(content []byte) bool {

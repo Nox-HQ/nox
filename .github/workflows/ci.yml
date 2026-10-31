@@ -497,6 +497,9 @@ jobs:
       - name: Fuzz the one-pass literal index against the per-literal search
         run: go test -run '^$' -fuzz '^FuzzLiteralIndexMatchesIndexAll$' -fuzztime 30s -timeout 120s ./core/rules/
 
+      - name: Fuzz the one-pass keyword pre-filter against the lower-cased search
+        run: go test -run '^$' -fuzz '^FuzzKeywordsPresentMatchesKeywordIndex$' -fuzztime 30s -timeout 120s ./core/rules/
+
   deps-audit:
     name: Nox dependency CVE audit
     runs-on: ubuntu-latest

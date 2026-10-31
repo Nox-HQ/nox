@@ -19,6 +19,11 @@ package rules
 // indexAll's EqualFold decides wherever a plan is used: a file holding a fold
 // outlier takes the full scan (usableIn) and never asks. Literals under three
 // bytes, and literals no plan of the rule set had, are searched one at a time.
+//
+// The same pass answers the keyword pre-filters. They were a second pass of
+// their own (keywordindex.go) over a lower-cased copy of the file: 2.9 s of
+// crewAI's scan, against 0.35 s for adding the keywords to this one. Each
+// keyword of three or more bytes is held as a case-insensitive literal.
 type literalIndex struct {
 	rules int // len(RuleSet.Rules()) when built
 	lits  []literalPrefix
@@ -26,6 +31,12 @@ type literalIndex struct {
 	seen  [indexBuckets / 64]uint64
 	start [indexBuckets + 1]int32 // bucket b holds ids[start[b]:start[b+1]]
 	ids   []int32
+
+	// keywords is the rule set's keyword index; kwLit gives, per keyword,
+	// its position in lits, or -1 for one under three bytes. nil when some
+	// keyword is not ASCII, which this pass cannot answer for.
+	keywords *keywordIndex
+	kwLit    []int32
 }
 
 func newLiteralIndex(rules []*Rule) *literalIndex {
@@ -53,6 +64,7 @@ func newLiteralIndex(rules []*Rule) *literalIndex {
 			x.lits = append(x.lits, lp)
 		}
 	}
+	x.addKeywords(newKeywordIndex(rules))
 	var counts [indexBuckets]int32
 	for _, lp := range x.lits {
 		counts[lp.bucket()]++
@@ -69,6 +81,29 @@ func newLiteralIndex(rules []*Rule) *literalIndex {
 		x.seen[b/64] |= 1 << (b % 64)
 	}
 	return x
+}
+
+func (x *literalIndex) addKeywords(kw *keywordIndex) {
+	x.keywords = kw
+	kwLit := make([]int32, len(kw.keywords))
+	for n, k := range kw.keywords {
+		if !isASCII(string(k)) {
+			return
+		}
+		kwLit[n] = -1
+		if len(k) < 3 {
+			continue
+		}
+		lp := literalPrefix{text: string(k), fold: true}
+		id, ok := x.id[lp]
+		if !ok {
+			id = int32(len(x.lits))
+			x.id[lp] = id
+			x.lits = append(x.lits, lp)
+		}
+		kwLit[n] = id
+	}
+	x.kwLit = kwLit
 }
 
 func (lp literalPrefix) bucket() uint32 {
@@ -126,4 +161,26 @@ func (lp literalPrefix) at(content []byte, i int) bool {
 		}
 	}
 	return true
+}
+
+// lowerOutliers are the two non-ASCII runes bytes.ToLower turns into ASCII
+// letters: LATIN CAPITAL LETTER I WITH DOT ABOVE into i, KELVIN SIGN into k.
+// The keyword pre-filter asked whether a keyword occurs in the lower-cased
+// file, so "Key" spelled with a Kelvin sign holds the keyword "key"; an ASCII
+// comparison would not find it. In a file holding neither, an ASCII keyword
+// occurs in the lower-cased file exactly where it occurs, ASCII case ignored,
+// in the file itself: lowering changes no other ASCII byte and creates no
+// other.
+var lowerOutliers = [][]byte{[]byte("\u0130"), []byte("\u212a")}
+
+// asciiFoldContains reports whether lower-cased k occurs in content, ASCII
+// case ignored.
+func asciiFoldContains(content, k []byte) bool {
+	lp := literalPrefix{text: string(k), fold: true}
+	for i := 0; i+len(k) <= len(content); i++ {
+		if lp.at(content, i) {
+			return true
+		}
+	}
+	return false
 }
