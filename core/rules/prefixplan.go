@@ -93,6 +93,11 @@ type prefixPlan struct {
 	// DATA-007's `\b[A-Z]{2}\d{2}\s?…` gives [A-Z], [0-9], [0-9]. A first
 	// byte not followed by bytes of these sets cannot start a match.
 	follow []*[256]bool
+	// ctx is `^(?s:.)(?:pattern)`, set when an assertion at a match's start
+	// must see the byte before it: the match is tried from one byte earlier,
+	// that byte consumed, so `\b` there is decided as the full scan decides it
+	// (see buildOptionalLeadPlan).
+	ctx *regexp.Regexp
 	// after, for a plan whose prefixes are exactly what the pattern's opening
 	// literals match, holds the bytes the rest of the pattern can start with:
 	// DATA-005's `(?i)(?:ip|host|server|addr)\s*[=:]…` gives whitespace, `=`
@@ -189,6 +194,9 @@ func buildPlan(pattern string) *prefixPlan {
 	body, leadBoundary := stripLeadingBoundary(re)
 	prefixes, ok := leadingLiterals(body)
 	if !ok || len(prefixes) == 0 {
+		if p := buildOptionalLeadPlan(pattern, body); p != nil {
+			return p
+		}
 		if p := buildLeadPlan(pattern); p != nil {
 			return p
 		}
@@ -339,6 +347,93 @@ func lineStarts(content []byte, offsets []int) []int {
 	return out
 }
 
+// buildOptionalLeadPlan returns the plan for a pattern that opens with an
+// optional group before its literals, or nil. MCP-011 is `(?i)(?:(?:\bnot|
+// \bnever|n't|\bwithout)\s+)?(?:exfiltrate|send|…)…`: a match starts with
+// one of the group's literals when the group is taken and with one of the
+// rest's when it is not, so both sets are the candidates. Some of the group's
+// branches open with `\b` and some do not; rather than check a boundary per
+// literal, the anchored match is tried from the byte before the candidate
+// (ctx), which decides every assertion at the start as the full scan does.
+func buildOptionalLeadPlan(pattern string, body *syntax.Regexp) *prefixPlan {
+	for body.Op == syntax.OpCapture {
+		body = body.Sub[0]
+	}
+	if body.Op != syntax.OpConcat || len(body.Sub) < 2 {
+		return nil
+	}
+	opt := body.Sub[0]
+	if opt.Op != syntax.OpQuest {
+		return nil
+	}
+	head, ok := boundaryFreeLiterals(opt.Sub[0])
+	if !ok {
+		return nil
+	}
+	tail, ok := leadingLiterals(concatOf(body.Sub[1:], body.Flags))
+	if !ok {
+		return nil
+	}
+	prefixes := append(head, tail...)
+	for _, lp := range prefixes {
+		if len(lp.text) < 2 {
+			return nil
+		}
+	}
+	anchored, err := regexp.Compile(`^(?:` + pattern + `)`)
+	if err != nil {
+		return nil
+	}
+	ctx, err := regexp.Compile(`^(?s:.)(?:` + pattern + `)`)
+	if err != nil {
+		return nil
+	}
+	return &prefixPlan{prefixes: prefixes, anchored: anchored, ctx: ctx, maxLen: maxBytes(body)}
+}
+
+// boundaryFreeLiterals is leadingLiterals that passes over a `\b` opening
+// any branch: the literals every match of re starts with, the boundary left
+// to the anchored match (ctx).
+func boundaryFreeLiterals(re *syntax.Regexp) ([]literalPrefix, bool) {
+	for re.Op == syntax.OpCapture {
+		re = re.Sub[0]
+	}
+	switch re.Op {
+	case syntax.OpAlternate:
+		var out []literalPrefix
+		for _, sub := range re.Sub {
+			lits, ok := boundaryFreeLiterals(sub)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, lits...)
+		}
+		return out, true
+	case syntax.OpConcat:
+		if len(re.Sub) == 0 {
+			return nil, false
+		}
+		if re.Sub[0].Op == syntax.OpWordBoundary {
+			return boundaryFreeLiterals(concatOf(re.Sub[1:], re.Flags))
+		}
+		if lits, ok := leadingLiterals(re); ok {
+			return lits, true
+		}
+		// The first element starts every match; literals it starts with
+		// cannot be empty, so the element is not.
+		return boundaryFreeLiterals(re.Sub[0])
+	}
+	return leadingLiterals(re)
+}
+
+// concatOf is the concatenation of subs, or its one element.
+func concatOf(subs []*syntax.Regexp, flags syntax.Flags) *syntax.Regexp {
+	if len(subs) == 1 {
+		return subs[0]
+	}
+	return &syntax.Regexp{Op: syntax.OpConcat, Flags: flags, Sub: subs}
+}
+
 // buildLeadPlan returns the plan for a pattern that opens with a run of one
 // character class followed by literals (see leadRun), or nil.
 func buildLeadPlan(pattern string) *prefixPlan {
@@ -386,9 +481,10 @@ func buildLeadPlan(pattern string) *prefixPlan {
 	}
 	p := buildPlan(rest.String())
 	// A rest that opens with `\b` would be checked against the byte before the
-	// run, not before the literal; one that has its own run, or opens with a
-	// class rather than literals, is not this shape.
-	if p == nil || p.leadBoundary || p.lead != nil || p.first != nil {
+	// run, not before the literal; one that has its own run, opens with a
+	// class rather than literals, or with an optional group (ctx), is not
+	// this shape.
+	if p == nil || p.leadBoundary || p.lead != nil || p.first != nil || p.ctx != nil {
 		return nil
 	}
 	if boundary {
@@ -1232,13 +1328,29 @@ func (p *prefixPlan) findAllFrom(content []byte, starts []int, submatch bool) []
 		if p.leadBoundary && s > 0 && isWordByte(content[s-1]) {
 			continue // `\b` does not hold here, so no match starts here
 		}
-		loc := p.anchored.FindSubmatchIndex(content[s:])
-		if loc == nil {
-			continue
-		}
-		for i := range loc {
-			if loc[i] >= 0 {
-				loc[i] += s
+		var loc []int
+		if p.ctx != nil && s > 0 {
+			// From the byte before, consumed by ctx's `(?s:.)`: the match
+			// itself starts at s.
+			loc = p.ctx.FindSubmatchIndex(content[s-1:])
+			if loc == nil {
+				continue
+			}
+			loc[0] = 1
+			for i := range loc {
+				if loc[i] >= 0 {
+					loc[i] += s - 1
+				}
+			}
+		} else {
+			loc = p.anchored.FindSubmatchIndex(content[s:])
+			if loc == nil {
+				continue
+			}
+			for i := range loc {
+				if loc[i] >= 0 {
+					loc[i] += s
+				}
 			}
 		}
 		if !submatch {
