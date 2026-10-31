@@ -1,5 +1,7 @@
 package rules
 
+import "bytes"
+
 // One pass for every plan's literals.
 //
 // A plan finds its candidates by searching the file for each of its literals
@@ -174,13 +176,50 @@ func (lp literalPrefix) at(content []byte, i int) bool {
 var lowerOutliers = [][]byte{[]byte("\u0130"), []byte("\u212a")}
 
 // asciiFoldContains reports whether lower-cased k occurs in content, ASCII
-// case ignored.
+// case ignored. Only a position holding k's first byte, in either case, can
+// start an occurrence, so those are found with bytes.IndexByte and tried in
+// order. The next position of each case is kept until it is passed, so
+// neither is searched for twice and the scan stays linear. k is non-empty.
 func asciiFoldContains(content, k []byte) bool {
+	if len(content) < len(k) {
+		return false
+	}
 	lp := literalPrefix{text: string(k), fold: true}
-	for i := 0; i+len(k) <= len(content); i++ {
+	starts := content[:len(content)-len(k)+1]
+	lo, up := k[0], asciiUpper(k[0])
+	nextLo := indexByteFrom(starts, lo, 0)
+	nextUp := len(starts)
+	if up != lo {
+		nextUp = indexByteFrom(starts, up, 0)
+	}
+	for {
+		i := min(nextLo, nextUp)
+		if i == len(starts) {
+			return false
+		}
 		if lp.at(content, i) {
 			return true
 		}
+		if i == nextLo {
+			nextLo = indexByteFrom(starts, lo, i+1)
+		} else {
+			nextUp = indexByteFrom(starts, up, i+1)
+		}
 	}
-	return false
+}
+
+// indexByteFrom returns the first position at or after from holding c, or
+// len(b) when there is none.
+func indexByteFrom(b []byte, c byte, from int) int {
+	if j := bytes.IndexByte(b[from:], c); j >= 0 {
+		return from + j
+	}
+	return len(b)
+}
+
+func asciiUpper(c byte) byte {
+	if c >= 'a' && c <= 'z' {
+		return c - ('a' - 'A')
+	}
+	return c
 }

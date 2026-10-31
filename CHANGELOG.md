@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A keyword under three bytes is searched for from the positions holding its first byte, found with `bytes.IndexByte`, instead of by comparing at every byte. Such keywords stay out of the one-pass literal index, and the catalog has 27 of them across its four rule sets (`sk`, `jd`, `de`, digits, `=`); a rare one read the whole file one comparison at a time, once per rule set: 3.7 s of a 58 s crewAI scan profile, in a Linux container. Over all 30,296 crewAI files and those 27 keywords the search takes 0.96 s instead of 5.7 s, with the same answer for every file and keyword. The whole-scan saving, about 5%, is below what a loaded host can resolve; findings, fingerprints and the AI inventory are identical on crewAI. The replaced loop is kept as the oracle, by a seeded test and in the CI fuzz job (#736).
+
 ## [1.55.8] - 2026-10-31
 
 Scans cost about 19% less CPU: on crewAI, median user CPU fell from 112.7 s to 91.7 s against 1.55.7 (4 interleaved rounds on macOS, every round 18-19% lower), with findings, fingerprints and the AI inventory identical in every run. The keyword pre-filters come from the one-pass literal index, character-class openings check their fixed bytes before trying a start, alternations opening with `\b` take the literal-prefix path, and the AI inventory's extractors match through it. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.7, fingerprints included.

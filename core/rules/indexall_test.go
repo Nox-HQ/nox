@@ -206,3 +206,46 @@ func assertKeywordsPresent(t *testing.T, x *literalIndex, content []byte) bool {
 	}
 	return true
 }
+
+// asciiFoldContainsOracle is the definition asciiFoldContains keeps: k, ASCII
+// case ignored, starts at some position of content.
+func asciiFoldContainsOracle(content, k []byte) bool {
+	for i := 0; i+len(k) <= len(content); i++ {
+		if bytes.EqualFold(content[i:i+len(k)], k) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestAsciiFoldContainsMatchesTheOracle covers the short keywords the
+// catalog holds (letters, digits, punctuation, mixed), first bytes of either
+// case dense and absent, and occurrences flush against either end.
+func TestAsciiFoldContainsMatchesTheOracle(t *testing.T) {
+	keywords := []string{"k", "4", "=", "..", "s.", "sk", "de", "jd", "ey", "22", "s3", "key"}
+	r := rand.New(rand.NewSource(961))
+	for range 20000 {
+		k := []byte(keywords[r.Intn(len(keywords))])
+		content := randomBytes(r, r.Intn(24), "sSkKdDeEjJyY.=4235 \n\xff")
+		if got, want := asciiFoldContains(content, k), asciiFoldContainsOracle(content, k); got != want {
+			t.Fatalf("asciiFoldContains(%q, %q) = %v, want %v", content, k, got, want)
+		}
+	}
+}
+
+func FuzzAsciiFoldContainsMatchesTheOracle(f *testing.F) {
+	f.Add([]byte("xxSK"), []byte("sk"))
+	f.Add([]byte("Jd"), []byte("jd"))
+	f.Fuzz(func(t *testing.T, content, k []byte) {
+		if len(k) == 0 {
+			return
+		}
+		k = bytes.ToLower(k)
+		if !isASCII(string(k)) {
+			return
+		}
+		if got, want := asciiFoldContains(content, k), asciiFoldContainsOracle(content, k); got != want {
+			t.Fatalf("asciiFoldContains(%q, %q) = %v, want %v", content, k, got, want)
+		}
+	})
+}
