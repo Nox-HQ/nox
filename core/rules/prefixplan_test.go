@@ -432,3 +432,46 @@ func TestFollowBytesMatchFindAll(t *testing.T) {
 		t.Fatalf("only %d patterns had follow bytes; the comparison is not exercising them", filtered)
 	}
 }
+
+// A pattern opening with an optional group before its literals is found from
+// both literal sets (buildOptionalLeadPlan), and a `\b` opening only some of
+// the group's branches is decided from the byte before the candidate (ctx).
+// The content puts literals after word and non-word bytes, at offset 0, and
+// after multi-byte and invalid UTF-8.
+func TestOptionalLeadPlanMatchesFindAll(t *testing.T) {
+	groups := []string{`(?:\bab|ba)\s+`, `(?:(?:\bab|\bba|n't)\s+)`, `(?:ab|ba)-`, `\bab `, `(?:x[0-9]|\bab)`}
+	rests := []string{`(?:cd|dc)`, `(?:cd|dc)\s*x`, `cd[0-9]+`, `(?:cd\s+x|ba\s+y)`, `(?:cd|ab)\b`}
+	r := rand.New(rand.NewSource(972))
+	planned := 0
+	for range 3000 {
+		pattern := "(?:" + groups[r.Intn(len(groups))] + ")?" + rests[r.Intn(len(rests))]
+		if r.Intn(3) == 0 {
+			pattern = "(?i)" + pattern
+		}
+		p := planFor(pattern)
+		if p == nil {
+			continue
+		}
+		if p.ctx != nil {
+			planned++
+		}
+		re := regexp.MustCompile(pattern)
+		for range 5 {
+			var content []byte
+			for range r.Intn(10) {
+				content = append(content, []string{"ab", "ba", "cd", "dc", " ", "\t", "x", "y", "1", "-", "n't", "é", "\xff", "\n", "AB", "_"}[r.Intn(16)]...)
+			}
+			want := re.FindAllSubmatchIndex(content, -1)
+			if got := p.findAll(nil, content, true); !reflect.DeepEqual(got, want) {
+				t.Fatalf("%q on %q: plan %v, FindAll %v", pattern, content, got, want)
+			}
+		}
+	}
+	if planned < 1500 {
+		t.Fatalf("only %d optional-lead patterns got a plan; the comparison is not exercising it", planned)
+	}
+	mcp011 := `(?i)(?:(?:\bnot|\bnever|n't|\bwithout)\s+)?(?:(?:exfiltrate|send|upload|leak|transmit|post|forward)\s+(?:the\s+)?(?:contents?\s+of\s+)?(?:~/\.ssh|\.ssh/|id_rsa|\.env\b|/etc/passwd|api[_-]?keys?|secrets?|credentials?|environment\s+variables?|access[_-]?tokens?)|(?:read|cat)\s+(?:the\s+)?(?:contents?\s+of\s+)?(?:~/\.ssh|\.ssh/|id_rsa|\.env\b|/etc/passwd))`
+	if p := planFor(mcp011); p == nil || p.ctx == nil {
+		t.Errorf("MCP-011 has no optional-lead plan")
+	}
+}
