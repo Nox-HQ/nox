@@ -40,12 +40,14 @@ func TestAPatternWithoutALiteralStartHasNoPlan(t *testing.T) {
 		`key.*|[0-9]+`,                // one alternative has no literal
 		`a`,                           // single-character literal
 		`(?:secret)?\s*[=:]\s*x`,      // optional literal: a match can start elsewhere
+		`\bfoo=\d|bar=\d`,             // \b opens one alternative only
+		`\bfoo=\d|\b\.env`,            // \b before a non-word literal in one branch
 	} {
 		if q := planFor(p); q != nil && q.first == nil {
 			t.Errorf("%q got a literal-prefix plan", p)
 		}
 	}
-	for _, p := range []string{`(?i)(?:phone|tel)\s*[=:]\s*\d+`, `\bAKIA[0-9A-Z]{16}`, `(?i)\b(?:eval|exec)\s*\(`} {
+	for _, p := range []string{`(?i)(?:phone|tel)\s*[=:]\s*\d+`, `\bAKIA[0-9A-Z]{16}`, `(?i)\b(?:eval|exec)\s*\(`, `(?i)(?:\bkind:\s*x|\bdata:\s*y)`} {
 		if planFor(p) == nil {
 			t.Errorf("%q opens with literals (after \\b) and got no plan", p)
 		}
@@ -64,6 +66,10 @@ func TestPrefixPathEdgeCases(t *testing.T) {
 		// A literal and then a small class: one literal per class character.
 		{`(?i)(f["']|\.format\(|%s).*?(user_input|user_query)`, "x = f\"{user_input}\" F'{user_query}' f`user_input` '%S' % user_query"},
 		{`ab[cd]e|ab[x]`, "abce abde abxe abfe"},
+		// \b opening every alternative (SEC-254's shape), which the parser
+		// does not factor out.
+		{`(?i)(?:\bkind:\s*secret.{0,20}?\bdata:|\bdata:.{0,20}?\bkind:\s*secret)`, "kind: Secret\ndata: x  metadata: kind: secret xdata: kind: secret data:\nKIND:SECRET DATA:"},
+		{`\bfoo=\d|\bbar=\d`, "foo=1 xfoo=2 _bar=3 (bar=4 bar=5foo=6"},
 	} {
 		re := regexp.MustCompile(c.pattern)
 		want := re.FindAllSubmatchIndex([]byte(c.content), -1)
@@ -290,5 +296,41 @@ func TestFirstBytePathDropsACandidateCutOffByTheEnd(t *testing.T) {
 	starts, _ := p.firstCandidates([]byte("AB12 AB1"), -1)
 	if !reflect.DeepEqual(starts, []int{0}) {
 		t.Errorf("candidates %v, want [0]: the AB1 at the end cannot start a match", starts)
+	}
+}
+
+// An alternation every branch of which opens with `\b` is planned with the
+// boundary checked once, at the candidate. Seeded alternations and contents:
+// the plan must find what the full scan finds.
+func TestBoundaryOpeningEveryBranchMatchesFindAll(t *testing.T) {
+	words := []string{"ab", "ba", "aab", "b_a", "a1"}
+	tails := []string{"", "=", "[0-9]", "=[0-9]+", ".?b"}
+	r := rand.New(rand.NewSource(958))
+	planned := 0
+	for range 2000 {
+		var branches []string
+		for n := 2 + r.Intn(3); n > 0; n-- {
+			branches = append(branches, `\b`+words[r.Intn(len(words))]+tails[r.Intn(len(tails))])
+		}
+		pattern := strings.Join(branches, "|")
+		if r.Intn(2) == 0 {
+			pattern = "(?i)(?:" + pattern + ")"
+		}
+		p := planFor(pattern)
+		if p == nil || p.first != nil {
+			continue
+		}
+		planned++
+		re := regexp.MustCompile(pattern)
+		for range 5 {
+			content := randomBytes(r, r.Intn(40), "abAB_1= .x")
+			want := re.FindAllSubmatchIndex(content, -1)
+			if got := p.findAll(nil, content, true); !reflect.DeepEqual(got, want) {
+				t.Fatalf("%q on %q: plan %v, FindAll %v", pattern, content, got, want)
+			}
+		}
+	}
+	if planned < 1000 {
+		t.Fatalf("only %d alternations got a plan; the comparison is not exercising it", planned)
 	}
 }
