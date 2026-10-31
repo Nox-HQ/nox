@@ -33,6 +33,18 @@ func (p *PlannedRegexp) Match(content []byte) bool {
 	return p.re.Match(content)
 }
 
+// FindAllSubmatchIndex returns what regexp's FindAllSubmatchIndex(content,
+// -1) returns, through the plan when it is exact for the content and cheaper
+// than the scan.
+func (p *PlannedRegexp) FindAllSubmatchIndex(content []byte) [][]int {
+	if p.plan != nil {
+		if locs, ok := p.plan.match(content, true); ok {
+			return locs
+		}
+	}
+	return p.re.FindAllSubmatchIndex(content, -1)
+}
+
 // HasPlan reports whether the pattern has a literal-prefix plan at all.
 func (p *PlannedRegexp) HasPlan() bool { return p.plan != nil }
 

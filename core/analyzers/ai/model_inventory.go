@@ -3,6 +3,8 @@ package ai
 import (
 	"regexp"
 	"strings"
+
+	"github.com/nox-hq/nox/core/rules"
 )
 
 // ModelReference represents a reference to an ML model found in the codebase.
@@ -33,6 +35,32 @@ func extractModelReferences(path string, content []byte) []ModelReference {
 	return extractModelReferencesIn(path, content, false)
 }
 
+// The model patterns are compiled once; the two run over whole files go
+// through the literal-prefix plan, as the prompt patterns do.
+var (
+	modelFromPretrainedRe = rules.MustCompilePlanned(`(?i)(?:from_pretrained|AutoModel\w*|pipeline)\s*\(\s*['"]([^'"]+)['"]`)
+	modelConfigRe         = rules.MustCompilePlanned(`(?i)(?:model|model_name|model_id)\s*[:=]\s*['"]([^'"]+)['"]`)
+	modelRevisionRe       = regexp.MustCompile(`(?i)revision\s*=\s*['"]([^'"]+)['"]`)
+	modelHashRe           = regexp.MustCompile(`(?i)(?:sha256|hash)\s*[:=]\s*['"]([a-f0-9]{40,64})['"]`)
+)
+
+// stringSubmatches turns FindAllSubmatchIndex results over text into what
+// FindAllStringSubmatch returns: each group's text, "" for one that did not
+// take part.
+func stringSubmatches(text string, locs [][]int) [][]string {
+	out := make([][]string, 0, len(locs))
+	for _, loc := range locs {
+		m := make([]string, len(loc)/2)
+		for i := range m {
+			if loc[2*i] >= 0 {
+				m[i] = text[loc[2*i]:loc[2*i+1]]
+			}
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
 // extractModelReferencesIn is extractModelReferences with a precision switch
 // for the config-style pattern. With requireKnownFamily set, a `model: "X"`
 // assignment is a model reference only when X names a recognised model family
@@ -45,9 +73,7 @@ func extractModelReferencesIn(path string, content []byte, requireKnownFamily bo
 	text := string(content)
 
 	// Pattern: from_pretrained("model-name") or from_pretrained('model-name', revision="...")
-	fromPretrainedRe := regexp.MustCompile(`(?i)(?:from_pretrained|AutoModel\w*|pipeline)\s*\(\s*['"]([^'"]+)['"]`)
-	matches := fromPretrainedRe.FindAllStringSubmatch(text, -1)
-	for _, m := range matches {
+	for _, m := range stringSubmatches(text, modelFromPretrainedRe.FindAllSubmatchIndex(content)) {
 		ref := ModelReference{
 			Name: m[1],
 			Path: path,
@@ -63,9 +89,7 @@ func extractModelReferencesIn(path string, content []byte, requireKnownFamily bo
 	}
 
 	// Pattern: model: "name" or model = "name" in YAML/config
-	modelConfigRe := regexp.MustCompile(`(?i)(?:model|model_name|model_id)\s*[:=]\s*['"]([^'"]+)['"]`)
-	configMatches := modelConfigRe.FindAllStringSubmatch(text, -1)
-	for _, m := range configMatches {
+	for _, m := range stringSubmatches(text, modelConfigRe.FindAllSubmatchIndex(content)) {
 		// Skip if already found via from_pretrained
 		if containsModel(refs, m[1]) {
 			continue
@@ -109,7 +133,6 @@ func classifyModelRegistry(name string) string {
 
 func extractModelVersion(text, context string) string {
 	// Look near context for revision= or version=
-	re := regexp.MustCompile(`(?i)revision\s*=\s*['"]([^'"]+)['"]`)
 	idx := strings.Index(text, context)
 	if idx >= 0 {
 		// Search within 200 chars after the match
@@ -117,7 +140,7 @@ func extractModelVersion(text, context string) string {
 		if end > len(text) {
 			end = len(text)
 		}
-		if m := re.FindStringSubmatch(text[idx:end]); m != nil {
+		if m := modelRevisionRe.FindStringSubmatch(text[idx:end]); m != nil {
 			return m[1]
 		}
 	}
@@ -125,14 +148,13 @@ func extractModelVersion(text, context string) string {
 }
 
 func extractModelHash(text, context string) string {
-	re := regexp.MustCompile(`(?i)(?:sha256|hash)\s*[:=]\s*['"]([a-f0-9]{40,64})['"]`)
 	idx := strings.Index(text, context)
 	if idx >= 0 {
 		end := idx + len(context) + 300
 		if end > len(text) {
 			end = len(text)
 		}
-		if m := re.FindStringSubmatch(text[idx:end]); m != nil {
+		if m := modelHashRe.FindStringSubmatch(text[idx:end]); m != nil {
 			return m[1]
 		}
 	}
