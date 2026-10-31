@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"regexp"
 	"regexp/syntax"
+	"slices"
 	"sort"
 	"sync"
 	"unicode"
@@ -60,6 +61,12 @@ import (
 // before them most occurrences are excluded by the byte before. Every match
 // starts at one of those bytes, so they are the candidates (see firstBytes).
 //
+// A fourth shape is anchored to a line: `(?m)^P R`, where P cannot match a
+// newline and R opens with literals, like the Ansible markers' `(?m)^[ \t]*-?
+// [ \t]*(?:hosts|tasks|…):`. A match starts at the start of a line holding
+// one of R's literals, so those line starts are the candidates (see
+// buildLinePlan). This is the one shape a `^` is allowed in.
+//
 // TestPrefixPlanMatchesFindAll holds the equivalence for every built-in rule.
 
 // prefixPlan is how a pattern can be matched from its literal prefixes.
@@ -85,6 +92,10 @@ type prefixPlan struct {
 	// DATA-007's `\b[A-Z]{2}\d{2}\s?…` gives [A-Z], [0-9], [0-9]. A first
 	// byte not followed by bytes of these sets cannot start a match.
 	follow []*[256]bool
+	// line is set for a pattern `(?m)^P R` where P cannot match a newline and
+	// R opens with prefixes: the candidates are the starts of the lines the
+	// prefixes occur on (see buildLinePlan).
+	line bool
 }
 
 // leadRun is a pattern `C{0,max}R` (lazy or greedy) whose rest R opens with
@@ -167,7 +178,7 @@ func buildPlan(pattern string) *prefixPlan {
 		return nil
 	}
 	if hasTextStartAssertion(re) {
-		return nil
+		return buildLinePlan(pattern, re)
 	}
 	body, leadBoundary := stripLeadingBoundary(re)
 	prefixes, ok := leadingLiterals(body)
@@ -196,6 +207,89 @@ func buildPlan(pattern string) *prefixPlan {
 		return nil
 	}
 	return &prefixPlan{prefixes: prefixes, anchored: anchored, leadBoundary: leadBoundary, maxLen: maxBytes(re)}
+}
+
+// buildLinePlan returns the plan for a line-anchored pattern, `(?m)^P R`, or
+// nil. re is the simplified pattern. IAC-351 and the Ansible markers open
+// this way: `(?m)^[ \t]*-?[ \t]*(?:hosts|tasks|…)[ \t]*:`. A match starts at
+// a line start, and the anchored match regexp would try at every byte.
+//
+// When nothing P matches can hold a newline, a match at line start s reaches
+// R on the same line, and R starts with one of its prefixes. So every match
+// starts at the start of a line holding a prefix occurrence; trying those
+// line starts in order, each skipped once a match has ended past it, finds
+// the matches regexp finds. Slicing the content at a line start hides only a
+// newline before it, which every assertion sees as it sees the start of the
+// text: `^` holds, and `\b` treats both as a non-word byte. R is the shortest
+// tail of the concatenation that has a literal plan of its own, so P is
+// whatever comes between the anchor and the first literals.
+func buildLinePlan(pattern string, re *syntax.Regexp) *prefixPlan {
+	for re.Op == syntax.OpCapture {
+		re = re.Sub[0]
+	}
+	if re.Op != syntax.OpConcat || len(re.Sub) < 2 || re.Sub[0].Op != syntax.OpBeginLine {
+		return nil
+	}
+	for k := 1; k < len(re.Sub); k++ {
+		if k > 1 && !withinLine(re.Sub[k-1]) {
+			return nil
+		}
+		rest := &syntax.Regexp{Op: syntax.OpConcat, Flags: re.Flags, Sub: re.Sub[k:]}
+		if len(rest.Sub) == 1 {
+			rest = rest.Sub[0]
+		}
+		p := buildPlan(rest.String())
+		if p == nil || p.lead != nil || p.first != nil || p.line {
+			continue
+		}
+		anchored, err := regexp.Compile(`^(?:` + pattern + `)`)
+		if err != nil {
+			return nil
+		}
+		return &prefixPlan{prefixes: p.prefixes, anchored: anchored, maxLen: maxBytes(re), line: true}
+	}
+	return nil
+}
+
+// withinLine reports whether re matches only text holding no newline, and
+// asserts nothing about its surroundings.
+func withinLine(re *syntax.Regexp) bool {
+	switch re.Op {
+	case syntax.OpEmptyMatch, syntax.OpAnyCharNotNL:
+		return true
+	case syntax.OpLiteral:
+		return !slices.Contains(re.Rune, '\n')
+	case syntax.OpCharClass:
+		return !inClass('\n', re.Rune)
+	case syntax.OpStar, syntax.OpPlus, syntax.OpQuest, syntax.OpRepeat,
+		syntax.OpConcat, syntax.OpAlternate, syntax.OpCapture:
+		for _, sub := range re.Sub {
+			if !withinLine(sub) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// lineStarts maps ascending offsets to the starts of their lines, each once.
+// The search for each newline starts at the previous offset, so it is linear.
+func lineStarts(content []byte, offsets []int) []int {
+	var out []int
+	ls, prev := -1, 0
+	for _, t := range offsets {
+		if nl := bytes.LastIndexByte(content[prev:t], '\n'); nl >= 0 {
+			ls = prev + nl + 1
+		} else if ls < 0 {
+			ls = 0
+		}
+		if len(out) == 0 || out[len(out)-1] != ls {
+			out = append(out, ls)
+		}
+		prev = t
+	}
+	return out
 }
 
 // buildLeadPlan returns the plan for a pattern that opens with a run of one
@@ -893,6 +987,9 @@ func (p *prefixPlan) matchIn(lits *fileLiterals, content []byte, submatch bool) 
 		}
 	} else {
 		starts = p.candidates(lits, content)
+		if p.line {
+			starts = lineStarts(content, starts)
+		}
 	}
 	if p.cost(content, starts) > len(content) {
 		return nil, false
@@ -969,7 +1066,11 @@ func (p *prefixPlan) findAll(lits *fileLiterals, content []byte, submatch bool) 
 		starts, _ := p.firstCandidates(content, -1)
 		return p.findAllFrom(content, starts, submatch)
 	}
-	return p.findAllFrom(content, p.candidates(lits, content), submatch)
+	starts := p.candidates(lits, content)
+	if p.line {
+		starts = lineStarts(content, starts)
+	}
+	return p.findAllFrom(content, starts, submatch)
 }
 
 // findAllFrom returns what re.FindAllSubmatchIndex(content, -1) would, using
