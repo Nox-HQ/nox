@@ -80,6 +80,11 @@ type prefixPlan struct {
 	// first is set when the pattern opens with a character class: the bytes
 	// a match can start with. They replace prefixes as the candidates.
 	first *[256]bool
+	// follow, with first, holds the bytes each next position of a match can
+	// be, for as many positions as every match fills with one ASCII byte:
+	// DATA-007's `\b[A-Z]{2}\d{2}\s?…` gives [A-Z], [0-9], [0-9]. A first
+	// byte not followed by bytes of these sets cannot start a match.
+	follow []*[256]bool
 }
 
 // leadRun is a pattern `C{0,max}R` (lazy or greedy) whose rest R opens with
@@ -307,7 +312,8 @@ const maxFirstBytes = 36
 //   - whitespace among the first bytes, or more than maxFirstBytes of them:
 //     too dense to narrow anything;
 //   - `\b` before a first byte that is not a word character, where the
-//     boundary is not "the previous byte is not a word character".
+//     boundary is not "the previous byte is not a word character";
+//   - a body that can match "", whose empty matches no first byte marks.
 //
 // buildPlan has already declined `^`, `\A` and patterns matching "".
 func buildFirstBytePlan(pattern string, re, body *syntax.Regexp, leadBoundary bool) *prefixPlan {
@@ -316,6 +322,12 @@ func buildFirstBytePlan(pattern string, re, body *syntax.Regexp, leadBoundary bo
 		return nil
 	}
 	if prefix, _ := full.LiteralPrefix(); prefix != "" {
+		return nil
+	}
+	// buildPlan declined a pattern matching the empty input, but `\b[0-9]*`
+	// matches "" at every boundary of a non-empty one, and no first byte
+	// marks those starts.
+	if canBeEmpty(body) {
 		return nil
 	}
 	var first [256]bool
@@ -339,7 +351,68 @@ func buildFirstBytePlan(pattern string, re, body *syntax.Regexp, leadBoundary bo
 	if err != nil {
 		return nil
 	}
-	return &prefixPlan{first: &first, anchored: anchored, leadBoundary: leadBoundary, maxLen: maxBytes(re)}
+	p := &prefixPlan{first: &first, anchored: anchored, leadBoundary: leadBoundary, maxLen: maxBytes(re)}
+	var shape []*[256]bool
+	fixedShape(body, &shape)
+	if len(shape) > 1 {
+		p.follow = shape[1:]
+	}
+	return p
+}
+
+// fixedShape appends to shape the bytes every match of re can have at each
+// of its leading positions, for as long as each such position is one ASCII
+// byte in every match, and reports whether that holds to re's end, so a
+// caller may go on to what follows. Every set appended is a position no
+// match can skip or widen: a literal or an ASCII class, inside captures and
+// concatenations, and the first of a `+`. re is simplified, so `C{2,4}` is
+// already `CC(?:CC?)?` and its two mandatory copies are reached as a
+// concatenation. Anything else ends the shape.
+func fixedShape(re *syntax.Regexp, shape *[]*[256]bool) bool {
+	switch re.Op {
+	case syntax.OpLiteral:
+		if re.Flags&syntax.FoldCase != 0 {
+			return false
+		}
+		for _, r := range re.Rune {
+			if r >= utf8.RuneSelf {
+				return false
+			}
+			var set [256]bool
+			set[r] = true
+			*shape = append(*shape, &set)
+		}
+		return true
+	case syntax.OpCharClass:
+		if len(re.Rune) == 0 {
+			return false
+		}
+		var set [256]bool
+		for i := 0; i+1 < len(re.Rune); i += 2 {
+			lo, hi := re.Rune[i], re.Rune[i+1]
+			if hi >= utf8.RuneSelf {
+				return false
+			}
+			for c := lo; c <= hi; c++ {
+				set[c] = true
+			}
+		}
+		*shape = append(*shape, &set)
+		return true
+	case syntax.OpCapture:
+		return fixedShape(re.Sub[0], shape)
+	case syntax.OpConcat:
+		for _, sub := range re.Sub {
+			if !fixedShape(sub, shape) {
+				return false
+			}
+		}
+		return true
+	case syntax.OpPlus:
+		fixedShape(re.Sub[0], shape)
+		return false
+	}
+	return false
 }
 
 // firstBytes adds to set every byte a match of re can start with, or reports
@@ -821,7 +894,7 @@ func (p *prefixPlan) matchIn(lits *fileLiterals, content []byte, submatch bool) 
 func (p *prefixPlan) firstCandidates(content []byte, limit int) ([]int, bool) {
 	var out []int
 	for i, c := range content {
-		if !p.first[c] || (p.leadBoundary && i > 0 && isWordByte(content[i-1])) {
+		if !p.first[c] || (p.leadBoundary && i > 0 && isWordByte(content[i-1])) || !p.followsAt(content, i) {
 			continue
 		}
 		if len(out) == limit {
@@ -830,6 +903,20 @@ func (p *prefixPlan) firstCandidates(content []byte, limit int) ([]int, bool) {
 		out = append(out, i)
 	}
 	return out, true
+}
+
+// followsAt reports whether the bytes after a first byte at i are of the
+// plan's follow sets; a file ending first leaves positions no match can skip.
+func (p *prefixPlan) followsAt(content []byte, i int) bool {
+	if i+len(p.follow) >= len(content) {
+		return len(p.follow) == 0
+	}
+	for k, set := range p.follow {
+		if !set[content[i+1+k]] {
+			return false
+		}
+	}
+	return true
 }
 
 // maxFirstDensity: the first-byte path is used while at most one byte in this
