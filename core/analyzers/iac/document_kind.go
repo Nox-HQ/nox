@@ -437,7 +437,7 @@ const ansibleFamilyTag = "ansible"
 // and every Ansible key is lower-case, while the capitalised schemas are full
 // of collisions: `Roles:` is a CloudFormation IAM property, and it admitted
 // MANAGEDAD.cfn.yaml to the Ansible family under a case-insensitive match.
-var ansibleKeyMarkers = regexp.MustCompile(`(?m)^[ \t]*-?[ \t]*(?:hosts|tasks|pre_tasks|post_tasks|roles|` +
+var ansibleKeyMarkers = rules.MustCompilePlanned(`(?m)^[ \t]*-?[ \t]*(?:hosts|tasks|pre_tasks|post_tasks|roles|` +
 	`handlers|become|become_user|become_method|gather_facts|vars_files|vars_prompt|` +
 	`include_tasks|import_tasks|include_role|import_playbook|include_vars|` +
 	`delegate_to|with_items|with_dict|galaxy_info|collections|serial|any_errors_fatal)[ \t]*:`)
@@ -445,7 +445,7 @@ var ansibleKeyMarkers = regexp.MustCompile(`(?m)^[ \t]*-?[ \t]*(?:hosts|tasks|pr
 // ansibleTokenMarkers are Ansible's own namespaces, which may appear anywhere:
 // a collection-qualified module name, or an `ansible_` fact or connection
 // variable. Each is anchored enough to be safe unanchored.
-var ansibleTokenMarkers = regexp.MustCompile(`(?i)\b(?:ansible|community|amazon|kubernetes|containers|google)\.` +
+var ansibleTokenMarkers = rules.MustCompilePlanned(`(?i)\b(?:ansible|community|amazon|kubernetes|containers|google)\.` +
 	`[a-z0-9_]+\.[a-z0-9_]+|\bansible_[a-z0-9_]+`)
 
 // isAnsibleDocument reports whether content is an Ansible playbook, task file,
@@ -473,7 +473,7 @@ func isAnsibleDocument(_ string, content []byte) bool {
 // Column zero is what makes it safe. A GitHub Actions workflow's `steps:` are a
 // sequence of `- name:` items too, but they are nested under a job, and no
 // other format this meets puts a named sequence at the document's top level.
-var ansibleTaskFile = regexp.MustCompile(`(?m)^-[ \t]+name[ \t]*:`)
+var ansibleTaskFile = rules.MustCompilePlanned(`(?m)^-[ \t]+name[ \t]*:`)
 
 // documentFormatTags is the vocabulary of tags that name a DOCUMENT FORMAT,
 // as opposed to the severity, theme or cloud provider a rule is also tagged

@@ -36,7 +36,6 @@ func TestAPatternWithoutALiteralStartHasNoPlan(t *testing.T) {
 		`\B(?:akia|asia)[0-9A-Z]{16}`, // leading non-boundary
 		`\b\.env\b`,                   // \b before a non-word literal
 		`[a-z0-9]{32}`,                // character class
-		`(?m)^password\s*=`,           // start-of-line anchor
 		`key.*|[0-9]+`,                // one alternative has no literal
 		`a`,                           // single-character literal
 		`(?:secret)?\s*[=:]\s*x`,      // optional literal: a match can start elsewhere
@@ -47,7 +46,7 @@ func TestAPatternWithoutALiteralStartHasNoPlan(t *testing.T) {
 			t.Errorf("%q got a literal-prefix plan", p)
 		}
 	}
-	for _, p := range []string{`(?i)(?:phone|tel)\s*[=:]\s*\d+`, `\bAKIA[0-9A-Z]{16}`, `(?i)\b(?:eval|exec)\s*\(`, `(?i)(?:\bkind:\s*x|\bdata:\s*y)`} {
+	for _, p := range []string{`(?i)(?:phone|tel)\s*[=:]\s*\d+`, `\bAKIA[0-9A-Z]{16}`, `(?i)\b(?:eval|exec)\s*\(`, `(?i)(?:\bkind:\s*x|\bdata:\s*y)`, `(?m)^password\s*=`} {
 		if planFor(p) == nil {
 			t.Errorf("%q opens with literals (after \\b) and got no plan", p)
 		}
@@ -332,5 +331,60 @@ func TestBoundaryOpeningEveryBranchMatchesFindAll(t *testing.T) {
 	}
 	if planned < 1000 {
 		t.Fatalf("only %d alternations got a plan; the comparison is not exercising it", planned)
+	}
+}
+
+// A line-anchored pattern, `(?m)^P R`, is found from the starts of the lines
+// R's literals occur on (buildLinePlan). The leads cover runs, optional and
+// required characters, classes and `.`, none of which holds a newline; the
+// tails reach across lines and assert boundaries; the content puts literals
+// at line starts, mid-line, several to a line, and flush against both ends.
+func TestLineAnchoredPlanMatchesFindAll(t *testing.T) {
+	leads := []string{"", "[ \t]*", "-?", "-[ \t]+", "[ \t]*-?[ \t]*", "x?", ".*", "[^\n]{0,3}", "(?:- )?", `\b`, `\s*`, "[^x]*"}
+	words := []string{"ab", "ba", "(?:ab|ba)", "(?:aab|b_a)", "a1"}
+	tails := []string{"", ":", "[ \t]*:", `\b`, "[^:]*:", "$", `\s*b`}
+	r := rand.New(rand.NewSource(964))
+	planned := 0
+	for range 3000 {
+		pattern := "(?m)^" + leads[r.Intn(len(leads))] + words[r.Intn(len(words))] + tails[r.Intn(len(tails))]
+		if r.Intn(3) == 0 {
+			pattern = "(?i)" + pattern
+		}
+		p := planFor(pattern)
+		if p == nil {
+			continue
+		}
+		if !p.line {
+			t.Fatalf("%q planned, but not as a line plan", pattern)
+		}
+		planned++
+		re := regexp.MustCompile(pattern)
+		for range 5 {
+			content := randomBytes(r, r.Intn(48), "abAB_1:- \t\nx")
+			want := re.FindAllSubmatchIndex(content, -1)
+			if got := p.findAll(nil, content, true); !reflect.DeepEqual(got, want) {
+				t.Fatalf("%q on %q: plan %v, FindAll %v", pattern, content, got, want)
+			}
+		}
+	}
+	if planned < 2000 {
+		t.Fatalf("only %d line-anchored patterns got a plan; the comparison is not exercising it", planned)
+	}
+}
+
+// TestLineAnchoredPlanDeclines keeps the full scan where a match could start
+// on an earlier line than its literal, or need not reach a literal at all.
+func TestLineAnchoredPlanDeclines(t *testing.T) {
+	for _, pattern := range []string{
+		`(?m)^\s*foo`,     // \s holds a newline
+		`(?m)^(?s:.)*foo`, // so does . under s
+		`(?m)^[^x]*foo`,   // and a negated class
+		`(?m)^foo|bar`,    // the anchor is one branch's
+		`(?m)^[a-z]+=`,    // no literal to find the line by
+		`^foo`,            // start of text, not of a line
+	} {
+		if planFor(pattern) != nil {
+			t.Errorf("%q: planned, want the full scan", pattern)
+		}
 	}
 }
