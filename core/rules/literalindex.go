@@ -113,6 +113,14 @@ func (lp literalPrefix) bucket() uint32 {
 	return trigramBucket(asciiLower(t[0]), asciiLower(t[1]), asciiLower(t[2]))
 }
 
+// lowerTable is asciiLower as a table.
+var lowerTable = func() (t [256]byte) {
+	for c := range 256 {
+		t[c] = asciiLower(byte(c))
+	}
+	return t
+}()
+
 func asciiLower(c byte) byte {
 	if c >= 'A' && c <= 'Z' {
 		return c + 'a' - 'A'
@@ -131,10 +139,20 @@ func (x *literalIndex) lookup(lp literalPrefix) (int32, bool) {
 }
 
 // occurrences finds every indexed literal in content, indexed like x.lits.
+//
+// The window's three lower-cased bytes are kept as a rolling 24-bit value,
+// so each byte is lowered once, from a table, rather than three times: the
+// pass is a loop over every byte of every file, once per rule set, and was
+// 3.6 ns a byte.
 func (x *literalIndex) occurrences(content []byte) [][]int {
 	occ := make([][]int, len(x.lits))
+	if len(content) < 3 {
+		return occ
+	}
+	w := uint32(lowerTable[content[0]])<<8 | uint32(lowerTable[content[1]])
 	for i := 0; i+2 < len(content); i++ {
-		b := trigramBucket(asciiLower(content[i]), asciiLower(content[i+1]), asciiLower(content[i+2]))
+		w = (w<<8 | uint32(lowerTable[content[i+2]])) & 0xffffff
+		b := w * 2654435761 >> 16 & (indexBuckets - 1)
 		if x.seen[b/64]&(1<<(b%64)) == 0 {
 			continue
 		}
