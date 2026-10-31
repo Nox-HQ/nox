@@ -3,6 +3,7 @@ package authz
 import (
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -91,6 +92,9 @@ type pyIndex struct {
 	// funcText indexes every function's comment-free text by name, built on
 	// first use.
 	funcText map[string][]string
+	// bySuffix maps a module path, slash-separated without .py, to the files
+	// in order whose stem is it or ends in "/" and it (see resolveModule).
+	bySuffix map[string][]string
 }
 
 var (
@@ -118,7 +122,7 @@ var pyConventionalRouters = setOf("app", "bp", "blueprint", "router", "api", "ap
 func newPyIndex(files map[string]*pyFile, order []string, rls bool) *pyIndex {
 	ix := &pyIndex{files: files, order: order, rls: rls,
 		decls: map[pyKey]*pyDecl{}, includes: map[pyKey]pyInclude{}, hooks: map[pyKey][]pyDep{},
-		aliases: map[string]pyDep{}, consts: map[string][]string{}}
+		aliases: map[string]pyDep{}, consts: map[string][]string{}, bySuffix: moduleSuffixes(order)}
 	for _, p := range order {
 		parsePyImports(ix, ix.files[p])
 	}
@@ -189,17 +193,14 @@ func (ix *pyIndex) resolveModule(from string, dots int, mod string) string {
 	if rel == "" {
 		return ""
 	}
-	var cands []string
-	for _, p := range ix.order {
-		stem := strings.TrimSuffix(p, ".py")
-		stem = strings.TrimSuffix(stem, "/__init__")
-		if stem == rel || strings.HasSuffix(stem, "/"+rel) {
-			cands = append(cands, p)
-		}
-	}
-	if len(cands) == 0 {
+	// The files whose stem is rel or ends in "/"+rel. Looking them up instead
+	// of testing every file kept the cost from growing with imports times
+	// files: 0.41 s of a 58 s crewAI scan profile.
+	found := ix.bySuffix[rel]
+	if len(found) == 0 {
 		return ""
 	}
+	cands := slices.Clone(found)
 	// Prefer the candidate nearest the importing file, then the shortest path.
 	sort.SliceStable(cands, func(i, j int) bool {
 		ci, cj := commonDirPrefix(cands[i], from), commonDirPrefix(cands[j], from)
@@ -209,6 +210,29 @@ func (ix *pyIndex) resolveModule(from string, dots int, mod string) string {
 		return len(cands[i]) < len(cands[j])
 	})
 	return cands[0]
+}
+
+// moduleSuffixes indexes each file under its stem and every part of it after
+// a slash: a stem is rel or ends in "/"+rel exactly when rel is one of these.
+// A file's keys differ in length, so each is filed once under each, in order.
+func moduleSuffixes(order []string) map[string][]string {
+	by := map[string][]string{}
+	for _, p := range order {
+		stem := moduleStem(p)
+		by[stem] = append(by[stem], p)
+		for i := range len(stem) {
+			if stem[i] == '/' {
+				by[stem[i+1:]] = append(by[stem[i+1:]], p)
+			}
+		}
+	}
+	return by
+}
+
+// moduleStem is the module path a file is imported by: a/b.py and
+// a/b/__init__.py are both a/b.
+func moduleStem(p string) string {
+	return strings.TrimSuffix(strings.TrimSuffix(p, ".py"), "/__init__")
 }
 
 func commonDirPrefix(a, b string) int {
