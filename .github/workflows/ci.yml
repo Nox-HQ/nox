@@ -503,6 +503,9 @@ jobs:
       - name: Fuzz the short-keyword search against the window-by-window oracle
         run: go test -run '^$' -fuzz '^FuzzAsciiFoldContainsMatchesTheOracle$' -fuzztime 30s -timeout 120s ./core/rules/
 
+      - name: Fuzz the entropy tokenizers' class-run scan against the regexps it replaced
+        run: go test -run '^$' -fuzz '^FuzzClassRunsMatchTheRegexp$' -fuzztime 30s -timeout 120s ./core/rules/
+
   deps-audit:
     name: Nox dependency CVE audit
     runs-on: ubuntu-latest

@@ -3,7 +3,6 @@ package rules
 import (
 	"bytes"
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -53,11 +52,18 @@ var secretHints = []string{
 	"private",
 }
 
-// base64Re matches base64-encoded sequences of at least 30 characters.
-var base64Re = regexp.MustCompile(`[A-Za-z0-9+/=]{30,}`)
+// base64Chars and hexChars are the classes of the base64 and hex tokenizers:
+// a base64 candidate is a run of at least 30 of `[A-Za-z0-9+/=]`, a hex one a
+// run of at least 32 of `[0-9a-fA-F]`.
+var base64Chars, hexChars = byteClass("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="), byteClass("0123456789abcdefABCDEF")
 
-// hexRe matches hexadecimal sequences of at least 32 characters.
-var hexRe = regexp.MustCompile(`[0-9a-fA-F]{32,}`)
+func byteClass(members string) *[256]bool {
+	var c [256]bool
+	for i := range len(members) {
+		c[members[i]] = true
+	}
+	return &c
+}
 
 // candidateKind records which tokenizer produced a candidate. It is the
 // tokenizer, not the text, that decides: hex is a subset of the base64
@@ -242,10 +248,10 @@ func (m *EntropyMatcher) Match(content []byte, rule *Rule) []MatchResult {
 		extractAssignmentRHS(lineStr, collectAs(candidateAssignment))
 
 		// Tokenizer 3: base64 blobs (30+ chars).
-		extractRegexCandidates(lineStr, base64Re, 30, collectAs(candidateBase64))
+		extractClassRuns(lineStr, base64Chars, 30, collectAs(candidateBase64))
 
 		// Tokenizer 4: hex strings (32+ chars).
-		extractRegexCandidates(lineStr, hexRe, 32, collectAs(candidateHex))
+		extractClassRuns(lineStr, hexChars, 32, collectAs(candidateHex))
 
 		for _, c := range candidates {
 			if !candidateMatchesKinds(c.kinds, wantKinds) {
@@ -560,14 +566,25 @@ func isTokenChar(c byte) bool {
 		c == '-' || c == '_' || c == '.'
 }
 
-// extractRegexCandidates finds all matches of re in line with at least
-// minLen characters and passes them to addFn.
-func extractRegexCandidates(line string, re *regexp.Regexp, minLen int, addFn func(col int, text string)) {
-	locs := re.FindAllStringIndex(line, -1)
-	for _, loc := range locs {
-		text := line[loc[0]:loc[1]]
-		if len(text) >= minLen {
-			addFn(loc[0]+1, text) // 1-based column
+// extractClassRuns passes addFn every maximal run of class bytes in line at
+// least minLen long. These are exactly the matches of the regexp
+// `[class]{minLen,}`: from the leftmost class byte a greedy match takes the
+// whole run, a shorter run has no match and the next starts after it. Go's
+// regexp tries a match from every byte, with no literal to skip ahead with;
+// the scan reads each byte once. Byte-wise scanning is exact for an ASCII
+// class: no byte of a multi-byte or invalid UTF-8 sequence is in it.
+func extractClassRuns(line string, class *[256]bool, minLen int, addFn func(col int, text string)) {
+	for i := 0; i < len(line); {
+		if !class[line[i]] {
+			i++
+			continue
+		}
+		start := i
+		for i < len(line) && class[line[i]] {
+			i++
+		}
+		if i-start >= minLen {
+			addFn(start+1, line[start:i]) // 1-based column
 		}
 	}
 }
