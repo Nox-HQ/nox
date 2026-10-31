@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.55.8] - 2026-10-31
+
+Scans cost about 19% less CPU: on crewAI, median user CPU fell from 112.7 s to 91.7 s against 1.55.7 (4 interleaved rounds on macOS, every round 18-19% lower), with findings, fingerprints and the AI inventory identical in every run. The keyword pre-filters come from the one-pass literal index, character-class openings check their fixed bytes before trying a start, alternations opening with `\b` take the literal-prefix path, and the AI inventory's extractors match through it. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.7, fingerprints included.
+
 ### Changed
 
 - The AI inventory's extractors match their whole-file patterns through the rule engine's literal-prefix plan: the prompt templates, model references, tool lists, SDK invocations and tool registrations. Most are case-insensitive or open with an alternation, so regexp could not skip ahead to their literals and read every byte of every AI-flavoured source file, which on crewAI is most of them. Patterns that were compiled on every call, once per file or per template body, are compiled once, and a file is no longer copied into a string except for a `.prompt` file. crewAI scan CPU fell 11% (median user CPU 107.9 s to 96.1 s against main, 4 interleaved rounds on macOS on a busy host, every round 7-14% lower). Findings and the AI inventory were byte-identical on crewAI (1,506 components, 397 prompt templates, 258 model references), nox and NOX Intelligence. A test fails if one of these patterns loses its plan (#736).
