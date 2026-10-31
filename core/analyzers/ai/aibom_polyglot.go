@@ -11,7 +11,6 @@
 package ai
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/nox-hq/nox/core/lexctx"
@@ -154,28 +153,28 @@ func indexBytes(haystack, needle []byte) int {
 // a known SDK call site. Capture group 1 must be the model name.
 type sdkInvocationPattern struct {
 	provider string
-	re       *regexp.Regexp
+	re       *rules.PlannedRegexp
 }
 
 // providerInvocations covers the major LLM SDK call sites across Python,
 // JavaScript/TypeScript, and Go. Captures the model name argument.
 var providerInvocations = []sdkInvocationPattern{
 	// chat.completions.create(model="gpt-...") / messages.create(model="claude-...")
-	{provider: "openai", re: regexp.MustCompile(`(?:chat\.completions\.create|chat\.completions\.stream|completions\.create|ChatCompletion\.create)\s*\([^)]*model\s*[:=]\s*["']([^"']+)["']`)},
-	{provider: "anthropic", re: regexp.MustCompile(`messages\.(?:create|stream)\s*\([^)]*model\s*[:=]\s*["']([^"']+)["']`)},
-	{provider: "google", re: regexp.MustCompile(`(?:GenerativeModel|generateContent|generate_content)\s*\([^)]*["']([a-zA-Z0-9-]*gemini[a-zA-Z0-9.-]*)["']`)},
-	{provider: "cohere", re: regexp.MustCompile(`cohere\.(?:Client\([^)]*\)\.)?(?:chat|generate|embed)\s*\([^)]*model\s*[:=]\s*["']([^"']+)["']`)},
-	{provider: "mistral", re: regexp.MustCompile(`mistralai[^(]*\([^)]*model\s*[:=]\s*["']([^"']+)["']`)},
+	{provider: "openai", re: rules.MustCompilePlanned(`(?:chat\.completions\.create|chat\.completions\.stream|completions\.create|ChatCompletion\.create)\s*\([^)]*model\s*[:=]\s*["']([^"']+)["']`)},
+	{provider: "anthropic", re: rules.MustCompilePlanned(`messages\.(?:create|stream)\s*\([^)]*model\s*[:=]\s*["']([^"']+)["']`)},
+	{provider: "google", re: rules.MustCompilePlanned(`(?:GenerativeModel|generateContent|generate_content)\s*\([^)]*["']([a-zA-Z0-9-]*gemini[a-zA-Z0-9.-]*)["']`)},
+	{provider: "cohere", re: rules.MustCompilePlanned(`cohere\.(?:Client\([^)]*\)\.)?(?:chat|generate|embed)\s*\([^)]*model\s*[:=]\s*["']([^"']+)["']`)},
+	{provider: "mistral", re: rules.MustCompilePlanned(`mistralai[^(]*\([^)]*model\s*[:=]\s*["']([^"']+)["']`)},
 	// Bedrock — model id is `anthropic.claude-...` or `meta.llama3-...`.
-	{provider: "bedrock", re: regexp.MustCompile(`invoke_model\s*\([^)]*modelId\s*[:=]\s*["']([^"']+)["']`)},
+	{provider: "bedrock", re: rules.MustCompilePlanned(`invoke_model\s*\([^)]*modelId\s*[:=]\s*["']([^"']+)["']`)},
 	// Local (Ollama).
-	{provider: "ollama", re: regexp.MustCompile(`ollama\.(?:Client\([^)]*\)\.)?(?:Chat|Generate|chat|generate)\s*\([^)]*model\s*[:=]\s*["']([^"']+)["']`)},
+	{provider: "ollama", re: rules.MustCompilePlanned(`ollama\.(?:Client\([^)]*\)\.)?(?:Chat|Generate|chat|generate)\s*\([^)]*model\s*[:=]\s*["']([^"']+)["']`)},
 	// LiteLLM router (provider-prefixed).
-	{provider: "litellm", re: regexp.MustCompile(`litellm\.(?:completion|acompletion)\s*\([^)]*model\s*[:=]\s*["']([^"']+)["']`)},
+	{provider: "litellm", re: rules.MustCompilePlanned(`litellm\.(?:completion|acompletion)\s*\([^)]*model\s*[:=]\s*["']([^"']+)["']`)},
 	// Go — go-openai shape.
-	{provider: "openai", re: regexp.MustCompile(`openai\.ChatCompletionRequest\s*\{[^}]*Model\s*:\s*(?:openai\.[A-Za-z0-9]+|"([^"]+)")`)},
+	{provider: "openai", re: rules.MustCompilePlanned(`openai\.ChatCompletionRequest\s*\{[^}]*Model\s*:\s*(?:openai\.[A-Za-z0-9]+|"([^"]+)")`)},
 	// Anthropic Go SDK.
-	{provider: "anthropic", re: regexp.MustCompile(`anthropic\.MessageNewParams\s*\{[^}]*Model\s*:\s*(?:anthropic\.[A-Za-z0-9]+|"([^"]+)")`)},
+	{provider: "anthropic", re: rules.MustCompilePlanned(`anthropic\.MessageNewParams\s*\{[^}]*Model\s*:\s*(?:anthropic\.[A-Za-z0-9]+|"([^"]+)")`)},
 }
 
 // extractSDKInvocations returns ModelReference entries for every SDK
@@ -188,7 +187,7 @@ var providerInvocations = []sdkInvocationPattern{
 func extractSDKInvocations(path string, content []byte) []ModelReference {
 	var refs []ModelReference
 	for _, p := range providerInvocations {
-		locs := p.re.FindAllSubmatchIndex(content, -1)
+		locs := p.re.FindAllSubmatchIndex(content)
 		for _, m := range locs {
 			if len(m) < 4 || m[2] == -1 {
 				continue

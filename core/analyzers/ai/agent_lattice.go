@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/nox-hq/nox/core/lexctx"
+	"github.com/nox-hq/nox/core/rules"
 
 	"github.com/nox-hq/nox/core/findings"
 )
@@ -64,50 +65,50 @@ type extractedTool struct {
 // The first capture group must be the tool name.
 type toolPattern struct {
 	framework string
-	re        *regexp.Regexp
+	re        *rules.PlannedRegexp
 }
 
 var (
 	// Python frameworks.
 	pyPatterns = []toolPattern{
 		// LangChain @tool decorator and Tool(name="...") factory.
-		{framework: "langchain", re: regexp.MustCompile(`(?m)^\s*@tool\s*\(\s*["']([a-zA-Z0-9_]+)["']`)},
-		{framework: "langchain", re: regexp.MustCompile(`Tool\s*\(\s*name\s*=\s*["']([a-zA-Z0-9_]+)["']`)},
-		{framework: "langchain", re: regexp.MustCompile(`StructuredTool\.from_function\s*\([^)]*name\s*=\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "langchain", re: rules.MustCompilePlanned(`(?m)^\s*@tool\s*\(\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "langchain", re: rules.MustCompilePlanned(`Tool\s*\(\s*name\s*=\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "langchain", re: rules.MustCompilePlanned(`StructuredTool\.from_function\s*\([^)]*name\s*=\s*["']([a-zA-Z0-9_]+)["']`)},
 		// LlamaIndex.
-		{framework: "llamaindex", re: regexp.MustCompile(`FunctionTool\.from_defaults\s*\([^)]*name\s*=\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "llamaindex", re: rules.MustCompilePlanned(`FunctionTool\.from_defaults\s*\([^)]*name\s*=\s*["']([a-zA-Z0-9_]+)["']`)},
 		// AutoGen.
-		{framework: "autogen", re: regexp.MustCompile(`register_function\s*\(\s*[a-zA-Z_]+\s*,\s*name\s*=\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "autogen", re: rules.MustCompilePlanned(`register_function\s*\(\s*[a-zA-Z_]+\s*,\s*name\s*=\s*["']([a-zA-Z0-9_]+)["']`)},
 		// MCP server (Python SDK).
-		{framework: "mcp", re: regexp.MustCompile(`@server\.list_tools\(\)|add_tool\s*\(\s*Tool\s*\(\s*name\s*=\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "mcp", re: rules.MustCompilePlanned(`@server\.list_tools\(\)|add_tool\s*\(\s*Tool\s*\(\s*name\s*=\s*["']([a-zA-Z0-9_]+)["']`)},
 		// OpenAI / Anthropic direct tools= entries with name.
-		{framework: "openai", re: regexp.MustCompile(`["']function["']\s*:\s*\{[^}]*["']name["']\s*:\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "openai", re: rules.MustCompilePlanned(`["']function["']\s*:\s*\{[^}]*["']name["']\s*:\s*["']([a-zA-Z0-9_]+)["']`)},
 	}
 
 	// JavaScript / TypeScript frameworks.
 	jsPatterns = []toolPattern{
 		// LangChain.js DynamicTool.
-		{framework: "langchain.js", re: regexp.MustCompile(`new\s+DynamicTool\s*\(\s*\{[^}]*name\s*:\s*["']([a-zA-Z0-9_]+)["']`)},
-		{framework: "langchain.js", re: regexp.MustCompile(`tool\s*\(\s*\{[^}]*name\s*:\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "langchain.js", re: rules.MustCompilePlanned(`new\s+DynamicTool\s*\(\s*\{[^}]*name\s*:\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "langchain.js", re: rules.MustCompilePlanned(`tool\s*\(\s*\{[^}]*name\s*:\s*["']([a-zA-Z0-9_]+)["']`)},
 		// Vercel AI SDK tool({ ... }).
-		{framework: "ai-sdk", re: regexp.MustCompile(`tool\s*\(\s*\{\s*description[^}]*\}\s*\)\s*$`)},
+		{framework: "ai-sdk", re: rules.MustCompilePlanned(`tool\s*\(\s*\{\s*description[^}]*\}\s*\)\s*$`)},
 		// Direct OpenAI/Anthropic tools array.
-		{framework: "openai", re: regexp.MustCompile(`["']?function["']?\s*:\s*\{[^}]*["']?name["']?\s*:\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "openai", re: rules.MustCompilePlanned(`["']?function["']?\s*:\s*\{[^}]*["']?name["']?\s*:\s*["']([a-zA-Z0-9_]+)["']`)},
 		// MCP TS SDK.
-		{framework: "mcp-ts", re: regexp.MustCompile(`server\.tool\s*\(\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "mcp-ts", re: rules.MustCompilePlanned(`server\.tool\s*\(\s*["']([a-zA-Z0-9_]+)["']`)},
 	}
 
 	// Go frameworks.
 	goPatterns = []toolPattern{
 		// Praxis capability registry.
-		{framework: "praxis", re: regexp.MustCompile(`Registry\.Register\s*\(\s*["']([a-zA-Z0-9_]+)["']`)},
-		{framework: "praxis", re: regexp.MustCompile(`capability\.Capability\s*\{\s*Name\s*:\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "praxis", re: rules.MustCompilePlanned(`Registry\.Register\s*\(\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "praxis", re: rules.MustCompilePlanned(`capability\.Capability\s*\{\s*Name\s*:\s*["']([a-zA-Z0-9_]+)["']`)},
 		// agent-go.
-		{framework: "agent-go", re: regexp.MustCompile(`\.AddTool\s*\(\s*[^,)]*,\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "agent-go", re: rules.MustCompilePlanned(`\.AddTool\s*\(\s*[^,)]*,\s*["']([a-zA-Z0-9_]+)["']`)},
 		// mcp-go.
-		{framework: "mcp-go", re: regexp.MustCompile(`(?:srv|server)\.Tool\s*\(\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "mcp-go", re: rules.MustCompilePlanned(`(?:srv|server)\.Tool\s*\(\s*["']([a-zA-Z0-9_]+)["']`)},
 		// go-openai / anthropic-sdk-go function-call tools.
-		{framework: "openai-go", re: regexp.MustCompile(`openai\.Tool\s*\{[^}]*Name\s*:\s*["']([a-zA-Z0-9_]+)["']`)},
+		{framework: "openai-go", re: rules.MustCompilePlanned(`openai\.Tool\s*\{[^}]*Name\s*:\s*["']([a-zA-Z0-9_]+)["']`)},
 	}
 )
 
@@ -233,7 +234,7 @@ func extractTools(path string, content []byte) []extractedTool {
 	}
 	var regs []registration
 	for _, pat := range pats {
-		for _, m := range pat.re.FindAllSubmatchIndex(content, -1) {
+		for _, m := range pat.re.FindAllSubmatchIndex(content) {
 			if len(m) < 4 || m[2] == -1 {
 				continue
 			}

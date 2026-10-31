@@ -2,6 +2,7 @@ package rules_test
 
 import (
 	"math/rand"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -10,7 +11,7 @@ import (
 )
 
 // TestPlannedMatchAgreesWithRegexp holds PlannedRegexp.Match to
-// regexp.Match: through the plan, through each fallback (no plan, a fold
+// regexp.Match, and FindAllSubmatchIndex to regexp's: through the plan, through each fallback (no plan, a fold
 // outlier in the file, a plan dearer than the scan) and on content that does
 // and does not match.
 func TestPlannedMatchAgreesWithRegexp(t *testing.T) {
@@ -20,6 +21,7 @@ func TestPlannedMatchAgreesWithRegexp(t *testing.T) {
 	}{
 		{`(?m)(?:from\s+langchain|import\s+langchain|require\s*\(\s*['"]langchain|"langchain")`, true},
 		{`(?i)(?:secret|token)\s*[=:]\s*\S+`, true},
+		{`(?i)(secret|token)\s*[=:]\s*(\S+)?`, true}, // groups, one optional
 		{`\b(?:apikey|api_key)\b`, true},
 		{`tmc/langchaingo`, true},
 		{`[a-z]+\d`, true},  // a leading class: planned from its first bytes
@@ -46,6 +48,9 @@ func TestPlannedMatchAgreesWithRegexp(t *testing.T) {
 			content := []byte(b.String())
 			if got, want := p.Match(content), re.Match(content); got != want {
 				t.Fatalf("%s on %q: Match = %v, regexp says %v", tc.pattern, content, got, want)
+			}
+			if got, want := p.FindAllSubmatchIndex(content), re.FindAllSubmatchIndex(content, -1); !reflect.DeepEqual(got, want) {
+				t.Fatalf("%s on %q: FindAllSubmatchIndex = %v, regexp says %v", tc.pattern, content, got, want)
 			}
 		}
 	}
