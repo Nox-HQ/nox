@@ -388,3 +388,39 @@ func TestLineAnchoredPlanDeclines(t *testing.T) {
 		}
 	}
 }
+
+// A plan whose prefixes are exactly what the opening literals match drops an
+// occurrence the rest of the pattern cannot start after (afterPrefixes). The
+// heads include prefixes of one another (`ip` and `ipx`), folded and two-part
+// heads; the rests open with classes, optional runs, alternations and groups
+// that can be skipped; the content puts literals flush against the end.
+func TestFollowBytesMatchFindAll(t *testing.T) {
+	heads := []string{"ab", "(?:ab|ba)", "(?:ab|abx)", "(?:ip|host)", "a(?:b|x)"}
+	rests := []string{`=`, `\s*[=:]`, `[0-9]+`, `(?:=|:)x`, `[ \t]*=?b`, `x?=`, `(?:\s|-)+1`, `"?:`}
+	r := rand.New(rand.NewSource(968))
+	filtered := 0
+	for range 3000 {
+		pattern := heads[r.Intn(len(heads))] + rests[r.Intn(len(rests))]
+		if r.Intn(3) == 0 {
+			pattern = "(?i)" + pattern
+		}
+		p := planFor(pattern)
+		if p == nil {
+			continue
+		}
+		if p.after != nil {
+			filtered++
+		}
+		re := regexp.MustCompile(pattern)
+		for range 5 {
+			content := randomBytes(r, r.Intn(40), "abABxip=: \t\n1-\"host")
+			want := re.FindAllSubmatchIndex(content, -1)
+			if got := p.findAll(nil, content, true); !reflect.DeepEqual(got, want) {
+				t.Fatalf("%q on %q: plan %v, FindAll %v", pattern, content, got, want)
+			}
+		}
+	}
+	if filtered < 1000 {
+		t.Fatalf("only %d patterns had follow bytes; the comparison is not exercising them", filtered)
+	}
+}
