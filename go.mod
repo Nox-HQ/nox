@@ -14,6 +14,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/openai/openai-go/v3 v3.86.0
+	github.com/pelletier/go-toml/v2 v2.2.4
 	golang.org/x/sync v0.24.0
 	golang.org/x/term v0.47.0
 	golang.org/x/time v0.16.0

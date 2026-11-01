@@ -458,7 +458,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 	}
 
-	npmLocks := newManifestDedupe()
+	locks := newManifestDedupe()
 
 	for _, art := range artifacts {
 		if art.Type != discovery.Lockfile || isInstalledDependencyPath(art.Path) {
@@ -469,10 +469,11 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if err != nil {
 			return nil, nil, fmt.Errorf("reading lockfile %s: %w", art.Path, err)
 		}
-		if npmLockfiles[filepath.Base(art.Path)] {
+		lockEco := lockfileEcosystems[filepath.Base(art.Path)]
+		if lockEco != "" {
 			// Recorded before parsing so a lockfile that fails to parse still
 			// counts as present; see manifestDedupe.record.
-			npmLocks.record(pathDir(art.Path), nil)
+			locks.record(lockEco, pathDir(art.Path), nil)
 		}
 
 		var pkgs []Package
@@ -507,8 +508,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			continue
 		}
 
-		if npmLockfiles[filepath.Base(art.Path)] {
-			npmLocks.record(pathDir(art.Path), pkgs)
+		if lockEco != "" {
+			locks.record(lockEco, pathDir(art.Path), pkgs)
 		}
 		for _, p := range pkgs {
 			inventory.Add(p)
@@ -516,40 +517,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 	}
 
-	// package.json declares dependencies even when no lockfile resolves them,
-	// which is the usual shape of a project an AI assistant just generated.
-	// Reading only lockfiles reported such a project as having none. A lockfile
-	// stays authoritative: the manifest contributes only names it does not
-	// resolve, and everything when there is no lockfile at all.
-	for _, art := range artifacts {
-		if filepath.Base(art.Path) != "package.json" || isInstalledDependencyPath(art.Path) {
-			continue
-		}
-		content, err := os.ReadFile(art.AbsPath)
-		if err != nil {
-			a.degradations.AddAdvisory(degrade.Lockfile,
-				fmt.Sprintf("%s could not be read: %v", art.Path, err),
-				"dependencies declared in this file were NOT scanned for vulnerabilities")
-			continue
-		}
-		mpkgs, unresolved, err := parsePackageJSONManifest(content)
-		if err != nil {
-			a.degradations.AddAdvisory(degrade.Lockfile,
-				fmt.Sprintf("%s was not parsed: %v", art.Path, err),
-				"dependencies declared in this file were NOT scanned for vulnerabilities")
-			continue
-		}
-		locked, governed := npmLocks.governing(pathDir(art.Path))
-		for _, p := range mpkgs {
-			if _, ok := locked[p.Name]; ok {
-				continue
-			}
+	// A manifest declares dependencies even when no lockfile resolves them, which
+	// is the usual shape of a project an AI assistant just generated. Reading
+	// only lockfiles reported such a project as having none. See readManifests.
+	for _, m := range a.readManifests(artifacts, locks) {
+		for _, p := range m.Pkgs {
 			inventory.Add(p)
-			sources = append(sources, pkgSource{lockfilePath: art.Path})
-		}
-		if !governed && len(mpkgs)+len(unresolved) > 0 {
-			detail, impact := manifestDegradation(art.Path, len(mpkgs), unresolved)
-			a.degradations.AddAdvisory(degrade.Lockfile, detail, impact)
+			sources = append(sources, pkgSource{lockfilePath: m.Path})
 		}
 	}
 

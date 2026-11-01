@@ -1934,18 +1934,34 @@ Software Bill of Materials in two formats:
 - **`sbom.cdx.json`** — CycloneDX JSON (primary)
 - **`sbom.spdx.json`** — SPDX JSON (secondary)
 
-Generated from dependency lockfile analysis. Supported ecosystems:
+Generated from dependency lockfile analysis. Lockfiles nox reads:
 
 | Lockfile | Ecosystem |
 |----------|-----------|
 | `go.mod` (with `go.sum`) | Go |
-| `package-lock.json` | npm |
-| `requirements.txt` | PyPI |
+| `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml` | npm |
+| `requirements.txt`, `poetry.lock`, `uv.lock`, `Pipfile.lock` | PyPI |
 | `Gemfile.lock` | RubyGems |
 | `Cargo.lock` | Cargo |
 | `pom.xml` | Maven |
 | `build.gradle`, `build.gradle.kts` | Gradle |
 | `packages.lock.json` | NuGet |
+| `composer.lock` | Packagist |
+| `pubspec.lock` | Pub |
+| `bom.json` (CycloneDX), `sbom.json` (SPDX) | any |
+
+Without a lockfile, nox reads the manifest's direct dependencies (exact pins
+as written, ranges at their lower bound) and records a degradation saying the
+versions came from the manifest: `package.json`, `pyproject.toml`,
+`Cargo.toml`, `composer.json`, `Gemfile`, `pubspec.yaml`, `*.csproj` /
+`*.fsproj` / `*.vbproj` and `Directory.Packages.props`. A lockfile beside the
+manifest always wins.
+
+A manifest nox cannot read at all — `Package.swift`, `mix.exs`, `build.sbt`,
+Conan, vcpkg, `Podfile`, `Cartfile`, a Gradle version catalog, rebar3, Stack,
+Cabal, Julia, R and Perl — is never reported as "no dependencies": the scan
+records a degradation naming the file, and the summary says the dependencies
+it declares were not checked.
 
 > **Go:** versions come from `go.mod`, which records what Minimal Version
 > Selection actually chose. `go.sum` is not used as the version source — it
