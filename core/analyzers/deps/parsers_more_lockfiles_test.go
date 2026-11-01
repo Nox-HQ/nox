@@ -52,7 +52,7 @@ func TestParsePackageResolved(t *testing.T) {
     ]
   },
   "version": 1
-}`, want: []Package{{Name: "https://github.com/Alamofire/Alamofire.git", Version: "5.6.1", Ecosystem: "swift"}}},
+}`, want: []Package{{Name: "github.com/Alamofire/Alamofire", Version: "5.6.1", Ecosystem: "swift"}}},
 		{name: "v2", input: `{
   "pins" : [
     {"identity" : "swift-nio", "kind" : "remoteSourceControl",
@@ -63,9 +63,9 @@ func TestParsePackageResolved(t *testing.T) {
      "state" : {"branch" : "main", "revision" : "2"}}
   ],
   "version" : 2
-}`, want: []Package{{Name: "https://github.com/apple/swift-nio.git", Version: "2.40.0", Ecosystem: "swift"}}},
+}`, want: []Package{{Name: "github.com/apple/swift-nio", Version: "2.40.0", Ecosystem: "swift"}}},
 		{name: "v3 with originHash", input: `{"originHash":"abc","pins":[{"identity":"a","kind":"remoteSourceControl","location":"https://github.com/o/a","state":{"revision":"r","version":"1.0.0"}}],"version":3}`,
-			want: []Package{{Name: "https://github.com/o/a", Version: "1.0.0", Ecosystem: "swift"}}},
+			want: []Package{{Name: "github.com/o/a", Version: "1.0.0", Ecosystem: "swift"}}},
 		{name: "no pins", input: `{"pins":[],"version":2}`},
 		{name: "empty", input: ``},
 		{name: "malformed", input: `{"pins": [`, wantErr: true},
@@ -282,5 +282,27 @@ func TestScanArtifacts_UnqueryableEcosystemIsDegradedNotSilent(t *testing.T) {
 	}
 	if found != 1 {
 		t.Errorf("want exactly one cocoapods degradation, got %d: %+v", found, d.Items())
+	}
+}
+
+// OSV's SwiftURL ecosystem names a package by its repository URL without
+// scheme or ".git": "github.com/vapor/vapor" answers, while
+// "https://github.com/vapor/vapor.git" answers nothing (checked against
+// api.osv.dev). Case is kept: OSV matches it exactly, and lowercasing would
+// miss a record published in mixed case.
+func TestSwiftPackageName(t *testing.T) {
+	cases := map[string]string{
+		"https://github.com/vapor/vapor.git":         "github.com/vapor/vapor",
+		"https://github.com/vapor/vapor":             "github.com/vapor/vapor",
+		"http://github.com/vapor/vapor/":             "github.com/vapor/vapor",
+		"git@github.com:apple/swift-nio.git":         "github.com/apple/swift-nio",
+		"ssh://git@github.com/apple/swift-nio":       "github.com/apple/swift-nio",
+		"https://github.com/Alamofire/Alamofire.git": "github.com/Alamofire/Alamofire",
+		"https://gitlab.com/group/sub/repo.git":      "gitlab.com/group/sub/repo",
+	}
+	for in, want := range cases {
+		if got := swiftPackageName(in); got != want {
+			t.Errorf("swiftPackageName(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

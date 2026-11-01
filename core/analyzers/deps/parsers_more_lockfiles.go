@@ -63,6 +63,7 @@ func parsePackageResolved(content []byte) ([]Package, error) {
 		if url == "" || pin.State.Version == nil || *pin.State.Version == "" {
 			continue
 		}
+		url = swiftPackageName(url)
 		key := url + "@" + *pin.State.Version
 		if _, dup := seen[key]; dup {
 			continue
@@ -273,4 +274,23 @@ func parseConanLock(content []byte) ([]Package, error) {
 		return pkgs[i].Version < pkgs[j].Version
 	})
 	return pkgs, nil
+}
+
+// swiftPackageName is a SwiftPM location in the form OSV's SwiftURL ecosystem
+// names packages: host and path, no scheme, user, ".git" or trailing slash
+// ("https://github.com/vapor/vapor.git" -> "github.com/vapor/vapor"). Case is
+// kept, since OSV matches names exactly.
+func swiftPackageName(location string) string {
+	s := strings.TrimSpace(location)
+	if i := strings.Index(s, "://"); i >= 0 {
+		s = s[i+3:]
+	} else if at := strings.Index(s, "@"); at >= 0 {
+		// scp-like: git@github.com:owner/repo
+		s = strings.Replace(s[at+1:], ":", "/", 1)
+	}
+	if at := strings.Index(s, "@"); at >= 0 && at < strings.Index(s+"/", "/") {
+		s = s[at+1:] // user in a URL: ssh://git@host/...
+	}
+	s = strings.TrimSuffix(strings.TrimSuffix(s, "/"), ".git")
+	return s
 }
