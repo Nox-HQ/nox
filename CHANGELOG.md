@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Prompt-injection call sites and the AI inventory reach Java, Kotlin, Ruby, PHP and Rust, and the inventory C#. User input flowing into Spring AI (`chatClient.prompt().user(q).call()`), langchain4j (`generate`, `chat`), openai-java and anthropic-java, ruby-openai (`client.chat(parameters:)`), openai-php (`$client->chat()->create`) and async-openai (`client.chat().create`) now reports AGENTFLOW-001; before, only Python, JavaScript/TypeScript, Go and C# did. The inventory names these SDKs and the models passed to them, with OpenAI .NET and Azure OpenAI for C#; `.php` files are read for it. A call chain split across lines (`chatClient.prompt()` then `.user(q)` on the next) is joined for Java, Kotlin and PHP, and for Rust only behind a `*Args::default()` request builder, since joining every Rust chain moved `Command::new` findings. Each language has a vulnerable case and a safe twin reading the same real source. OWASP BenchmarkJava findings are identical (2,662, by fingerprint; score 48.2), and so are the findings and inventories of the seven head-to-head repositories. Spring handlers whose input arrives through `@RequestParam` are still not a source.
+
 ## [1.55.11] - 2026-10-31
 
 DATA-001, the email-address rule and the costliest left in the engine, finds its matches back from the `@` instead of from every quote, `=` and `:`: over all crewAI files it takes 3.3 s instead of 8.0 s (five interleaved passes), its plan declining on 103 files instead of 4,450; AI-PI-002 and AI-PI-006 take the same path. No whole-scan figure is claimed: the host was too loaded to resolve one. Findings, fingerprints and the AI inventory are identical on crewAI. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.10, fingerprints included.
