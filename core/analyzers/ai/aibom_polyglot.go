@@ -31,6 +31,7 @@ func isSourceFile(path string) bool {
 	case strings.HasSuffix(path, ".java"), strings.HasSuffix(path, ".kt"):
 	case strings.HasSuffix(path, ".cs"):
 	case strings.HasSuffix(path, ".rs"):
+	case strings.HasSuffix(path, ".php"):
 	default:
 		return false
 	}
@@ -85,6 +86,9 @@ var likelyAIMarkers = [][]byte{
 	[]byte("huggingface"),
 	[]byte("from_pretrained"),
 	[]byte("modelcontextprotocol"),
+	// JVM SDKs whose package paths carry none of the provider words above.
+	[]byte("springframework.ai"),
+	[]byte("langchain4j"),
 }
 
 // isLikelyAIContent runs a cheap substring scan against the AI marker list.
@@ -154,6 +158,16 @@ func indexBytes(haystack, needle []byte) int {
 type sdkInvocationPattern struct {
 	provider string
 	re       *rules.PlannedRegexp
+	// preferKnownFamily classifies by the captured name when it is a recognised
+	// model family, falling back to provider otherwise. For an argument that is
+	// a model on one client and a deployment name on another (.NET
+	// GetChatClient("gpt-4o") vs. an Azure deployment of your own choosing).
+	preferKnownFamily bool
+	// requireKnownFamily drops a match whose name is not a recognised model
+	// family. For spellings shaped like an ordinary method (`x.chat(parameters:
+	// {model: ..})`, `->chat()->create([..])`, `new ChatClient("..")`) that
+	// nothing else vouches for: a chat-room class is not an LLM client.
+	requireKnownFamily bool
 }
 
 // providerInvocations covers the major LLM SDK call sites across Python,
@@ -175,6 +189,29 @@ var providerInvocations = []sdkInvocationPattern{
 	{provider: "openai", re: rules.MustCompilePlanned(`openai\.ChatCompletionRequest\s*\{[^}]*Model\s*:\s*(?:openai\.[A-Za-z0-9]+|"([^"]+)")`)},
 	// Anthropic Go SDK.
 	{provider: "anthropic", re: rules.MustCompilePlanned(`anthropic\.MessageNewParams\s*\{[^}]*Model\s*:\s*(?:anthropic\.[A-Za-z0-9]+|"([^"]+)")`)},
+
+	// JVM (Java and Kotlin share the builder spelling). The model is set on a
+	// params/options/model builder, so the match runs from the builder's
+	// constructor to the .model(...) call, bounded and never across a `;`.
+	{provider: "openai", re: rules.MustCompilePlanned(`(?:ChatCompletion|Completion|Response|Embedding)CreateParams\.builder\(\)[^;]{0,400}?\.model\(\s*"([^"]+)"`)},
+	{provider: "anthropic", re: rules.MustCompilePlanned(`MessageCreateParams\.builder\(\)[^;]{0,400}?\.model\(\s*"([^"]+)"`)},
+	{provider: "openai", re: rules.MustCompilePlanned(`OpenAiChatOptions\.builder\(\)[^;]{0,400}?\.(?:model|withModel)\(\s*"([^"]+)"`)},
+	{provider: "anthropic", re: rules.MustCompilePlanned(`AnthropicChatOptions\.builder\(\)[^;]{0,400}?\.(?:model|withModel)\(\s*"([^"]+)"`)},
+	{provider: "openai", re: rules.MustCompilePlanned(`OpenAi(?:Streaming)?ChatModel\.builder\(\)[^;]{0,400}?\.modelName\(\s*"([^"]+)"`)},
+	{provider: "anthropic", re: rules.MustCompilePlanned(`Anthropic(?:Streaming)?ChatModel\.builder\(\)[^;]{0,400}?\.modelName\(\s*"([^"]+)"`)},
+	{provider: "ollama", re: rules.MustCompilePlanned(`Ollama(?:Streaming)?ChatModel\.builder\(\)[^;]{0,400}?\.modelName\(\s*"([^"]+)"`)},
+	{provider: "google", re: rules.MustCompilePlanned(`GoogleAiGemini(?:Streaming)?ChatModel\.builder\(\)[^;]{0,400}?\.modelName\(\s*"([^"]+)"`)},
+	{provider: "mistral", re: rules.MustCompilePlanned(`MistralAi(?:Streaming)?ChatModel\.builder\(\)[^;]{0,400}?\.modelName\(\s*"([^"]+)"`)},
+	// Ruby: client.chat(parameters: { model: "gpt-4o", ... }).
+	{provider: "openai", requireKnownFamily: true, re: rules.MustCompilePlanned(`\.chat\s*\(\s*parameters:\s*\{[^}]{0,400}?model:\s*["']([^"']+)["']`)},
+	// PHP (openai-php): $client->chat()->create(['model' => 'gpt-4o', ...]).
+	{provider: "openai", requireKnownFamily: true, re: rules.MustCompilePlanned(`chat\(\)->create\s*\(\s*\[[^\]]{0,400}?['"]model['"]\s*=>\s*['"]([^'"]+)['"]`)},
+	// Rust (async-openai): Create*RequestArgs::default().model("gpt-4o").
+	{provider: "openai", re: rules.MustCompilePlanned(`Create(?:ChatCompletionRequest|CompletionRequest|EmbeddingRequest|Response)Args::default\(\)[^;]{0,400}?\.model\(\s*"([^"]+)"`)},
+	// .NET: OpenAI's `new ChatClient("gpt-4o", key)` and Azure.AI.OpenAI's
+	// `azureClient.GetChatClient("deployment")`.
+	{provider: "openai", requireKnownFamily: true, re: rules.MustCompilePlanned(`new\s+(?:Chat|Embedding)Client\s*\(\s*(?:model:\s*)?"([^"]+)"`)},
+	{provider: "azure", preferKnownFamily: true, re: rules.MustCompilePlanned(`GetChatClient\s*\(\s*(?:deploymentName:\s*)?"([^"]+)"`)},
 }
 
 // extractSDKInvocations returns ModelReference entries for every SDK
@@ -196,9 +233,18 @@ func extractSDKInvocations(path string, content []byte) []ModelReference {
 			if name == "" {
 				continue
 			}
+			if p.requireKnownFamily && classifyModelRegistry(name) == "unknown" {
+				continue
+			}
+			registry := p.provider
+			if p.preferKnownFamily {
+				if known := classifyModelRegistry(name); known != "unknown" {
+					registry = known
+				}
+			}
 			refs = append(refs, ModelReference{
 				Name:       name,
-				Registry:   p.provider,
+				Registry:   registry,
 				Path:       path,
 				Line:       lexctx.LineForOffset(content, m[0]),
 				AuthEnvVar: credentialFor(content, m[0]),
@@ -238,6 +284,20 @@ var frameworkPatterns = []frameworkPattern{
 	{componentName: "lancedb", componentType: "vector_store", pattern: rules.MustCompilePlanned(`(?m)(?:import\s+lancedb|@lancedb/)`)},
 	{componentName: "pgvector", componentType: "vector_store", pattern: rules.MustCompilePlanned(`(?m)(?:pgvector\b|pgvector-go|pgvector/pgvector)`)},
 	{componentName: "milvus", componentType: "vector_store", pattern: rules.MustCompilePlanned(`(?m)(?:pymilvus|milvus-sdk-go|@zilliz/milvus2-sdk-node)`)},
+	// LLM SDKs and frameworks outside Python/JS/Go. Each opens with a spelling
+	// only that ecosystem uses (a Java package, a Rust crate path, a Ruby
+	// constant, a PHP static factory, a C# using), so a Python or JS file never
+	// matches.
+	{componentName: "spring-ai", componentType: "agent_framework", pattern: rules.MustCompilePlanned(`org\.springframework\.ai`)},
+	{componentName: "langchain4j", componentType: "agent_framework", pattern: rules.MustCompilePlanned(`dev\.langchain4j`)},
+	{componentName: "openai-java", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`com\.openai\.`)},
+	{componentName: "anthropic-java", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`com\.anthropic\.`)},
+	{componentName: "openai-ruby", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`OpenAI::Client\b`)},
+	{componentName: "anthropic-ruby", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`Anthropic::Client\b`)},
+	{componentName: "openai-php", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`OpenAI::(?:client|factory)\s*\(`)},
+	{componentName: "async-openai", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`async[_-]openai`)},
+	{componentName: "openai-dotnet", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`(?m)using\s+OpenAI\b`)},
+	{componentName: "azure-ai-openai", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`Azure\.AI\.OpenAI`)},
 	// MCP.
 	{componentName: "mcp", componentType: "mcp_runtime", pattern: rules.MustCompilePlanned(`(?m)(?:modelcontextprotocol|mcp-go|@modelcontextprotocol/sdk)`)},
 }
