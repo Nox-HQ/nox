@@ -788,10 +788,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 
 	if !quiet {
 		// A scope that did not run has no count, not a count of zero.
-		deps := fmt.Sprintf("%d dependencies", pkgCount)
-		if !result.Scope.Has(nox.ScopeDeps) {
-			deps = "dependencies not scanned"
-		}
+		deps := dependencySummary(pkgCount, result.Scope.Has(nox.ScopeDeps), result.Degradations)
 		aiComponents := result.AIInventory.Summary()
 		if !result.Scope.Has(nox.ScopeAI) {
 			aiComponents = "AI components not scanned"
@@ -1098,4 +1095,20 @@ func joinScopes(ss []nox.Scope) string {
 		names[i] = string(s)
 	}
 	return strings.Join(names, ", ")
+}
+
+// dependencySummary words the dependency count for the [results] line. "0
+// dependencies" is a claim that none exist; when a manifest was recognised and
+// not turned into packages (lockfile_parse), the count is a floor, and saying
+// so is the difference between a clean result and a blind one.
+func dependencySummary(count int, scanned bool, degradations []nox.Degradation) string {
+	if !scanned {
+		return "dependencies not scanned"
+	}
+	for _, d := range degradations {
+		if string(d.Kind) == "lockfile_parse" {
+			return fmt.Sprintf("%d dependencies checked (some declared dependencies were NOT checked; see degradations)", count)
+		}
+	}
+	return fmt.Sprintf("%d dependencies", count)
 }
