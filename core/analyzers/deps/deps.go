@@ -466,6 +466,18 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 	locks := newManifestDedupe()
 
+	// Every pom.xml is indexed before any is read, so a module's versions can
+	// come from a parent or BOM elsewhere in the repository. See maven.go.
+	poms := newMavenIndex()
+	for _, art := range artifacts {
+		if art.Type == discovery.Lockfile && filepath.Base(art.Path) == "pom.xml" && !isInstalledDependencyPath(art.Path) {
+			if content, err := os.ReadFile(art.AbsPath); err == nil {
+				poms.add(filepath.ToSlash(art.Path), content)
+			}
+		}
+	}
+	var mavenUnresolved []unresolvedMaven
+
 	for _, art := range artifacts {
 		if art.Type != discovery.Lockfile || isInstalledDependencyPath(art.Path) {
 			continue
@@ -483,14 +495,19 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 
 		var pkgs []Package
-		if filepath.Base(art.AbsPath) == "go.mod" {
+		switch filepath.Base(art.AbsPath) {
+		case "go.mod":
 			goModDir = filepath.Dir(art.AbsPath)
 			// Go needs both files: go.mod for the selected versions, go.sum to
 			// recover transitives that module graph pruning left unnamed. A
 			// missing or unreadable go.sum is fine — go.mod alone still resolves.
 			goSum, _ := os.ReadFile(filepath.Join(filepath.Dir(art.AbsPath), "go.sum"))
 			pkgs, err = resolveGoPackages(content, goSum)
-		} else {
+		case "pom.xml":
+			var unresolved []unresolvedMaven
+			pkgs, unresolved, err = poms.packages(filepath.ToSlash(art.Path))
+			mavenUnresolved = append(mavenUnresolved, unresolved...)
+		default:
 			pkgs, err = a.ParseLockfile(art.AbsPath, content)
 		}
 		if err != nil {
@@ -521,6 +538,11 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			inventory.Add(p)
 			sources = append(sources, pkgSource{lockfilePath: art.Path})
 		}
+	}
+
+	if len(mavenUnresolved) > 0 {
+		detail, impact := mavenDegradation(mavenUnresolved)
+		a.degradations.Add(degrade.Lockfile, detail, impact)
 	}
 
 	// A manifest declares dependencies even when no lockfile resolves them, which
