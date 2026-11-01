@@ -3327,6 +3327,21 @@
         {
           "call": "System.getProperty",
           "kind": "env"
+        },
+        {
+          "call": "RequestBoundQuery",
+          "kind": "http_query",
+          "note": "sentinel: a read of a handler parameter a web framework binds from the query string or path by annotation (Spring @RequestParam/@PathVariable/@MatrixVariable, JAX-RS @QueryParam/@PathParam, Micronaut @QueryValue, Quarkus @RestQuery/@RestPath). Parameter names are arbitrary, so the extractor promotes this chain onto statements reading one (core/taint/engine/annotated_params.go); unannotated parameters are NOT promoted"
+        },
+        {
+          "call": "RequestBoundHeader",
+          "kind": "http_header",
+          "note": "sentinel: a handler parameter bound from a header or cookie by annotation (@RequestHeader, @CookieValue, @HeaderParam, @CookieParam, @Header, @RestHeader, @RestCookie); see RequestBoundQuery"
+        },
+        {
+          "call": "RequestBoundBody",
+          "kind": "http_body",
+          "note": "sentinel: a handler parameter bound from the request body or form by annotation (@RequestBody, @RequestPart, @ModelAttribute, @FormParam, @BeanParam, @Body, @RestForm); see RequestBoundQuery"
         }
       ],
       "sinks": [
@@ -4976,6 +4991,21 @@
         {
           "call": "System.getProperty",
           "kind": "env"
+        },
+        {
+          "call": "RequestBoundQuery",
+          "kind": "http_query",
+          "note": "sentinel: a read of a handler parameter a web framework binds from the query string or path by annotation (Spring @RequestParam/@PathVariable/@MatrixVariable, JAX-RS @QueryParam/@PathParam, Micronaut @QueryValue, Quarkus @RestQuery/@RestPath). Parameter names are arbitrary, so the extractor promotes this chain onto statements reading one (core/taint/engine/annotated_params.go); unannotated parameters are NOT promoted"
+        },
+        {
+          "call": "RequestBoundHeader",
+          "kind": "http_header",
+          "note": "sentinel: a handler parameter bound from a header or cookie by annotation (@RequestHeader, @CookieValue, @HeaderParam, @CookieParam, @Header, @RestHeader, @RestCookie); see RequestBoundQuery"
+        },
+        {
+          "call": "RequestBoundBody",
+          "kind": "http_body",
+          "note": "sentinel: a handler parameter bound from the request body or form by annotation (@RequestBody, @RequestPart, @ModelAttribute, @FormParam, @BeanParam, @Body, @RestForm); see RequestBoundQuery"
         }
       ],
       "sinks": [

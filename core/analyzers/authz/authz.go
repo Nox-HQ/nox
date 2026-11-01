@@ -90,8 +90,9 @@
 // text over a lexically masked copy of the file, not a Python parser.
 //
 // Next.js route handlers (app/**/route.ts and pages/api), NestJS controllers
-// (@Controller/@Get with @UseGuards and global guards) and Django (urls.py
-// with function and class views, DRF routers and permission classes) are read
+// (@Controller/@Get with @UseGuards and global guards), Django (urls.py
+// with function and class views, DRF routers and permission classes), and
+// Spring and JAX-RS controllers in Java and Kotlin (see jvm.go) are read
 // into the same route table, so AUTHN-001, WEBHOOK-001 and `nox model` cover
 // them; AUTHZ-001's body analysis does not run over their handlers.
 //
@@ -189,6 +190,8 @@ const (
 	ReaderNextJS  = "Next.js"
 	ReaderDjango  = "Django"
 	ReaderNestJS  = "NestJS"
+	ReaderSpring  = "Spring"
+	ReaderJAXRS   = "JAX-RS"
 )
 
 // Lead is a route that meets AUTHZ-001's proposition, reported as something to
@@ -225,10 +228,10 @@ func (a *Analyzer) Leads() []Lead { return a.leads }
 // Coverage names, for the scan's "Checks completed", exactly the frameworks
 // whose routes this analyzer reads. Keep it equal to the package
 // documentation's SCOPE.
-const Coverage = "Express, Fastify, Flask, FastAPI, Next.js, NestJS, Django, Go and ASP.NET Core routes"
+const Coverage = "Express, Fastify, Flask, FastAPI, Next.js, NestJS, Django, Spring, JAX-RS, Go and ASP.NET Core routes"
 
 // ObjectLevelCoverage is the subset of Coverage AUTHZ-001's body analysis
-// (object-level authorization) runs over. Next.js, NestJS, Django, Go and ASP.NET Core routes enter the
+// (object-level authorization) runs over. Next.js, NestJS, Django, Spring, JAX-RS, Go and ASP.NET Core routes enter the
 // route table, AUTHN-001 and WEBHOOK-001, but their handlers are not analysed
 // for ownership checks, and the scan says so rather than claiming otherwise.
 const ObjectLevelCoverage = "Express, Fastify, Flask and FastAPI"
@@ -349,6 +352,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	rls := false
 	pyFiles, pyOrder := map[string]*pyFile{}, []string(nil)
 	compiled := &compiledReaders{}
+	var jvmFiles []*jvmFile
+	jvmBuildDirs := map[string]bool{}
+	var jvmGuardFiles []string
 	ordered := make([]discovery.Artifact, len(artifacts))
 	copy(ordered, artifacts)
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Path < ordered[j].Path })
@@ -367,7 +373,19 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if compiled.read(art, ext, func() []byte { return readCompiledSource(art) }) {
 			continue
 		}
-		if art.Type != discovery.Source || (!jsExt[ext] && ext != ".py") || nsource.IsTestPath(art.Path) {
+		if isJVMBuildFile(art.Path) || isJVMConfigFile(art.Path) {
+			p := filepath.ToSlash(art.Path)
+			if isJVMBuildFile(art.Path) {
+				jvmBuildDirs[jvmDir(p)] = true
+			}
+			if !nsource.IsTestPath(art.Path) {
+				if b, err := os.ReadFile(art.AbsPath); err == nil && jvmConfigGuards(art.Path, b) {
+					jvmGuardFiles = append(jvmGuardFiles, p)
+				}
+			}
+			continue
+		}
+		if art.Type != discovery.Source || (!jsExt[ext] && ext != ".py" && ext != ".java" && ext != ".kt") || nsource.IsTestPath(art.Path) {
 			continue
 		}
 		raw, err := os.ReadFile(art.AbsPath)
@@ -378,6 +396,10 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			rls = true
 		}
 		p := filepath.ToSlash(art.Path)
+		if ext == ".java" || ext == ".kt" {
+			jvmFiles = append(jvmFiles, newJVMFile(p, raw))
+			continue
+		}
 		if ext == ".py" {
 			pyFiles[p] = &pyFile{path: p, raw: raw, code: string(lexctx.MaskNonCode(lexctx.LangPython, raw)), sans: withoutComments(lexctx.LangPython, raw), lineStarts: computeLineStarts(raw)}
 			pyOrder = append(pyOrder, p)
@@ -412,6 +434,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		a.routes += len(cRoutes)
 		a.routeList = append(a.routeList, cRoutes...)
 		views = append(views, cViews...)
+		sortRoutes(a.routeList)
+	}
+	if len(jvmFiles) > 0 {
+		jvmRoutes, jvmViews := newJVMIndex(jvmFiles, jvmBuildDirs, jvmGuardFiles).routes()
+		a.routes += len(jvmRoutes)
+		a.routeList = append(a.routeList, jvmRoutes...)
+		views = append(views, jvmViews...)
 		sortRoutes(a.routeList)
 	}
 	if len(pyOrder) > 0 {

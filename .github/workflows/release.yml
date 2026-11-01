@@ -229,6 +229,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
           SKIP_BREW: ${{ steps.tap.outputs.skip }}
+          # Developer ID signing and notarization (.goreleaser.yaml notarize).
+          # Unset secrets leave MACOS_SIGN_P12 empty and the step disabled.
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
 
   update-major-tag:
     # Move the floating `v1` action tag to this release so `nox-hq/nox@v1`

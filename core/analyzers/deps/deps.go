@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -418,6 +419,11 @@ var supportedLockfiles = map[string]func([]byte) ([]Package, error){
 	"composer.lock":      parseComposerLock,
 	"bom.json":           parseCycloneDXContent,
 	"sbom.json":          parseSPDXContent,
+	"Package.resolved":   parsePackageResolved,
+	"mix.lock":           parseMixLock,
+	"gradle.lockfile":    parseGradleLockfile,
+	"Podfile.lock":       parsePodfileLock,
+	"conan.lock":         parseConanLock,
 }
 
 // ParseLockfile detects the lockfile format from its filename and delegates
@@ -458,7 +464,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 	}
 
-	npmLocks := newManifestDedupe()
+	locks := newManifestDedupe()
 
 	for _, art := range artifacts {
 		if art.Type != discovery.Lockfile || isInstalledDependencyPath(art.Path) {
@@ -469,10 +475,11 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if err != nil {
 			return nil, nil, fmt.Errorf("reading lockfile %s: %w", art.Path, err)
 		}
-		if npmLockfiles[filepath.Base(art.Path)] {
+		lockEco := lockfileEcosystems[filepath.Base(art.Path)]
+		if lockEco != "" {
 			// Recorded before parsing so a lockfile that fails to parse still
 			// counts as present; see manifestDedupe.record.
-			npmLocks.record(pathDir(art.Path), nil)
+			locks.record(lockEco, pathDir(art.Path), nil)
 		}
 
 		var pkgs []Package
@@ -507,8 +514,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			continue
 		}
 
-		if npmLockfiles[filepath.Base(art.Path)] {
-			npmLocks.record(pathDir(art.Path), pkgs)
+		if lockEco != "" {
+			locks.record(lockEco, pathDir(art.Path), pkgs)
 		}
 		for _, p := range pkgs {
 			inventory.Add(p)
@@ -516,40 +523,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 	}
 
-	// package.json declares dependencies even when no lockfile resolves them,
-	// which is the usual shape of a project an AI assistant just generated.
-	// Reading only lockfiles reported such a project as having none. A lockfile
-	// stays authoritative: the manifest contributes only names it does not
-	// resolve, and everything when there is no lockfile at all.
-	for _, art := range artifacts {
-		if filepath.Base(art.Path) != "package.json" || isInstalledDependencyPath(art.Path) {
-			continue
-		}
-		content, err := os.ReadFile(art.AbsPath)
-		if err != nil {
-			a.degradations.AddAdvisory(degrade.Lockfile,
-				fmt.Sprintf("%s could not be read: %v", art.Path, err),
-				"dependencies declared in this file were NOT scanned for vulnerabilities")
-			continue
-		}
-		mpkgs, unresolved, err := parsePackageJSONManifest(content)
-		if err != nil {
-			a.degradations.AddAdvisory(degrade.Lockfile,
-				fmt.Sprintf("%s was not parsed: %v", art.Path, err),
-				"dependencies declared in this file were NOT scanned for vulnerabilities")
-			continue
-		}
-		locked, governed := npmLocks.governing(pathDir(art.Path))
-		for _, p := range mpkgs {
-			if _, ok := locked[p.Name]; ok {
-				continue
-			}
+	// A manifest declares dependencies even when no lockfile resolves them, which
+	// is the usual shape of a project an AI assistant just generated. Reading
+	// only lockfiles reported such a project as having none. See readManifests.
+	for _, m := range a.readManifests(artifacts, locks) {
+		for _, p := range m.Pkgs {
 			inventory.Add(p)
-			sources = append(sources, pkgSource{lockfilePath: art.Path})
-		}
-		if !governed && len(mpkgs)+len(unresolved) > 0 {
-			detail, impact := manifestDegradation(art.Path, len(mpkgs), unresolved)
-			a.degradations.AddAdvisory(degrade.Lockfile, detail, impact)
+			sources = append(sources, pkgSource{lockfilePath: m.Path})
 		}
 	}
 
@@ -737,6 +717,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if len(pkgs) > 0 {
 			ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 			defer cancel()
+
+			a.reportUnqueryableEcosystems(pkgs)
 
 			src := a.vulnSource()
 			vulnMap, err := lookupDistinct(ctx, src, pkgs)
@@ -1059,4 +1041,27 @@ func lookupDistinct(ctx context.Context, src vulnsource.Source, pkgs []Package) 
 		}
 	}
 	return out, nil
+}
+
+// reportUnqueryableEcosystems records, once per ecosystem, packages that were
+// inventoried but that the advisory pipeline has no OSV ecosystem for. The
+// lookup drops them without a word, so without this a Podfile.lock project
+// reads as checked and clean.
+func (a *Analyzer) reportUnqueryableEcosystems(pkgs []Package) {
+	counts := map[string]int{}
+	for _, p := range pkgs {
+		if _, ok := osvEcosystem(p.Ecosystem); !ok {
+			counts[p.Ecosystem]++
+		}
+	}
+	ecosystems := make([]string, 0, len(counts))
+	for eco := range counts {
+		ecosystems = append(ecosystems, eco)
+	}
+	sort.Strings(ecosystems)
+	for _, eco := range ecosystems {
+		a.degradations.AddAdvisory(degrade.Lockfile,
+			fmt.Sprintf("%d %s packages are in the inventory but the advisory pipeline has no OSV ecosystem for %s", counts[eco], eco, eco),
+			"these packages were NOT checked for known vulnerabilities; their licenses and the SBOM are unaffected")
+	}
 }

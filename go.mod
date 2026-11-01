@@ -14,6 +14,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/openai/openai-go/v3 v3.86.0
+	github.com/pelletier/go-toml/v2 v2.2.4
 	golang.org/x/sync v0.24.0
 	golang.org/x/term v0.47.0
 	golang.org/x/time v0.16.0
@@ -44,7 +45,7 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
-	github.com/nox-hq/nox-core v0.11.2
+	github.com/nox-hq/nox-core v0.12.0
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/tidwall/gjson v1.19.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
