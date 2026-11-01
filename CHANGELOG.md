@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Printing a request value to the server's console is no longer reported as cross-site scripting. The Java and Kotlin XSS sinks are keyed by method name (`println`, `print`, `write`), so `System.out.println(request.getParameter("t"))`, `System.err.print(...)` and Kotlin's receiverless `println(t)`, which is stdout, all read as TAINT-003. A writer that reaches the response (`response.getWriter().println`, a local holding it, Kotlin `response.writer`) keeps the sink. OWASP BenchmarkJava (2,662 findings), WebGoat, spring-petclinic and spring-petclinic-kotlin are unchanged; none prints a request value to the console.
+
 ## [1.55.11] - 2026-10-31
 
 DATA-001, the email-address rule and the costliest left in the engine, finds its matches back from the `@` instead of from every quote, `=` and `:`: over all crewAI files it takes 3.3 s instead of 8.0 s (five interleaved passes), its plan declining on 103 files instead of 4,450; AI-PI-002 and AI-PI-006 take the same path. No whole-scan figure is claimed: the host was too loaded to resolve one. Findings, fingerprints and the AI inventory are identical on crewAI. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.10, fingerprints included.
