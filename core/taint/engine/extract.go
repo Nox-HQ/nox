@@ -31,7 +31,12 @@ type unitDraft struct {
 	// order. Empty for the module unit. Used by the interprocedural summary pass
 	// to map a caller argument position to the callee parameter it binds.
 	params []string
-	stmts  []stmtDraft
+	// requestBound maps a parameter a web framework binds from the request by
+	// annotation to its source sentinel (see annotated_params.go).
+	requestBound map[string]string
+	// headerLine is the line the function's header starts on.
+	headerLine int
+	stmts      []stmtDraft
 	// guards are the function's branch conditions (see taint.Unit.Guards). Only
 	// calls and reads are meaningful on them.
 	guards []stmtDraft
