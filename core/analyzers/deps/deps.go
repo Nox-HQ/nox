@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -418,6 +419,11 @@ var supportedLockfiles = map[string]func([]byte) ([]Package, error){
 	"composer.lock":      parseComposerLock,
 	"bom.json":           parseCycloneDXContent,
 	"sbom.json":          parseSPDXContent,
+	"Package.resolved":   parsePackageResolved,
+	"mix.lock":           parseMixLock,
+	"gradle.lockfile":    parseGradleLockfile,
+	"Podfile.lock":       parsePodfileLock,
+	"conan.lock":         parseConanLock,
 }
 
 // ParseLockfile detects the lockfile format from its filename and delegates
@@ -711,6 +717,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if len(pkgs) > 0 {
 			ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 			defer cancel()
+
+			a.reportUnqueryableEcosystems(pkgs)
 
 			src := a.vulnSource()
 			vulnMap, err := lookupDistinct(ctx, src, pkgs)
@@ -1033,4 +1041,27 @@ func lookupDistinct(ctx context.Context, src vulnsource.Source, pkgs []Package) 
 		}
 	}
 	return out, nil
+}
+
+// reportUnqueryableEcosystems records, once per ecosystem, packages that were
+// inventoried but that the advisory pipeline has no OSV ecosystem for. The
+// lookup drops them without a word, so without this a Podfile.lock project
+// reads as checked and clean.
+func (a *Analyzer) reportUnqueryableEcosystems(pkgs []Package) {
+	counts := map[string]int{}
+	for _, p := range pkgs {
+		if _, ok := osvEcosystem(p.Ecosystem); !ok {
+			counts[p.Ecosystem]++
+		}
+	}
+	ecosystems := make([]string, 0, len(counts))
+	for eco := range counts {
+		ecosystems = append(ecosystems, eco)
+	}
+	sort.Strings(ecosystems)
+	for _, eco := range ecosystems {
+		a.degradations.AddAdvisory(degrade.Lockfile,
+			fmt.Sprintf("%d %s packages are in the inventory but the advisory pipeline has no OSV ecosystem for %s", counts[eco], eco, eco),
+			"these packages were NOT checked for known vulnerabilities; their licenses and the SBOM are unaffected")
+	}
 }
