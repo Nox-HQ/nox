@@ -29,6 +29,26 @@ builds:
     flags:
       - -trimpath
 
+# Sign and notarize the darwin binaries with Apple's Developer ID, through
+# quill (cross-platform, so the Linux runner does it). Off until the signing
+# secrets exist: a release without them builds exactly as before.
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids:
+        - nox
+      sign:
+        certificate: "{{.Env.MACOS_SIGN_P12}}"
+        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
+      notarize:
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
+        key: "{{.Env.MACOS_NOTARY_KEY}}"
+        # Wait, so a rejected submission fails the release instead of
+        # shipping a binary Gatekeeper will refuse. 20m is Apple's cap.
+        wait: true
+        timeout: 20m
+
 archives:
   - id: nox-archive
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
