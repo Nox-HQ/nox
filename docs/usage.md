@@ -1963,6 +1963,16 @@ lockfile that cannot be parsed is also a degradation. Pods are read at their
 root pod (`Firebase/Core` is `Firebase`); `conan.lock` build requirements are
 included.
 
+A `pom.xml` dependency usually has no version of its own. nox takes it, offline,
+from what the repository holds: a `${property}` the pom or an ancestor defines,
+the `dependencyManagement` of a parent pom in the repository (found by
+`relativePath`, default `../pom.xml`, or by coordinates), and BOMs imported from
+the repository. Dependencies on the repository's own modules are not
+dependencies, and an imported BOM is not a package. A version managed by a
+parent or BOM published elsewhere (`spring-boot-starter-parent`, `quarkus-bom`)
+is not guessed: the scan records one degradation counting those dependencies
+and naming where their versions live, and they are **not** checked.
+
 Without a lockfile, nox reads the manifest's direct dependencies (exact pins
 as written, ranges at their lower bound) and records a degradation saying the
 versions came from the manifest: `package.json`, `pyproject.toml`,

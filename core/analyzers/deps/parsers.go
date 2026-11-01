@@ -3,7 +3,6 @@ package deps
 import (
 	"bytes"
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"regexp"
 	"sort"
@@ -630,72 +629,6 @@ func unquoteTOML(s string) string {
 		return s[1 : len(s)-1]
 	}
 	return s
-}
-
-// pomXML is the minimal structure needed to extract dependencies from a Maven
-// pom.xml file.
-type pomXML struct {
-	Dependencies struct {
-		Dependency []struct {
-			GroupID    string `xml:"groupId"`
-			ArtifactID string `xml:"artifactId"`
-			Version    string `xml:"version"`
-		} `xml:"dependency"`
-	} `xml:"dependencies"`
-	DependencyManagement struct {
-		Dependencies struct {
-			Dependency []struct {
-				GroupID    string `xml:"groupId"`
-				ArtifactID string `xml:"artifactId"`
-				Version    string `xml:"version"`
-			} `xml:"dependency"`
-		} `xml:"dependencies"`
-	} `xml:"dependencyManagement"`
-}
-
-// parsePomXML extracts dependencies from a Maven pom.xml file.
-// Dependencies are named as "groupId:artifactId".
-func parsePomXML(content []byte) ([]Package, error) {
-	var pom pomXML
-	if err := xml.Unmarshal(content, &pom); err != nil {
-		return nil, fmt.Errorf("parsing pom.xml: %w", err)
-	}
-
-	type key struct{ name, ver string }
-	seen := make(map[key]struct{})
-	var pkgs []Package
-
-	addDeps := func(deps []struct {
-		GroupID    string `xml:"groupId"`
-		ArtifactID string `xml:"artifactId"`
-		Version    string `xml:"version"`
-	}) {
-		for _, d := range deps {
-			if d.GroupID == "" || d.ArtifactID == "" || d.Version == "" {
-				continue
-			}
-			// Skip Maven property references like ${project.version}.
-			if strings.HasPrefix(d.Version, "${") {
-				continue
-			}
-			name := d.GroupID + ":" + d.ArtifactID
-			k := key{name, d.Version}
-			if _, exists := seen[k]; exists {
-				continue
-			}
-			seen[k] = struct{}{}
-			pkgs = append(pkgs, Package{
-				Name:      name,
-				Version:   d.Version,
-				Ecosystem: "maven",
-			})
-		}
-	}
-
-	addDeps(pom.Dependencies.Dependency)
-	addDeps(pom.DependencyManagement.Dependencies.Dependency)
-
-	return pkgs, nil
 }
 
 // reGradleDep matches Gradle dependency declarations such as:
