@@ -104,7 +104,15 @@ func TestParsePackageJSONManifest_Malformed(t *testing.T) {
 	}
 }
 
-var lockfileTypes = map[string]bool{"package-lock.json": true, "yarn.lock": true, "pnpm-lock.yaml": true}
+// lockfileTypes is every name discovery classifies as a lockfile, so a test tree
+// is typed the way a real scan types it.
+var lockfileTypes = func() map[string]bool {
+	out := map[string]bool{}
+	for _, n := range discovery.LockfileNames() {
+		out[n] = true
+	}
+	return out
+}()
 
 // writeTree writes files under a temp dir and returns the discovery artifacts.
 func writeTree(t *testing.T, files map[string]string) []discovery.Artifact {
