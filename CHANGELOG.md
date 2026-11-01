@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- An online scan of a monorepo no longer waits most of an hour after writing its reports. The terminal assessment, `nox fix` and the MCP `fix_plan` tool check each upgrade target against OSV, and since #899 they asked once per manifest directory and package, one request after another, with no deadline: on llama_index (about 600 lockfiles) that was at least 9,856 sequential requests for 139 distinct package versions, and the scan took 2,996 s against 23 s offline, all of it after the reports were written. A plan now asks each (ecosystem, package, version) once, resolves different packages eight at a time, and the assessment gives the lookups 30 s; a target not confirmed in time is printed as not checked, never as clearing everything. `fix_plan` shares one memo between its own plan and the assessment's, honours the request's context, and marks such a target `unverified`. Over the seven repositories of the 2026-09-27 head-to-head, online: llama_index 2,996 s to 32 s, vercel-ai 56 s to 39 s, agent-go 28 s to 6 s, with every target verified within the budget and findings identical, fingerprints included.
+
 ## [1.55.11] - 2026-10-31
 
 DATA-001, the email-address rule and the costliest left in the engine, finds its matches back from the `@` instead of from every quote, `=` and `:`: over all crewAI files it takes 3.3 s instead of 8.0 s (five interleaved passes), its plan declining on 103 files instead of 4,450; AI-PI-002 and AI-PI-006 take the same path. No whole-scan figure is claimed: the host was too loaded to resolve one. Findings, fingerprints and the AI inventory are identical on crewAI. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.10, fingerprints included.

@@ -1780,6 +1780,9 @@ type fixAction struct {
 	To        string `json:"to"`
 	Ecosystem string `json:"ecosystem"`
 	Command   string `json:"command"`
+	// Unverified: the advisory database did not confirm To in time, so it is
+	// only the fix the installed version's findings name.
+	Unverified bool `json:"unverified,omitempty"`
 }
 
 // fix_plan status values disambiguate the four outcomes an empty actions
@@ -1808,7 +1811,7 @@ type fixPlanResponse struct {
 	Text string `json:"text"`
 }
 
-func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.StructuredResult, error) {
+func (s *Server) handleFixPlan(ctx context.Context, input fixPlanInput) (mcp.StructuredResult, error) {
 	pc := s.getCache("")
 	if pc == nil {
 		return toolError("no scan results available — run the scan tool first"), nil
@@ -1822,10 +1825,12 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 	// lookups (--offline, scan.osv.disabled, no deps scope) must not have its
 	// plan phone OSV either. Then the target is only what the findings name.
 	var targets fix.Checker
+	// Memoized: the plan below and the assessment inside remediate.Build ask
+	// about the same versions.
 	if !pc.result.AdvisoryLookupSkipped {
-		targets = osvcheck.New("")
+		targets = fix.Memoize(osvcheck.New(""))
 	}
-	plan := fix.PlanUpgrades(pc.result.Findings.ActiveFindings(), fix.Options{IncludeMajor: input.IncludeMajor, Checker: targets})
+	plan := fix.PlanUpgradesContext(ctx, pc.result.Findings.ActiveFindings(), fix.Options{IncludeMajor: input.IncludeMajor, Checker: targets})
 
 	resp := fixPlanResponse{
 		Note:         "Plan only; this server never changes the workspace. A person applies it with: nox fix apply",
@@ -1836,12 +1841,13 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 	}
 	for _, a := range plan.Actions {
 		resp.Actions = append(resp.Actions, fixAction{
-			RuleID:    a.RuleID,
-			Package:   a.Package,
-			From:      a.From,
-			To:        a.To,
-			Ecosystem: a.Ecosystem,
-			Command:   a.Command(),
+			RuleID:     a.RuleID,
+			Package:    a.Package,
+			From:       a.From,
+			To:         a.To,
+			Ecosystem:  a.Ecosystem,
+			Command:    a.Command(),
+			Unverified: a.Unverified,
 		})
 	}
 
