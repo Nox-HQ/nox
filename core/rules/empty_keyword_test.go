@@ -2,6 +2,7 @@ package rules
 
 import (
 	"bytes"
+	"slices"
 	"testing"
 )
 
@@ -14,7 +15,7 @@ func TestEmptyKeywordIsPresentEverywhere(t *testing.T) {
 	for _, content := range [][]byte{nil, []byte(""), []byte("x"), []byte("KEY = 1")} {
 		want := x.keywords.present(bytes.ToLower(content))
 		got := (&fileLiterals{index: x}).keywordsPresent(content)
-		if got != nil && (len(got) != 1 || got[0] != want[0]) {
+		if got != nil && !slices.Equal(got, want) {
 			t.Errorf("content %q: one pass %v, keyword index %v", content, got, want)
 		}
 		if len(want) != 1 || !want[0] {
