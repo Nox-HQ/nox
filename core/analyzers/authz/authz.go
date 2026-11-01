@@ -96,6 +96,11 @@
 // into the same route table, so AUTHN-001, WEBHOOK-001 and `nox model` cover
 // them; AUTHZ-001's body analysis does not run over their handlers.
 //
+// Go (net/http ServeMux, Gin, Echo, Chi: golang.go) and ASP.NET Core
+// (attribute-routed controllers and minimal APIs: dotnet.go) join the table the
+// same way. A Go route's middleware is read by interpreting the registration
+// code in order; an ASP.NET route's by its attributes and endpoint conventions.
+//
 // NOT read: other decorator frameworks (routing-controllers, tsoa), NestJS GraphQL
 // resolvers and gateways, Flask class-based views and Flask-RESTful
 // resources, Starlette/Sanic/Quart/aiohttp/Tornado routes, custom
@@ -223,10 +228,10 @@ func (a *Analyzer) Leads() []Lead { return a.leads }
 // Coverage names, for the scan's "Checks completed", exactly the frameworks
 // whose routes this analyzer reads. Keep it equal to the package
 // documentation's SCOPE.
-const Coverage = "Express, Fastify, Flask, FastAPI, Next.js, NestJS, Django, Spring and JAX-RS routes"
+const Coverage = "Express, Fastify, Flask, FastAPI, Next.js, NestJS, Django, Spring, JAX-RS, Go and ASP.NET Core routes"
 
 // ObjectLevelCoverage is the subset of Coverage AUTHZ-001's body analysis
-// (object-level authorization) runs over. Next.js, NestJS, Django, Spring and JAX-RS routes enter the
+// (object-level authorization) runs over. Next.js, NestJS, Django, Spring, JAX-RS, Go and ASP.NET Core routes enter the
 // route table, AUTHN-001 and WEBHOOK-001, but their handlers are not analysed
 // for ownership checks, and the scan says so rather than claiming otherwise.
 const ObjectLevelCoverage = "Express, Fastify, Flask and FastAPI"
@@ -346,6 +351,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	}
 	rls := false
 	pyFiles, pyOrder := map[string]*pyFile{}, []string(nil)
+	compiled := &compiledReaders{}
 	var jvmFiles []*jvmFile
 	jvmBuildDirs := map[string]bool{}
 	var jvmGuardFiles []string
@@ -362,6 +368,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			if b, err := os.ReadFile(art.AbsPath); err == nil && rlsRe.Match(b) {
 				rls = true
 			}
+			continue
+		}
+		if compiled.read(art, ext, func() []byte { return readCompiledSource(art) }) {
 			continue
 		}
 		if isJVMBuildFile(art.Path) || isJVMConfigFile(art.Path) {
@@ -419,6 +428,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		a.routes += len(nestRoutes)
 		a.routeList = append(a.routeList, nestRoutes...)
 		views = append(views, nestViews...)
+		sortRoutes(a.routeList)
+	}
+	if cRoutes, cViews := compiled.routes(); len(cRoutes) > 0 {
+		a.routes += len(cRoutes)
+		a.routeList = append(a.routeList, cRoutes...)
+		views = append(views, cViews...)
 		sortRoutes(a.routeList)
 	}
 	if len(jvmFiles) > 0 {
