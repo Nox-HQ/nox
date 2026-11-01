@@ -61,10 +61,36 @@ func (c arnRuleCase) arn(partition, region, account, resource string) string {
 	return arnOf(partition, c.service, region, account, resource)
 }
 
+// issuedAccountID is an account ID AWS's documentation does not use. The
+// positive cases used 123456789012, the documentation's own placeholder, so
+// they asserted that an example ARN ties code to an environment.
+const issuedAccountID = "402918375610"
+
+// Every ARN rule claims a hard-coded identifier ties the code to one
+// environment. AWS's documentation accounts belong to no environment: on the
+// 2026-09-27 corpus, 26 of SEC-465's sites were role ARNs in test files under
+// 123456789012 and 111122223333. An ARN under one is an example, not a
+// binding, in every partition and for every service.
+func TestARNRules_DoNotReportDocumentationAccounts(t *testing.T) {
+	for _, c := range arnRuleCases {
+		if c.service == "s3" {
+			continue // no account segment
+		}
+		for _, acct := range []string{"123456789012", "111122223333", "444455556666"} {
+			src := "RESOURCE = \"" + c.arn("aws", "us-east-1", acct, c.resource) + "\"\n"
+			t.Run(c.id+"/"+acct, func(t *testing.T) {
+				if _, ok := findingFor(scanOne(t, "test_app.py", src), c.id); ok {
+					t.Errorf("%s reported an ARN in AWS's documentation account %s:\n%s", c.id, acct, src)
+				}
+			})
+		}
+	}
+}
+
 func TestARNRules_ReportARNsInEveryPartition(t *testing.T) {
 	for _, c := range arnRuleCases {
 		for _, p := range arnPartitions {
-			src := "RESOURCE = \"" + c.arn(p.partition, p.region, "123456789012", c.resource) + "\"\n"
+			src := "RESOURCE = \"" + c.arn(p.partition, p.region, issuedAccountID, c.resource) + "\"\n"
 			t.Run(c.id+"/"+p.partition, func(t *testing.T) {
 				if _, ok := findingFor(scanOne(t, "app.py", src), c.id); !ok {
 					t.Errorf("%s did not report its ARN in application code:\n%s", c.id, src)
@@ -111,7 +137,7 @@ func TestSEC465_ReportsAWSManagedPolicyARN(t *testing.T) {
 // A sentence may end right after an ARN. The punctuation is not part of it.
 func TestARNRules_TrailingPunctuation(t *testing.T) {
 	for _, end := range []string{".", ","} {
-		src := "Jobs land in " + arnOf("aws", "sqs", "eu-west-1", "123456789012", "jobs") + end + " then a worker runs.\n"
+		src := "Jobs land in " + arnOf("aws", "sqs", "eu-west-1", issuedAccountID, "jobs") + end + " then a worker runs.\n"
 		if _, ok := findingFor(scanOne(t, "README.md", src), "SEC-518"); !ok {
 			t.Errorf("SEC-518 missed an ARN followed by %q:\n%s", end, src)
 		}
