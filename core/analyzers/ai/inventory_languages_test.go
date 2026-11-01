@@ -167,3 +167,23 @@ func TestIsSourceFileCoversPHP(t *testing.T) {
 		t.Error(".php must be scanned for AI SDK usage")
 	}
 }
+
+// Measured on real Python and TypeScript repositories: the first draft of the
+// .NET and Rust spellings matched English prose ("using OpenAI to ...") and a
+// Python identifier (`async_openai_client`), adding an openai-dotnet or
+// async-openai component to files that are neither. A spelling must be the
+// language's own syntax, not words.
+func TestInventorySDKSpellingsDoNotMatchProseOrIdentifiers(t *testing.T) {
+	files := map[string]string{
+		"a.py": "# Generate the image using OpenAI's API\nasync_openai_client = make()\nself.async_openai = None\nfrom openai import AsyncOpenAI\n",
+		"b.ts": "// This test is using OpenAI as the provider\nconst async_openai = 1;\nimport OpenAI from 'openai';\n",
+	}
+	for path, src := range files {
+		inv := scanSources(t, map[string]string{path: src})
+		for _, c := range inv.Components {
+			if c.Name == "openai-dotnet" || c.Name == "async-openai" {
+				t.Errorf("%s: %s component from prose or an identifier", path, c.Name)
+			}
+		}
+	}
+}

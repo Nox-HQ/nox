@@ -295,8 +295,8 @@ var frameworkPatterns = []frameworkPattern{
 	{componentName: "openai-ruby", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`OpenAI::Client\b`)},
 	{componentName: "anthropic-ruby", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`Anthropic::Client\b`)},
 	{componentName: "openai-php", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`OpenAI::(?:client|factory)\s*\(`)},
-	{componentName: "async-openai", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`async[_-]openai`)},
-	{componentName: "openai-dotnet", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`(?m)using\s+OpenAI\b`)},
+	{componentName: "async-openai", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`async_openai::`)},
+	{componentName: "openai-dotnet", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`(?m)using\s+OpenAI(?:\.[A-Za-z]+)*\s*;`)},
 	{componentName: "azure-ai-openai", componentType: "llm_sdk", pattern: rules.MustCompilePlanned(`Azure\.AI\.OpenAI`)},
 	// MCP.
 	{componentName: "mcp", componentType: "mcp_runtime", pattern: rules.MustCompilePlanned(`(?m)(?:modelcontextprotocol|mcp-go|@modelcontextprotocol/sdk)`)},
