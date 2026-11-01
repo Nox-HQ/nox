@@ -123,6 +123,11 @@ var lockfileNames = map[string]bool{
 	"composer.lock":      true,
 	"bom.json":           true,
 	"sbom.json":          true,
+	"Package.resolved":   true,
+	"mix.lock":           true,
+	"gradle.lockfile":    true,
+	"Podfile.lock":       true,
+	"conan.lock":         true,
 }
 
 // containerNames contains exact file names that identify container files.

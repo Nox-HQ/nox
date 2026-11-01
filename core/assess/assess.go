@@ -14,11 +14,13 @@
 package assess
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nox-hq/nox-core/degrade"
 	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
@@ -217,6 +219,10 @@ type Report struct {
 	// Issues are lower-priority observations; nothing is dropped from Issues.
 	AttentionIssues   int
 	AttentionFindings int
+	// DependenciesUnverified is true when a dependency manifest or lockfile was
+	// recognised but not turned into checked packages. The scan then cannot say
+	// "no issues" about dependencies without qualifying it.
+	DependenciesUnverified bool
 	// Checked names each concern the scan covered.
 	Checked []string
 	// NotChecked lists what the scan did not cover, and how to enable it.
@@ -243,6 +249,7 @@ func Build(in Input) Report {
 		}
 	}
 	r.Checked, r.NotChecked = coverage(in)
+	r.DependenciesUnverified = in.Scope.Has(nox.ScopeDeps) && hasKind(in.Degradations, "lockfile_parse")
 	r.Undetermined = undetermined(in.Findings)
 	r.Verify = verifications(in)
 	r.Leads = in.Leads
@@ -250,12 +257,20 @@ func Build(in Input) Report {
 	return r
 }
 
+// targetCheckBudget bounds how long the assessment waits for the advisory
+// database to confirm upgrade targets. The reports are already written when it
+// runs; a target not confirmed in time is printed as not checked, never as
+// clearing everything.
+const targetCheckBudget = 30 * time.Second
+
 func issues(in Input) []Issue {
 	ff := in.Findings
 	// The planner `nox fix` applies and the MCP fix_plan tool shows. The
 	// assessment's upgrade lines are exactly its actions, so "upgrade axios"
 	// here is the command `nox fix --dry-run` prints next.
-	plan := fix.PlanUpgrades(ff, fix.Options{Checker: in.checker()})
+	ctx, cancel := context.WithTimeout(context.Background(), targetCheckBudget)
+	defer cancel()
+	plan := fix.PlanUpgradesContext(ctx, ff, fix.Options{Checker: in.checker()})
 	used := make([]bool, len(ff))
 
 	var out []Issue
@@ -701,9 +716,10 @@ func degradationLimits(ds []nox.Degradation) []Limit {
 		}
 		head := kindHeadlines[k.kind]
 		if k.kind == "lockfile_parse" && !k.blocking {
-			// Advisory, not a failure: a package.json with no lockfile beside
-			// it was read, but only as far as a manifest can be.
-			head = "No lockfile is committed beside a package.json"
+			// Advisory, not a failure: a dependency manifest was read only as
+			// far as a manifest can be (no lockfile beside it), or could not be
+			// read at all (no reader for its ecosystem). The Impact says which.
+			head = "Some dependency manifests were read without a lockfile or could not be read"
 		}
 		if head == "" {
 			head = "A check did not complete (" + k.kind + ")"
