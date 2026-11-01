@@ -14,11 +14,13 @@
 package assess
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nox-hq/nox-core/degrade"
 	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
@@ -255,12 +257,20 @@ func Build(in Input) Report {
 	return r
 }
 
+// targetCheckBudget bounds how long the assessment waits for the advisory
+// database to confirm upgrade targets. The reports are already written when it
+// runs; a target not confirmed in time is printed as not checked, never as
+// clearing everything.
+const targetCheckBudget = 30 * time.Second
+
 func issues(in Input) []Issue {
 	ff := in.Findings
 	// The planner `nox fix` applies and the MCP fix_plan tool shows. The
 	// assessment's upgrade lines are exactly its actions, so "upgrade axios"
 	// here is the command `nox fix --dry-run` prints next.
-	plan := fix.PlanUpgrades(ff, fix.Options{Checker: in.checker()})
+	ctx, cancel := context.WithTimeout(context.Background(), targetCheckBudget)
+	defer cancel()
+	plan := fix.PlanUpgradesContext(ctx, ff, fix.Options{Checker: in.checker()})
 	used := make([]bool, len(ff))
 
 	var out []Issue
