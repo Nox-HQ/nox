@@ -42,11 +42,11 @@ func resolveRangeSpec(declared, spec string, bareIsRange bool) (name, version st
 	return declared, ver, true, ""
 }
 
-func resolveBareExact(declared, spec string) (string, string, bool, string) {
+func resolveBareExact(declared, spec string) (name, version string, isRange bool, reason string) {
 	return resolveRangeSpec(declared, spec, false)
 }
 
-func resolveBareRange(declared, spec string) (string, string, bool, string) {
+func resolveBareRange(declared, spec string) (name, version string, isRange bool, reason string) {
 	return resolveRangeSpec(declared, spec, true)
 }
 
@@ -229,12 +229,12 @@ func addCargoTable(acc *manifestAccumulator, deps map[string]any) {
 				acc.addUnresolved(declared, "", reasonNotRegistry)
 			default:
 				version, _ := v["version"].(string)
-				real := declared
+				crate := declared
 				if pkg, ok := v["package"].(string); ok && pkg != "" {
-					real = pkg
+					crate = pkg
 				}
 				acc.add(declared, version, func(_, spec string) (string, string, bool, string) {
-					return resolveRangeSpec(real, spec, true)
+					return resolveRangeSpec(crate, spec, true)
 				})
 			}
 		}
@@ -346,7 +346,7 @@ func parseComposerManifest(content []byte) ([]Package, []unresolvedSpec, error) 
 	return pkgs, unresolved, nil
 }
 
-func resolveComposer(declared, spec string) (string, string, bool, string) {
+func resolveComposer(declared, spec string) (name, version string, isRange bool, reason string) {
 	s := composerStabilityRe.ReplaceAllString(spec, "")
 	s, _, _ = strings.Cut(s, " as ")
 	first, _, _ := strings.Cut(s, "|") // "|" and "||" both separate alternatives
@@ -382,7 +382,7 @@ func parseGemfileManifest(content []byte) ([]Package, []unresolvedSpec, error) {
 		var constraints []string
 		for {
 			q := gemQuotedRe.FindStringSubmatch(rest)
-			if q == nil || !gemConstraint.MatchString(q[1]) {
+			if len(q) < 2 || !gemConstraint.MatchString(q[1]) {
 				break
 			}
 			constraints = append(constraints, strings.TrimSpace(q[1]))

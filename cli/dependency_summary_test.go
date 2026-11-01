@@ -29,7 +29,7 @@ func TestDependencySummary(t *testing.T) {
 			if !strings.Contains(got, tc.want) {
 				t.Errorf("dependencySummary = %q, want it to contain %q", got, tc.want)
 			}
-			if tc.degs != nil && string(tc.degs[0].Kind) == "lockfile_parse" && got == "0 dependencies" {
+			if len(tc.degs) > 0 && string(tc.degs[0].Kind) == "lockfile_parse" && got == "0 dependencies" {
 				t.Errorf("an unread manifest reads as %q", got)
 			}
 		})
