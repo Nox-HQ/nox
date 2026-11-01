@@ -822,7 +822,7 @@ func (e *StructuralEngine) inlineSanitized(lang string, st *taint.Statement) map
 func (e *StructuralEngine) resolveSink(lang, rawCall string) (taint.Sink, bool) {
 	for _, key := range suffixKeys(rawCall) {
 		if s, ok := e.cat.IsSink(lang, key); ok {
-			if receiverDisqualifies(lang, rawCall, key) {
+			if receiverDisqualifies(lang, rawCall, key) || writesToConsole(lang, rawCall, s.VulnClass) {
 				return taint.Sink{}, false
 			}
 			return s, true
@@ -862,9 +862,36 @@ func pythonConnectFactoryKey(lang, rawCall string) (string, bool) {
 // injection.
 var rubyKernelSinks = map[string]bool{"exec": true, "system": true, "spawn": true}
 
+// writesToConsole reports a JVM output call that writes to the process's
+// console, which no browser reads: System.out / System.err in Java and Kotlin,
+// and Kotlin's receiverless println / print, which ARE stdout. The XSS sinks
+// are keyed by method name (println, print, write), so these read as
+// cross-site scripting. A writer that reaches the response keeps the sink.
+func writesToConsole(lang, rawCall string, class taint.VulnClass) bool {
+	if class != taint.VulnXSS || (lang != "java" && lang != "kotlin") {
+		return false
+	}
+	recv, _, hasRecv := strings.Cut(rawCall, ".")
+	if !hasRecv {
+		return lang == "kotlin" && (rawCall == "println" || rawCall == "print")
+	}
+	if recv != "System" {
+		return false
+	}
+	return strings.HasPrefix(rawCall, "System.out.") || strings.HasPrefix(rawCall, "System.err.")
+}
+
 // receiverDisqualifies reports a receiver that makes a bare-name sink some
 // other object's method.
 func receiverDisqualifies(lang, rawCall, key string) bool {
+	// In Java and Kotlin a call on exactly `super` or `this` is the enclosing
+	// class's own method: `super.execute(file, name)` is not JDBC's
+	// Statement.execute. A field receiver (`this.statement.execute`) is still
+	// the library object and keeps the sink.
+	if lang == "java" || lang == "kotlin" {
+		recv := strings.TrimSuffix(rawCall, "."+key)
+		return recv != rawCall && (recv == "super" || recv == "this")
+	}
 	if lang != "ruby" || !rubyKernelSinks[key] || rawCall == key {
 		return false
 	}

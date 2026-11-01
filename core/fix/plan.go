@@ -151,6 +151,13 @@ type Plan struct {
 //     downgrades, no sideways moves, no stable-to-prerelease jumps.
 //  4. Hold back a major-boundary bump unless IncludeMajor.
 func PlanUpgrades(items []findings.Finding, opts Options) Plan {
+	return PlanUpgradesContext(context.Background(), items, opts)
+}
+
+// PlanUpgradesContext is PlanUpgrades bounded by ctx. A target the Checker has
+// not confirmed when ctx ends is planned from the findings alone and marked
+// Unverified, so a caller that cannot wait gets an honest plan, not a hang.
+func PlanUpgradesContext(ctx context.Context, items []findings.Finding, opts Options) Plan {
 	var plan Plan
 
 	type candidate struct {
@@ -199,6 +206,15 @@ func PlanUpgrades(items []findings.Finding, opts Options) Plan {
 		c.findings = append(c.findings, i)
 	}
 
+	var queries []targetQuery
+	for _, key := range order {
+		c := byPkg[key]
+		if target := BestFix(c.fixes); target != "" && IsUpgrade(c.from, target) {
+			queries = append(queries, targetQuery{ecosystem: c.ecosystem, pkg: c.pkg, from: c.from, initial: target})
+		}
+	}
+	resolved := resolveTargets(ctx, opts.Checker, queries)
+
 	for _, key := range order {
 		c := byPkg[key]
 		target := BestFix(c.fixes)
@@ -207,7 +223,7 @@ func PlanUpgrades(items []findings.Finding, opts Options) Plan {
 			plan.Unplanned = append(plan.Unplanned, c.findings...)
 			continue
 		}
-		res := resolveTarget(context.Background(), opts.Checker, c.ecosystem, c.pkg, c.from, target)
+		res := resolved[targetQuery{ecosystem: c.ecosystem, pkg: c.pkg, from: c.from, initial: target}]
 		target = res.Target
 		action := UpgradeAction{
 			RuleID:     c.ruleID,

@@ -73,6 +73,13 @@ func capitalize(s string) string {
 
 func renderIssues(b *strings.Builder, r Report, limit int) {
 	if len(r.Issues) == 0 {
+		if r.DependenciesUnverified {
+			// "No issues found in what was checked" reads as an all-clear. Some
+			// declared dependencies were not checked, and the claim cannot
+			// stand without saying so.
+			b.WriteString("No issues found, but some declared dependencies were NOT checked (see below).\n")
+			return
+		}
 		b.WriteString("No issues found in what was checked.\n")
 		return
 	}
