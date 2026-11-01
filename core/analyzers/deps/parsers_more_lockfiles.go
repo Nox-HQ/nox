@@ -97,7 +97,7 @@ func parseMixLock(content []byte) ([]Package, error) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		entry := reMixEntry.FindStringSubmatch(line)
-		if entry == nil || entry[1] != "hex" {
+		if len(entry) < 2 || entry[1] != "hex" {
 			continue
 		}
 		m := reMixHex.FindStringSubmatch(line)
@@ -179,7 +179,7 @@ func parsePodfileLock(content []byte) ([]Package, error) {
 		}
 		m := rePodEntry.FindStringSubmatch(strings.TrimSpace(strings.TrimPrefix(line, "  - ")))
 		if m == nil {
-			return nil, fmt.Errorf("Podfile.lock pod is not `Name (version)`: %q", strings.TrimSpace(line))
+			return nil, fmt.Errorf("in Podfile.lock, pod is not `Name (version)`: %q", strings.TrimSpace(line))
 		}
 		if strings.HasPrefix(m[2], "from ") {
 			continue
@@ -196,7 +196,7 @@ func parsePodfileLock(content []byte) ([]Package, error) {
 		return nil, fmt.Errorf("scanning Podfile.lock: %w", err)
 	}
 	if !sawPods {
-		return nil, errors.New("Podfile.lock has no PODS section")
+		return nil, errors.New("no PODS section in Podfile.lock")
 	}
 	return pkgs, nil
 }
