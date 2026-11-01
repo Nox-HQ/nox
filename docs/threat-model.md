@@ -117,7 +117,7 @@ with a line saying how many were left out.
 Stated in every model. Fixed limits: business logic and intent, runtime
 configuration, the identity provider and session handling, network topology
 beyond infrastructure findings, frameworks nox does not read (routes and
-authorization leads come from the Express, Fastify, Flask, FastAPI, Next.js, NestJS, Django, Spring, JAX-RS, Go and ASP.NET Core
+authorization leads come from the Express, Fastify, Flask, FastAPI, Next.js, NestJS, Django, Spring, JAX-RS, Go, ASP.NET Core, Rails and Laravel
 readers; gRPC, queue consumers and
 scheduled jobs are not enumerated),
 infrastructure of a kind nox does not read (or produced by a template or module), dependency directness, call tracing between

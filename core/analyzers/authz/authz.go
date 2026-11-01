@@ -91,10 +91,14 @@
 //
 // Next.js route handlers (app/**/route.ts and pages/api), NestJS controllers
 // (@Controller/@Get with @UseGuards and global guards), Django (urls.py
-// with function and class views, DRF routers and permission classes), and
-// Spring and JAX-RS controllers in Java and Kotlin (see jvm.go) are read
-// into the same route table, so AUTHN-001, WEBHOOK-001 and `nox model` cover
-// them; AUTHZ-001's body analysis does not run over their handlers.
+// with function and class views, DRF routers and permission classes),
+// Spring and JAX-RS controllers in Java and Kotlin (see jvm.go), Rails
+// (config/routes.rb joined to its controllers' before_action callbacks; see
+// rails.go) and Laravel (routes/*.php with middleware groups and controller
+// middleware; see laravel.go) are read into the same route table, so
+// AUTHN-001 and `nox model` cover them; AUTHZ-001's body analysis does not run
+// over their handlers, and WEBHOOK-001 is not judged for Rails and Laravel
+// (their delegates are not followed).
 //
 // Go (net/http ServeMux, Gin, Echo, Chi: golang.go) and ASP.NET Core
 // (attribute-routed controllers and minimal APIs: dotnet.go) join the table the
@@ -228,10 +232,10 @@ func (a *Analyzer) Leads() []Lead { return a.leads }
 // Coverage names, for the scan's "Checks completed", exactly the frameworks
 // whose routes this analyzer reads. Keep it equal to the package
 // documentation's SCOPE.
-const Coverage = "Express, Fastify, Flask, FastAPI, Next.js, NestJS, Django, Spring, JAX-RS, Go and ASP.NET Core routes"
+const Coverage = "Express, Fastify, Flask, FastAPI, Next.js, NestJS, Django, Spring, JAX-RS, Go, ASP.NET Core, Rails and Laravel routes"
 
 // ObjectLevelCoverage is the subset of Coverage AUTHZ-001's body analysis
-// (object-level authorization) runs over. Next.js, NestJS, Django, Spring, JAX-RS, Go and ASP.NET Core routes enter the
+// (object-level authorization) runs over. Next.js, NestJS, Django, Spring, JAX-RS, Go, ASP.NET Core, Rails and Laravel routes enter the
 // route table, AUTHN-001 and WEBHOOK-001, but their handlers are not analysed
 // for ownership checks, and the scan says so rather than claiming otherwise.
 const ObjectLevelCoverage = "Express, Fastify, Flask and FastAPI"
@@ -463,6 +467,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 				refuteTo(ix.reasoning, rf.path, rf.line, rf.reason, "the Flask and FastAPI route reader, over this repository's Python")
 			}
 		}
+	}
+	if rbRoutes, rbViews := readRubyAndPHP(ordered); len(rbRoutes) > 0 {
+		a.routes += len(rbRoutes)
+		a.routeList = append(a.routeList, rbRoutes...)
+		views = append(views, rbViews...)
+		sortRoutes(a.routeList)
 	}
 	exposed, hooks := exposures(views)
 	for _, h := range hooks {
