@@ -91,6 +91,8 @@ func newMemoChecker(c Checker) *memoChecker {
 	return &memoChecker{inner: c, calls: map[string]*memoCall{}}
 }
 
+// Remaining implements Checker: the first asker of a key asks the inner
+// Checker; later askers wait for that answer or for their own ctx.
 func (m *memoChecker) Remaining(ctx context.Context, ecosystem, pkg, version string) ([]Residual, error) {
 	key := ecosystem + "\x00" + pkg + "\x00" + version
 	m.mu.Lock()
