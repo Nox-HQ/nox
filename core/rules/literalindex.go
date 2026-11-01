@@ -197,8 +197,12 @@ var lowerOutliers = [][]byte{[]byte("\u0130"), []byte("\u212a")}
 // case ignored. Only a position holding k's first byte, in either case, can
 // start an occurrence, so those are found with bytes.IndexByte and tried in
 // order. The next position of each case is kept until it is passed, so
-// neither is searched for twice and the scan stays linear. k is non-empty.
+// neither is searched for twice and the scan stays linear. An empty k occurs
+// everywhere, as it does for bytes.Contains in the keyword index.
 func asciiFoldContains(content, k []byte) bool {
+	if len(k) == 0 {
+		return true
+	}
 	if len(content) < len(k) {
 		return false
 	}
