@@ -45,6 +45,7 @@ func extractJava(lines []logicalLine) []unitDraft {
 	// Without joining the two, the header was never recognized and the
 	// method's statements folded into the module unit.
 	pendingSig := ""
+	pendingSigLine := 0
 
 	for _, ll := range lines {
 		trimmed := strings.TrimSpace(ll.code)
@@ -57,7 +58,7 @@ func extractJava(lines []logicalLine) []unitDraft {
 			if strings.HasPrefix(trimmed, "throws ") || trimmed == "{" {
 				joined := sig + " " + trimmed
 				if name, params, ok := javaMethodHeader(joined); ok {
-					u := &unitDraft{funcName: name, params: params}
+					u := &unitDraft{funcName: name, params: params, requestBound: javaRequestBound(joined), headerLine: pendingSigLine}
 					units = append(units, u)
 					cur = u
 					methodDepth = depth
@@ -68,13 +69,14 @@ func extractJava(lines []logicalLine) []unitDraft {
 		}
 		if javaSignatureWithoutBody(trimmed) {
 			pendingSig = trimmed
+			pendingSigLine = ll.line
 			continue
 		}
 
 		// A method header opens a new unit. Recognize it before statements so its
 		// name is not mistaken for a call and its parameters become the unit's.
 		if name, params, ok := javaMethodHeader(trimmed); ok {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, requestBound: javaRequestBound(trimmed), headerLine: ll.line}
 			units = append(units, u)
 			cur = u
 			methodDepth = depth
@@ -147,6 +149,7 @@ func extractJava(lines []logicalLine) []unitDraft {
 
 	out := make([]unitDraft, 0, len(units))
 	for _, u := range units {
+		seedRequestBoundParams(u)
 		out = append(out, *u)
 	}
 	return out
@@ -434,4 +437,13 @@ func javaReturnStatement(ll logicalLine) (stmtDraft, bool) {
 	st.returns = append([]string(nil), st.reads...)
 	st.isReturn = true
 	return st, true
+}
+
+// javaRequestBound maps a Java method header's request-bound parameters
+// (`@RequestParam String host`) to their source sentinels.
+func javaRequestBound(header string) map[string]string {
+	// A method annotation on the same line (`@GetMapping("/p") String ping(`)
+	// opens the first parenthesis; the parameter list follows it.
+	_, rest := leadingAnnotations(header)
+	return requestBoundParams(headerParamList(rest), splitJavaParamList, lastIdentifier)
 }

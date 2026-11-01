@@ -884,6 +884,14 @@ func writesToConsole(lang, rawCall string, class taint.VulnClass) bool {
 // receiverDisqualifies reports a receiver that makes a bare-name sink some
 // other object's method.
 func receiverDisqualifies(lang, rawCall, key string) bool {
+	// In Java and Kotlin a call on exactly `super` or `this` is the enclosing
+	// class's own method: `super.execute(file, name)` is not JDBC's
+	// Statement.execute. A field receiver (`this.statement.execute`) is still
+	// the library object and keeps the sink.
+	if lang == "java" || lang == "kotlin" {
+		recv := strings.TrimSuffix(rawCall, "."+key)
+		return recv != rawCall && (recv == "super" || recv == "this")
+	}
 	if lang != "ruby" || !rubyKernelSinks[key] || rawCall == key {
 		return false
 	}
