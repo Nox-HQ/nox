@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A project whose dependencies are declared only in a manifest nox did not read is no longer reported as clean. `Cargo.toml`, `pyproject.toml`, `composer.json`, `Gemfile`, `pubspec.yaml`, `.csproj`, `Package.swift`, `mix.exs`, `build.sbt` and Conan files without a lockfile gave "0 dependencies", "dependencies (none found)" and "No issues found in what was checked", with no degradation: pinned smallvec 1.6.0, django 2.2.0, nokogiri 1.8.0 and Newtonsoft.Json 12.0.1 were invisible. Only npm said so. One table now names every dependency manifest, its ecosystem and the lockfiles that govern it; manifest readers for `pyproject.toml` (PEP 621 and Poetry), `Cargo.toml`, `.csproj`/`.fsproj`/`.vbproj` with `Directory.Packages.props`, `composer.json`, `Gemfile` and `pubspec.yaml` read direct dependencies the way `package.json` already was, and a manifest nox cannot read is a degradation naming it. The summary no longer says "none found" or "No issues found" while such a degradation stands. On the built binary those four pins give 1, 43, 47 and 1 advisories. On the seven repositories of the 2026-09-27 head-to-head, online, this adds 46 advisories, all `torch==2.1.0a0` pinned in two llama_index `pyproject.toml` files with no lockfile, and one degradation for crewAI's Jinja-templated `pyproject.toml`; everything else is unchanged.
+
 ## [1.55.11] - 2026-10-31
 
 DATA-001, the email-address rule and the costliest left in the engine, finds its matches back from the `@` instead of from every quote, `=` and `:`: over all crewAI files it takes 3.3 s instead of 8.0 s (five interleaved passes), its plan declining on 103 files instead of 4,450; AI-PI-002 and AI-PI-006 take the same path. No whole-scan figure is claimed: the host was too loaded to resolve one. Findings, fingerprints and the AI inventory are identical on crewAI. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.10, fingerprints included.

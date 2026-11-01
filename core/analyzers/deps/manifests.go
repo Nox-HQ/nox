@@ -43,7 +43,7 @@ var manifestTable = map[string]manifestSpec{
 	"package.json": {"npm", "npm", []string{"package-lock.json", "yarn.lock", "pnpm-lock.yaml"}, parsePackageJSONManifest},
 
 	"pyproject.toml": {"pypi", "Python", []string{"poetry.lock", "uv.lock", "Pipfile.lock", "requirements.txt"}, parsePyprojectManifest},
-	"Pipfile":        {"pypi", "Python (Pipenv)", nil, nil},
+	"Pipfile":        {"pypi", "Python (Pipenv)", []string{"Pipfile.lock"}, nil},
 
 	"Cargo.toml":    {"cargo", "Rust", []string{"Cargo.lock"}, parseCargoManifest},
 	"composer.json": {"composer", "PHP", []string{"composer.lock"}, parseComposerManifest},
@@ -189,6 +189,11 @@ func (a *Analyzer) readManifests(artifacts []discovery.Artifact, locks *manifest
 			continue
 		}
 		if spec.Read == nil {
+			// A lockfile is read on its own: Pipfile beside Pipfile.lock was
+			// scanned, though nox cannot read the Pipfile itself.
+			if _, governed := locks.governing(spec.Ecosystem, pathDir(art.Path)); governed {
+				continue
+			}
 			a.degradations.AddAdvisory(degrade.Lockfile,
 				fmt.Sprintf("%s is a dependency manifest (%s) and nox has no reader for it", art.Path, spec.Label),
 				"dependencies declared in this file were NOT scanned for vulnerabilities")

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -247,8 +248,25 @@ func TestManifestTable_LockfilesAreParsed(t *testing.T) {
 				t.Errorf("%s names lockfile %s, which nox does not parse", name, lf)
 			}
 		}
-		if spec.Read == nil && len(spec.Lockfiles) != 0 {
-			t.Errorf("%s has lockfiles but no reader: its lockfiles cannot govern what nox cannot read", name)
+	}
+	// A lockfile is read on its own, so it governs its manifest whether or not
+	// nox can read the manifest. When nox parses a manifest's companion
+	// lockfile, the table must name it, or the ordinary layout (Pipfile beside
+	// Pipfile.lock) is reported as "NOT scanned" while its lockfile was.
+	companions := map[string]string{
+		"Pipfile": "Pipfile.lock", "Package.swift": "Package.resolved", "mix.exs": "mix.lock",
+		"Podfile": "Podfile.lock", "Cartfile": "Cartfile.resolved", "conanfile.txt": "conan.lock",
+		"conanfile.py": "conan.lock", "rebar.config": "rebar.lock", "stack.yaml": "stack.yaml.lock",
+		"cabal.project": "cabal.project.freeze", "Project.toml": "Manifest.toml", "cpanfile": "cpanfile.snapshot",
+		"Cargo.toml": "Cargo.lock", "composer.json": "composer.lock", "Gemfile": "Gemfile.lock", "pubspec.yaml": "pubspec.lock",
+	}
+	for name, lf := range companions {
+		if _, parsed := supportedLockfiles[lf]; !parsed {
+			continue
+		}
+		spec, ok := manifestTable[name]
+		if ok && !slices.Contains(spec.Lockfiles, lf) {
+			t.Errorf("nox parses %s but %s does not name it as governing", lf, name)
 		}
 	}
 	for _, name := range []string{"Cargo.toml", "pyproject.toml", "composer.json", "Gemfile", "pubspec.yaml", "Package.swift",
@@ -312,6 +330,10 @@ func TestScanArtifacts_LockfileGovernsItsEcosystemManifest(t *testing.T) {
 		{"cargo", map[string]string{
 			"Cargo.toml": "[dependencies]\nsmallvec = \"=1.6.0\"\n",
 			"Cargo.lock": "[[package]]\nname = \"smallvec\"\nversion = \"1.6.0\"\n",
+		}},
+		{"pipenv", map[string]string{
+			"Pipfile":      "[packages]\nrequests = \"==2.19.0\"\n",
+			"Pipfile.lock": `{"_meta":{},"default":{"requests":{"version":"==2.19.0"}},"develop":{}}`,
 		}},
 		{"poetry", map[string]string{
 			"pyproject.toml": "[tool.poetry.dependencies]\ndjango = \"2.2.0\"\n",
