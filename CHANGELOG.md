@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The twelve ARN rules (SEC-414, SEC-465, SEC-466, SEC-511 to SEC-519) no longer report an ARN in one of AWS's documentation accounts: 123456789012, 111122223333 and 444455556666, the placeholders AWS's IAM, CLI and SDK guides use. Each rule claims a hard-coded identifier ties code to one environment, and these belong to none. On the seven repositories of the 2026-09-27 head-to-head this drops 50 findings, all of them role ARNs in test files under those accounts (25 SEC-465, 25 SEC-516 on the same lines), and adds none. 777788889999 is sometimes cited as one too; it was not found in AWS's documentation and is still reported. The positive test fixtures used 123456789012 and so asserted that an example ARN binds an environment; they now use an account AWS does not document.
+
 ## [1.55.11] - 2026-10-31
 
 DATA-001, the email-address rule and the costliest left in the engine, finds its matches back from the `@` instead of from every quote, `=` and `:`: over all crewAI files it takes 3.3 s instead of 8.0 s (five interleaved passes), its plan declining on 103 files instead of 4,450; AI-PI-002 and AI-PI-006 take the same path. No whole-scan figure is claimed: the host was too loaded to resolve one. Findings, fingerprints and the AI inventory are identical on crewAI. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.10, fingerprints included.
