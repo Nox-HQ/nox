@@ -1948,7 +1948,20 @@ Generated from dependency lockfile analysis. Lockfiles nox reads:
 | `packages.lock.json` | NuGet |
 | `composer.lock` | Packagist |
 | `pubspec.lock` | Pub |
+| `mix.lock` | Hex |
+| `gradle.lockfile` | Gradle (queried as Maven) |
+| `Package.resolved` | Swift Package Manager (inventory only, see below) |
+| `Podfile.lock` | CocoaPods (inventory only, see below) |
+| `conan.lock` | Conan (inventory only, see below) |
 | `bom.json` (CycloneDX), `sbom.json` (SPDX) | any |
+
+`Package.resolved`, `Podfile.lock` and `conan.lock` are read into the dependency
+inventory and the SBOM, but the advisory pipeline has no OSV ecosystem for
+Swift, CocoaPods or Conan, so those packages are **not** checked for
+vulnerabilities: the scan records a degradation per ecosystem saying so. A
+lockfile that cannot be parsed is also a degradation. Pods are read at their
+root pod (`Firebase/Core` is `Firebase`); `conan.lock` build requirements are
+included.
 
 Without a lockfile, nox reads the manifest's direct dependencies (exact pins
 as written, ranges at their lower bound) and records a degradation saying the
