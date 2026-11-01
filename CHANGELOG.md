@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A type annotation on a local no longer loses its taint in Python and TypeScript. `host: str = request.args.get("host")` and `const host: string = req.query.host` bound nothing, so the flow into `os.system` or `exec` was silent where the same line without the annotation fired: the dominant idiom in typed Python (PEP 526) and in TypeScript. The annotation is now cut from the binding as it already was for Rust, Kotlin, Swift, Scala, Java, C#, Dart and Go; a clause keyword before the colon (`else:`, `default:`) binds nothing, and colons inside brackets are left alone. A cross-language test holds every language to the same rule, each case with its unannotated twin as the premise and a typed constant that must not fire. The seven repositories of the 2026-09-27 head-to-head contain no typed local read from a request, and their findings are unchanged.
+
 ## [1.55.11] - 2026-10-31
 
 DATA-001, the email-address rule and the costliest left in the engine, finds its matches back from the `@` instead of from every quote, `=` and `:`: over all crewAI files it takes 3.3 s instead of 8.0 s (five interleaved passes), its plan declining on 103 files instead of 4,450; AI-PI-002 and AI-PI-006 take the same path. No whole-scan figure is claimed: the host was too loaded to resolve one. Findings, fingerprints and the AI inventory are identical on crewAI. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.10, fingerprints included.
