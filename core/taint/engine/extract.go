@@ -126,12 +126,12 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// continuations merge physical lines and each logical line is split on
 		// top-level semicolons. lexctx has already blanked the HTML template shell
 		// (non-code), so only real <?php … ?> code reaches the recognizer.
-		return extractPHP(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true), "->")))
+		return extractPHP(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true), joinAlways, "->")))
 	case lexctx.LangJava:
 		// Java uses the lexctx line/statement recognizer (no CGo tree-sitter): it is
 		// brace-delimited and `;`-terminated like JS, so it shares the
 		// logicalLines/splitSemicolons segmentation. See extract_java.go.
-		return extractJava(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true))))
+		return extractJava(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true), joinAlways)))
 	case lexctx.LangRuby:
 		// Ruby uses the lexctx line/statement recognizer like Python. Its `{}` are
 		// block/hash delimiters (not statement bodies — those are `def...end`), so
@@ -146,7 +146,7 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// each logical line is split on top-level semicolons. Ownership, Result/`?`
 		// unwrapping, iterator chains, and macro sinks make line recognition coarse;
 		// see extract_rust.go for the honest limits.
-		return extractRust(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true))))
+		return extractRust(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true), joinOnlyBuilders)))
 	case lexctx.LangCSharp:
 		// C# is brace-delimited like JS: paren/array continuations merge physical
 		// lines, then each logical line splits on top-level semicolons into
@@ -181,7 +181,7 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// Kotlin statements are usually newline-terminated (semicolons optional),
 		// so the split only affects the rare `a; b` line; it recognizes `fun`
 		// headers for per-function units. See extract_kotlin.go.
-		return extractKotlin(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true))))
+		return extractKotlin(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true), joinAlways)))
 	case lexctx.LangShell:
 		// Shell is command-oriented and paren-less. Statements are newline- or
 		// `;`-terminated; `{}`/`()` delimit function bodies (not continuations), so
@@ -517,24 +517,54 @@ func bracketDelta(code string, bracesAreBlocks bool) int {
 // assignment, so a value reaching a builder (a model request, a SQL builder)
 // never reached the variable the builder was assigned to.
 //
-// extra lists continuation operators beyond ".": PHP's "->". A line merges only
+// gate decides, per statement so far, whether a continuation may join it. extra
+// lists continuation operators beyond ".": PHP's "->". A line merges only
 // when the line above it does not end a statement or open/close a block
 // (';', '{', '}'), so a leading '.' after a block is never glued onto it.
 // Range operators (".." and "...", Rust and Kotlin) are not member access.
-func joinChainContinuations(lines []logicalLine, extra ...string) []logicalLine {
+func joinChainContinuations(lines []logicalLine, gate func(head string) bool, extra ...string) []logicalLine {
 	out := make([]logicalLine, 0, len(lines))
 	for _, ll := range lines {
-		if len(out) > 0 && opensWithMemberAccess(ll.code, extra) && !endsStatementOrBlock(out[len(out)-1].code) {
+		if len(out) > 0 && opensWithMemberAccess(ll.code, extra) && !endsStatementOrBlock(out[len(out)-1].code) && gate(out[len(out)-1].code) {
 			prev := &out[len(out)-1]
 			// No separator: the call-chain flattener reads `prompt()` followed
 			// directly by `.user(` as one chain, and breaks it at whitespace.
-			prev.code = strings.TrimRight(prev.code, " \t") + strings.TrimSpace(ll.code)
-			prev.raw = strings.TrimRight(prev.raw, " \t") + strings.TrimSpace(ll.raw)
+			//
+			// The code and raw views are byte-aligned (a comment is blanked to
+			// spaces in code but kept in raw), and later stages rely on that. So
+			// whitespace is trimmed by the COUNT measured on the code view and
+			// removed from both; trimming each view by its own content would drop
+			// a trailing comment from one and not the other.
+			cut := len(prev.code) - len(strings.TrimRight(prev.code, " \t"))
+			lead := len(ll.code) - len(strings.TrimLeft(ll.code, " \t"))
+			if len(prev.raw) == len(prev.code) && len(ll.raw) == len(ll.code) {
+				prev.code = prev.code[:len(prev.code)-cut] + ll.code[lead:]
+				prev.raw = prev.raw[:len(prev.raw)-cut] + ll.raw[lead:]
+			} else {
+				prev.code = strings.TrimRight(prev.code, " \t") + strings.TrimSpace(ll.code)
+				prev.raw = strings.TrimRight(prev.raw, " \t") + strings.TrimSpace(ll.raw)
+			}
 			continue
 		}
 		out = append(out, ll)
 	}
 	return out
+}
+
+// joinAlways joins every continuation line.
+func joinAlways(string) bool { return true }
+
+// joinOnlyBuilders joins a continuation only onto a statement that begins a
+// derive_builder request (`CreateChatCompletionRequestArgs::default()`, the
+// shape async-openai's requests take).
+//
+// Rust is gated because joining moves a finding to the statement's first line,
+// and Rust's existing taint rules key on the line of the call that carries the
+// value: `Command::new("sh")` / `.arg("-c")` / `.arg(format!(..))` is reported
+// on the `.arg` line, and the precision suite pins that. A builder request has
+// no such rule, and its flow is invisible unless the chain is one statement.
+func joinOnlyBuilders(head string) bool {
+	return strings.Contains(head, "Args::default()") || strings.Contains(head, "Args::default ()")
 }
 
 func opensWithMemberAccess(code string, extra []string) bool {
