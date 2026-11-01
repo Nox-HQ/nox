@@ -156,9 +156,14 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 			}
 			left := strings.TrimSpace(code[:i])
 			right := strings.TrimSpace(code[i+1:])
-			// JS declaration keywords.
+			// JS declaration keywords, then a TypeScript annotation on the
+			// binding (`const id: string = ...`).
 			if lang == langJavaScript {
-				left = stripDeclKeyword(left)
+				left = stripLocalAnnotation(stripDeclKeyword(left), jsAnnotationKeywords)
+			}
+			// A Python annotated assignment (`uid: str = ...`, PEP 526).
+			if lang == langPython {
+				left = stripLocalAnnotation(left, pythonAnnotationKeywords)
 			}
 			// Java variable declarations put a type before the name
 			// (`String user = ...`, `final int n = ...`, `Map<String,String> m = ...`).
@@ -253,6 +258,45 @@ func splitAssignment(lang langKind, code string) (lhs, rhs string) {
 	}
 	return "", ""
 }
+
+// stripLocalAnnotation cuts a type annotation from an assignment LHS: the text
+// after the first colon outside brackets, when what precedes it names a binding.
+// `uid: Optional[str]` and `id: Record<string, string>` become the bare name;
+// `d["a:b"]` and `a[1:2]` keep their colons, which sit inside brackets. A
+// keyword before the colon is a clause, not a name: Python's `else: x = y` and
+// a JS `default: x = y` are returned unchanged, so they bind nothing rather
+// than binding a variable named after the keyword.
+func stripLocalAnnotation(left string, keywords map[string]bool) string {
+	depth := 0
+	for i := 0; i < len(left); i++ {
+		switch left[i] {
+		case '(', '[', '{', '<':
+			depth++
+		case ')', ']', '}', '>':
+			depth--
+		case ':':
+			if depth != 0 {
+				continue
+			}
+			name := strings.TrimSpace(left[:i])
+			if name == "" || keywords[name] || strings.ContainsAny(name, " \t\"'") {
+				return left
+			}
+			return name
+		}
+	}
+	return left
+}
+
+// Keywords that precede a colon as a clause, not as an annotated name.
+var (
+	pythonAnnotationKeywords = map[string]bool{
+		"else": true, "try": true, "finally": true, "lambda": true, "case": true,
+		"if": true, "elif": true, "while": true, "for": true, "with": true,
+		"except": true, "match": true, "class": true, "def": true,
+	}
+	jsAnnotationKeywords = map[string]bool{"default": true, "case": true}
+)
 
 // stripDeclKeyword removes a leading const/let/var from a JS assignment LHS.
 func stripDeclKeyword(left string) string {
