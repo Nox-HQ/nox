@@ -54,15 +54,15 @@ var manifestTable = map[string]manifestSpec{
 
 	// No reader. Each of these is recognised so that a project built on it is
 	// never reported as having no dependencies.
-	"Package.swift":      {"swift", "Swift Package Manager", nil, nil},
-	"mix.exs":            {"hex", "Elixir (Mix)", nil, nil},
+	"Package.swift":      {"swift", "Swift Package Manager", []string{"Package.resolved"}, nil},
+	"mix.exs":            {"hex", "Elixir (Mix)", []string{"mix.lock"}, nil},
 	"build.sbt":          {"sbt", "Scala (sbt)", nil, nil},
-	"conanfile.txt":      {"conan", "C/C++ (Conan)", nil, nil},
-	"conanfile.py":       {"conan", "C/C++ (Conan)", nil, nil},
+	"conanfile.txt":      {"conan", "C/C++ (Conan)", []string{"conan.lock"}, nil},
+	"conanfile.py":       {"conan", "C/C++ (Conan)", []string{"conan.lock"}, nil},
 	"vcpkg.json":         {"vcpkg", "C/C++ (vcpkg)", nil, nil},
-	"Podfile":            {"cocoapods", "CocoaPods", nil, nil},
+	"Podfile":            {"cocoapods", "CocoaPods", []string{"Podfile.lock"}, nil},
 	"Cartfile":           {"carthage", "Carthage", nil, nil},
-	"libs.versions.toml": {"gradle", "Gradle version catalog", nil, nil},
+	"libs.versions.toml": {"gradle", "Gradle version catalog", []string{"gradle.lockfile"}, nil},
 	"rebar.config":       {"hex", "Erlang (rebar3)", nil, nil},
 	"stack.yaml":         {"hackage", "Haskell (Stack)", nil, nil},
 	"cabal.project":      {"hackage", "Haskell (Cabal)", nil, nil},
