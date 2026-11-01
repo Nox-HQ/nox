@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A JVM handler parameter that a web framework binds from the request by annotation is a taint source: Spring's `@RequestParam`, `@PathVariable`, `@MatrixVariable`, `@RequestHeader`, `@CookieValue`, `@RequestBody`, `@RequestPart` and `@ModelAttribute`; JAX-RS's `@QueryParam`, `@PathParam`, `@MatrixParam`, `@FormParam`, `@BeanParam`, `@HeaderParam` and `@CookieParam`; Micronaut's `@QueryValue`, `@Body` and `@Header`; and Quarkus REST's `@Rest*`, in Java and Kotlin. Such a value is as untrusted as `request.getParameter(...)`, but Spring and JAX-RS handlers passing one to a sink were silent. The parameter is bound from a per-kind source sentinel at method entry, so a direct `exec("ping " + host)`, an assignment chain and a sanitizer all behave as for any other source; an unannotated parameter is still not a source. On OWASP WebGoat this adds six findings: four SQL injections from `@RequestParam` in the SQL-injection lessons and challenge 5, a path traversal through an uploaded file's original name in WebWolf's file server, and a `PrintWriter.println` to a log file read as XSS. spring-petclinic, spring-petclinic-kotlin and OWASP BenchmarkJava (2,662 findings) are unchanged.
+
+### Fixed
+
+- A Kotlin parameter with an annotation (`@RequestParam host: String`) is a parameter. Its name read as `@RequestParam host`, which is not an identifier, so the parameter was dropped from the function and from every interprocedural summary through it.
+- In Java and Kotlin, a method called on exactly `super` or `this` is the class's own method, not a library sink of the same name. WebGoat's path-traversal lesson calls `super.execute(file, fullName, username)`, which suffix matching read as JDBC `Statement.execute`: SQL injection, three times, in a lesson with no SQL. A field receiver (`this.statement.execute`) keeps the sink.
+
 ## [1.55.11] - 2026-10-31
 
 DATA-001, the email-address rule and the costliest left in the engine, finds its matches back from the `@` instead of from every quote, `=` and `:`: over all crewAI files it takes 3.3 s instead of 8.0 s (five interleaved passes), its plan declining on 103 files instead of 4,450; AI-PI-002 and AI-PI-006 take the same path. No whole-scan figure is claimed: the host was too loaded to resolve one. Findings, fingerprints and the AI inventory are identical on crewAI. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.10, fingerprints included.
