@@ -126,12 +126,12 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// continuations merge physical lines and each logical line is split on
 		// top-level semicolons. lexctx has already blanked the HTML template shell
 		// (non-code), so only real <?php … ?> code reaches the recognizer.
-		return extractPHP(splitSemicolons(logicalLines(content, regions, true)))
+		return extractPHP(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true), "->")))
 	case lexctx.LangJava:
 		// Java uses the lexctx line/statement recognizer (no CGo tree-sitter): it is
 		// brace-delimited and `;`-terminated like JS, so it shares the
 		// logicalLines/splitSemicolons segmentation. See extract_java.go.
-		return extractJava(splitSemicolons(logicalLines(content, regions, true)))
+		return extractJava(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true))))
 	case lexctx.LangRuby:
 		// Ruby uses the lexctx line/statement recognizer like Python. Its `{}` are
 		// block/hash delimiters (not statement bodies — those are `def...end`), so
@@ -146,7 +146,7 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// each logical line is split on top-level semicolons. Ownership, Result/`?`
 		// unwrapping, iterator chains, and macro sinks make line recognition coarse;
 		// see extract_rust.go for the honest limits.
-		return extractRust(splitSemicolons(logicalLines(content, regions, true)))
+		return extractRust(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true))))
 	case lexctx.LangCSharp:
 		// C# is brace-delimited like JS: paren/array continuations merge physical
 		// lines, then each logical line splits on top-level semicolons into
@@ -181,7 +181,7 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// Kotlin statements are usually newline-terminated (semicolons optional),
 		// so the split only affects the rare `a; b` line; it recognizes `fun`
 		// headers for per-function units. See extract_kotlin.go.
-		return extractKotlin(splitSemicolons(logicalLines(content, regions, true)))
+		return extractKotlin(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true))))
 	case lexctx.LangShell:
 		// Shell is command-oriented and paren-less. Statements are newline- or
 		// `;`-terminated; `{}`/`()` delimit function bodies (not continuations), so
@@ -501,6 +501,61 @@ func bracketDelta(code string, bracesAreBlocks bool) int {
 		}
 	}
 	return d
+}
+
+// joinChainContinuations merges a line that opens with a member-access
+// operator into the statement above it. A fluent call chain is conventionally
+// written one call per line:
+//
+//	chatClient.prompt()
+//	    .user(question)
+//	    .call()
+//
+// and the bracket-balance merge in logicalLines cannot see that the first line
+// is unfinished, because every paren on it is closed. Without this each
+// `.user(question)` line was a statement of its own with no receiver and no
+// assignment, so a value reaching a builder (a model request, a SQL builder)
+// never reached the variable the builder was assigned to.
+//
+// extra lists continuation operators beyond ".": PHP's "->". A line merges only
+// when the line above it does not end a statement or open/close a block
+// (';', '{', '}'), so a leading '.' after a block is never glued onto it.
+// Range operators (".." and "...", Rust and Kotlin) are not member access.
+func joinChainContinuations(lines []logicalLine, extra ...string) []logicalLine {
+	out := make([]logicalLine, 0, len(lines))
+	for _, ll := range lines {
+		if len(out) > 0 && opensWithMemberAccess(ll.code, extra) && !endsStatementOrBlock(out[len(out)-1].code) {
+			prev := &out[len(out)-1]
+			// No separator: the call-chain flattener reads `prompt()` followed
+			// directly by `.user(` as one chain, and breaks it at whitespace.
+			prev.code = strings.TrimRight(prev.code, " \t") + strings.TrimSpace(ll.code)
+			prev.raw = strings.TrimRight(prev.raw, " \t") + strings.TrimSpace(ll.raw)
+			continue
+		}
+		out = append(out, ll)
+	}
+	return out
+}
+
+func opensWithMemberAccess(code string, extra []string) bool {
+	t := strings.TrimSpace(code)
+	if strings.HasPrefix(t, "..") {
+		return false
+	}
+	if strings.HasPrefix(t, ".") || strings.HasPrefix(t, "?.") {
+		return true
+	}
+	for _, op := range extra {
+		if strings.HasPrefix(t, op) {
+			return true
+		}
+	}
+	return false
+}
+
+func endsStatementOrBlock(code string) bool {
+	t := strings.TrimRight(code, " \t")
+	return t == "" || strings.HasSuffix(t, ";") || strings.HasSuffix(t, "{") || strings.HasSuffix(t, "}")
 }
 
 // splitSemicolons splits each logical line on top-level (non-bracketed)
