@@ -495,6 +495,16 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	inventory.pomsRequested = mavenFetched.requested
 	var mavenUnresolved []unresolvedMaven
 
+	// A gradle.lockfile pins every version its project resolves, so a
+	// versionless declaration in a build file it governs is not a gap.
+	var gradleLockDirs []string
+	for _, art := range artifacts {
+		if art.Type == discovery.Lockfile && filepath.Base(art.Path) == "gradle.lockfile" {
+			gradleLockDirs = append(gradleLockDirs, pathDir(art.Path))
+		}
+	}
+	var gradleUnresolved []unresolvedGradle
+
 	for _, art := range artifacts {
 		if art.Type != discovery.Lockfile || isInstalledDependencyPath(art.Path) {
 			continue
@@ -524,6 +534,18 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			var unresolved []unresolvedMaven
 			pkgs, unresolved, err = poms.packages(filepath.ToSlash(art.Path))
 			mavenUnresolved = append(mavenUnresolved, unresolved...)
+		case "build.gradle", "build.gradle.kts":
+			var props map[string]string
+			if b, perr := os.ReadFile(filepath.Join(filepath.Dir(art.AbsPath), "gradle.properties")); perr == nil {
+				props = parseGradleProperties(b)
+			}
+			var b gradleBuild
+			b, err = parseGradleBuild(content, props)
+			pkgs = b.pkgs
+			if len(b.unresolved) > 0 && !governedBy(gradleLockDirs, pathDir(art.Path)) {
+				gradleUnresolved = append(gradleUnresolved,
+					unresolvedGradle{path: filepath.ToSlash(art.Path), names: b.unresolved, springBoot: b.springBoot})
+			}
 		default:
 			pkgs, err = a.ParseLockfile(art.AbsPath, content)
 		}
@@ -557,6 +579,10 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 	}
 
+	if len(gradleUnresolved) > 0 {
+		detail, impact := gradleDegradation(gradleUnresolved)
+		a.degradations.Add(degrade.Lockfile, detail, impact)
+	}
 	if len(mavenUnresolved) > 0 {
 		detail, impact := mavenDegradation(mavenUnresolved, mavenFetched)
 		a.degradations.Add(degrade.Lockfile, detail, impact)

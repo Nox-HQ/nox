@@ -1986,6 +1986,18 @@ went from 25 to 0 (spring-petclinic), 23 to 0 (WebGoat), 354 to 0 (dropwizard)
 and 635 to 1 (quarkus-quickstarts, whose last one names a Testcontainers
 artifact no BOM manages). Transitive dependencies are not resolved.
 
+A Gradle build file is read for string coordinates after a configuration
+(`implementation("g:a:1.0")`, `api 'g:a:1.0'`). A `$name` or `${name}` version
+is taken from a literal the file defines (`val`, `var`, `def`, `ext.name`,
+`extra["name"]`, an `ext { }` block) or from `gradle.properties` beside it; a
+version at `${project.version}` is the build's own artifact and is not a
+dependency. A declaration with no version nox can determine (the Spring Boot
+plugin's dependency management, a `platform()` BOM, a variable defined in
+another project) is not guessed: the scan records one degradation counting
+them, naming the Spring Boot plugin version when the plugin is applied, and
+they are **not** checked. A `gradle.lockfile` in the build file's directory or
+above pins every version and governs it.
+
 Without a lockfile, nox reads the manifest's direct dependencies (exact pins
 as written, ranges at their lower bound) and records a degradation saying the
 versions came from the manifest: `package.json`, `pyproject.toml`,
