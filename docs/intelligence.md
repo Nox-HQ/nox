@@ -69,6 +69,17 @@ does not compare its advisories against a full scan. A plain OSV.dev response
 carries no coverage statement and raises nothing: it claims neither
 completeness nor its absence.
 
+Each advisory may also carry `nox_priority`: how likely the advisory is to be
+weaponised (a public exploit, or exploitation in the wild), by a named rule
+(`epss-first-severity-cwe/v1`: EPSS where it is at least 1%, otherwise the
+advisory's severity and CWE weighted by how often such advisories were
+weaponised). nox records it on the finding (`priority_score`, `priority_rule`,
+`priority_band`, `priority_why`, `priority_epss`, `priority_epss_percentile`)
+and uses it only to order findings that tie on severity, reachability and
+confidence in reports. It never changes a severity, gates a build, or hides a
+finding, and it ranks the advisory, not whether your code reaches the
+vulnerable function. Offline scans and plain OSV.dev answers carry none.
+
 ## The signed feeds, and the key built into nox
 
 Two feeds come from the service, both signed with one Ed25519 key:

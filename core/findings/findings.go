@@ -742,11 +742,27 @@ func reachabilityRank(f *Finding) int {
 	}
 }
 
+// advisoryPriority is NOX Intelligence's ranking of a dependency finding's
+// advisory (metadata priority_score, how likely the advisory is to be
+// weaponised): higher first. It only orders findings that tie on everything
+// that outranks it, and never changes a severity or hides anything. A finding
+// without one (no intelligence answer, or not a dependency finding) is 0, so
+// all of them tie here and keep their location order among themselves, and the
+// comparison stays a consistent ordering.
+func advisoryPriority(f *Finding) float64 {
+	v, err := strconv.ParseFloat(f.Metadata["priority_score"], 64)
+	if err != nil || v < 0 || v != v {
+		return 0
+	}
+	return v
+}
+
 // SortByPriority orders findings for a human reading top-down: active findings
 // before suppressed/baselined ones, then by severity, then by reachability
 // (confirmed-reachable up, likely-false-positive unreachable down — see the
-// reachability plugin), then confidence, then a stable location tiebreak. Use
-// it for display/reporting; SortDeterministic remains the canonical order for
+// reachability plugin), then confidence, then NOX Intelligence's advisory
+// priority (see advisoryPriority), then a stable location tiebreak. Use it for
+// display/reporting; SortDeterministic remains the canonical order for
 // baselines and diffs.
 func (fs *FindingSet) SortByPriority() {
 	sort.SliceStable(fs.items, func(i, j int) bool {
@@ -762,6 +778,9 @@ func (fs *FindingSet) SortByPriority() {
 		}
 		if ac, bc := confidencePriorityRank[a.Confidence], confidencePriorityRank[b.Confidence]; ac != bc {
 			return ac < bc
+		}
+		if ap, bp := advisoryPriority(&a), advisoryPriority(&b); ap != bp {
+			return ap > bp
 		}
 		if a.Location.FilePath != b.Location.FilePath {
 			return a.Location.FilePath < b.Location.FilePath
