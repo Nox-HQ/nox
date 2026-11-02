@@ -15,7 +15,7 @@
     "written against: if it does not match the tag rule-diff resolved, the ledger",
     "is stale as a whole and says so rather than silently passing."
   ],
-  "nox_release": "v1.55.11",
+  "nox_release": "v1.56.0",
   "classifications": {
     "duplicate-retired": "a second rule reported the same condition; one ID was retired into the other, which carries the alias",
     "applicability-narrowed": "the rule does not apply to this subject or resource kind, and now says so",
@@ -29,24 +29,5 @@
     "value-shape-required": "the value must now have the identifier's documented shape (case, digits, a boundary after it); a word or code expression assigned to the key is not the identifier",
     "duplicate-merged": "the vulnerability source reported one vulnerability under two identifiers (nox_same_as, e.g. a Go module advisory and its GitHub advisory); they are now one finding that keeps every id in aliases"
   },
-  "entries": [
-    {
-      "rule": "SEC-465",
-      "classification": "applicability-narrowed",
-      "pr": 981,
-      "reason": "An ARN under one of AWS's documentation accounts (123456789012, 111122223333, 444455556666, the placeholders AWS's IAM, CLI and SDK guides use) ties code to no environment, which is the claim every ARN rule makes; issuedAccount skips it. Drops read line by line: podinfo timoni/podinfo/debug_values.cue:119, an EKS role annotation under 111122223333; anthropic-sdk-python, four role ARNs in tests under 123456789012 and 111122223333."
-    },
-    {
-      "rule": "SEC-516",
-      "classification": "applicability-narrowed",
-      "pr": 981,
-      "reason": "An ARN under one of AWS's documentation accounts (123456789012, 111122223333, 444455556666, the placeholders AWS's IAM, CLI and SDK guides use) ties code to no environment, which is the claim every ARN rule makes; issuedAccount skips it. The IAM role rule fires on the same lines as SEC-465: podinfo debug_values.cue:119 and the four anthropic-sdk-python test role ARNs."
-    },
-    {
-      "rule": "SEC-517",
-      "classification": "applicability-narrowed",
-      "pr": 981,
-      "reason": "An ARN under one of AWS's documentation accounts (123456789012, 111122223333, 444455556666, the placeholders AWS's IAM, CLI and SDK guides use) ties code to no environment, which is the claim every ARN rule makes; issuedAccount skips it. Drops read line by line: aws-cloudformation-templates CloudFormation/MacrosExamples/ExecutionRoleBuilder README.md:77, example.yaml:20 and example.json:25, one example DynamoDB table ARN under 123456789012."
-    }
-  ]
+  "entries": []
 }
