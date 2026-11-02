@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -17,10 +18,12 @@ import (
 //
 // mavenIndex resolves what the repository itself can answer, offline: the
 // pom's own properties, the properties and dependencyManagement of a parent
-// that is in the repository, and BOMs imported from the repository. A version
-// that comes from a parent or BOM published elsewhere (spring-boot-starter-parent,
-// quarkus-bom) is not guessed: the dependency is reported as unresolved, naming
-// where its version lives, and the scan records that it was NOT checked.
+// that is in the repository, and BOMs imported from the repository. A parent or
+// BOM published elsewhere (spring-boot-starter-parent, quarkus-bom) is fetched
+// on an online scan, through NOX Intelligence (see maven_remote.go), and then
+// resolves exactly as an in-repo one does. What still cannot be had is not
+// guessed: the dependency is reported as unresolved, naming where its version
+// lives, and the scan records that it was NOT checked.
 
 // maxPomDepth bounds parent chains and BOM imports. Real chains are a handful
 // deep; the bound only stops a malformed or hostile cycle.
@@ -47,6 +50,10 @@ type pomFile struct {
 	managed   []pomDep
 	deps      []pomDep
 	parseFail error
+	// remote marks a POM fetched from a repository rather than read from the
+	// scanned tree. It is never one of the repository's own modules, and its
+	// parent is found by coordinates, never by relativePath.
+	remote bool
 }
 
 type pomEntry struct {
@@ -130,10 +137,13 @@ func parsePomFile(p string, content []byte) *pomFile {
 type mavenIndex struct {
 	byPath map[string]*pomFile
 	byGA   map[string]*pomFile // groupId:artifactId of each in-repo module
+	// remote holds fetched parents and BOMs by exact coordinates: unlike a
+	// module, a published POM is one version of many.
+	remote map[pomCoords]*pomFile
 }
 
 func newMavenIndex() *mavenIndex {
-	return &mavenIndex{byPath: map[string]*pomFile{}, byGA: map[string]*pomFile{}}
+	return &mavenIndex{byPath: map[string]*pomFile{}, byGA: map[string]*pomFile{}, remote: map[pomCoords]*pomFile{}}
 }
 
 func (x *mavenIndex) add(p string, content []byte) {
@@ -156,6 +166,9 @@ func (x *mavenIndex) parentOf(f *pomFile) *pomFile {
 	if f.parent == nil {
 		return nil
 	}
+	if f.remote {
+		return x.remote[*f.parent]
+	}
 	rel := "../pom.xml"
 	if f.relSet {
 		rel = f.relPath
@@ -173,11 +186,11 @@ func (x *mavenIndex) parentOf(f *pomFile) *pomFile {
 	if p, ok := x.byGA[f.parent.group+":"+f.parent.artifact]; ok && p != f {
 		return p
 	}
-	return nil
+	return x.remote[*f.parent]
 }
 
-// chain is f followed by its in-repo ancestors, and the first ancestor that is
-// NOT in the repository (nil when the chain ends locally).
+// chain is f followed by its known ancestors (in the repository or fetched),
+// and the first ancestor that is neither (nil when the chain ends).
 func (x *mavenIndex) chain(f *pomFile) ([]*pomFile, *pomCoords) {
 	out := []*pomFile{f}
 	seen := map[*pomFile]bool{f: true}
@@ -244,8 +257,9 @@ func interpolate(s string, props map[string]string) (string, bool) {
 }
 
 // managedVersions is the groupId:artifactId → version table f's dependencies
-// draw on, from f and its in-repo ancestors (nearest wins) and the BOMs they
-// import from the repository. external names imported BOMs that are not.
+// draw on, from f and its known ancestors (nearest wins) and the BOMs they
+// import, from the repository or fetched. external names imported BOMs that
+// are neither.
 func (x *mavenIndex) managedVersions(f *pomFile, depth int, visiting map[*pomFile]bool) (map[string]string, []pomCoords) {
 	table := map[string]string{}
 	var external []pomCoords
@@ -255,7 +269,14 @@ func (x *mavenIndex) managedVersions(f *pomFile, depth int, visiting map[*pomFil
 	visiting[f] = true
 	defer delete(visiting, f)
 	props := x.properties(f)
-	ch, _ := x.chain(f)
+	ch, extParent := x.chain(f)
+	// An imported BOM is interpolated in its own context, parent included, so
+	// a BOM whose parent is not known yet cannot be read in full: report the
+	// parent as needed too. A module's own external parent is reported by
+	// packages.
+	if depth > 0 && extParent != nil {
+		external = append(external, *extParent)
+	}
 	for _, p := range ch {
 		for _, m := range p.managed {
 			g, okG := interpolate(m.group, props)
@@ -266,6 +287,9 @@ func (x *mavenIndex) managedVersions(f *pomFile, depth int, visiting map[*pomFil
 			if m.scope == "import" {
 				v, _ := interpolate(m.version, props)
 				bom, ok := x.byGA[g+":"+a]
+				if !ok {
+					bom, ok = x.remote[pomCoords{g, a, v}]
+				}
 				if !ok {
 					external = append(external, pomCoords{g, a, v})
 					continue
@@ -319,7 +343,11 @@ func (x *mavenIndex) packages(p string) ([]Package, []unresolvedMaven, error) {
 	if externalParent != nil {
 		sources = append(sources, *externalParent)
 	}
-	sources = append(sources, externalBOMs...)
+	for _, b := range externalBOMs {
+		if !slices.Contains(sources, b) {
+			sources = append(sources, b)
+		}
+	}
 
 	type key struct{ name, ver string }
 	seen := map[key]bool{}
@@ -382,15 +410,16 @@ func parsePomXML(content []byte) ([]Package, error) {
 
 // mavenDegradation summarises every unresolved Maven dependency of a scan in
 // one degradation: a 124-module build must not produce 124 near-identical
-// lines.
-func mavenDegradation(all []unresolvedMaven) (detail, impact string) {
+// lines. The impact says, for the files the versions live in, why nox could not
+// read them: never asked (offline), not published, or not fetched.
+func mavenDegradation(all []unresolvedMaven, fetch *mavenFetch) (detail, impact string) {
 	poms := map[string]bool{}
-	srcCount := map[string]int{}
+	srcCount := map[pomCoords]int{}
 	var examples []string
 	for _, u := range all {
 		poms[u.pomPath] = true
 		for _, s := range u.source {
-			srcCount[s.String()]++
+			srcCount[s]++
 		}
 		if len(examples) < 3 {
 			examples = append(examples, u.name+" ("+u.pomPath+")")
@@ -400,25 +429,58 @@ func mavenDegradation(all []unresolvedMaven) (detail, impact string) {
 	if len(poms) != 1 {
 		files = "pom.xml files"
 	}
-	detail = fmt.Sprintf("%d Maven dependencies in %d %s have no version nox can determine from this repository, e.g. %s",
+	detail = fmt.Sprintf("%d Maven dependencies in %d %s have no version nox can determine, e.g. %s",
 		len(all), len(poms), files, strings.Join(examples, ", "))
 	impact = "these dependencies were NOT checked for vulnerabilities"
-	if len(srcCount) > 0 {
-		srcs := make([]string, 0, len(srcCount))
-		for s := range srcCount {
-			srcs = append(srcs, s)
+	if len(srcCount) == 0 {
+		return detail, impact
+	}
+	srcs := make([]pomCoords, 0, len(srcCount))
+	for s := range srcCount {
+		srcs = append(srcs, s)
+	}
+	sort.Slice(srcs, func(i, j int) bool {
+		if srcCount[srcs[i]] != srcCount[srcs[j]] {
+			return srcCount[srcs[i]] > srcCount[srcs[j]]
 		}
-		sort.Slice(srcs, func(i, j int) bool {
-			if srcCount[srcs[i]] != srcCount[srcs[j]] {
-				return srcCount[srcs[i]] > srcCount[srcs[j]]
-			}
-			return srcs[i] < srcs[j]
-		})
-		const shown = 3
-		if len(srcs) > shown {
-			srcs = append(srcs[:shown], fmt.Sprintf("%d more", len(srcCount)-shown))
+		return srcs[i].String() < srcs[j].String()
+	})
+	var notFound, unavailable, absent []string
+	for _, s := range srcs {
+		switch {
+		case fetch != nil && fetch.notFound[s]:
+			notFound = append(notFound, s.String())
+		case fetch != nil && fetch.unavailable[s]:
+			unavailable = append(unavailable, s.String())
+		default:
+			absent = append(absent, s.String())
 		}
-		impact += "; their versions are managed by " + strings.Join(srcs, ", ") + ", which is not in this repository"
+	}
+	if len(notFound) > 0 {
+		impact += "; their versions are managed by " + topN(notFound) + ", which is not on Maven Central (a private repository?)"
+	}
+	if len(unavailable) > 0 {
+		why := ""
+		if fetch.reason != "" {
+			why = " (" + fetch.reason + ")"
+		}
+		impact += "; their versions are managed by " + topN(unavailable) + ", which could not be fetched" + why +
+			"; a later online scan may resolve them"
+	}
+	if len(absent) > 0 {
+		impact += "; their versions are managed by " + topN(absent) + ", which is not in this repository"
+		if fetch == nil || !fetch.enabled {
+			impact += " (published parents and BOMs are fetched only on an online scan with NOX Intelligence enabled)"
+		}
 	}
 	return detail, impact
+}
+
+// topN joins the first three names and counts the rest.
+func topN(names []string) string {
+	const shown = 3
+	if len(names) > shown {
+		return strings.Join(names[:shown], ", ") + fmt.Sprintf(" and %d more", len(names)-shown)
+	}
+	return strings.Join(names, ", ")
 }

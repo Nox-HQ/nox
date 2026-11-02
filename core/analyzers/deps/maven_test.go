@@ -14,9 +14,9 @@ import (
 // online scan of spring-petclinic reported no vulnerable dependencies where
 // osv-scanner, resolving the parent, reported 17.
 
-func mavenPkgs(t *testing.T, files map[string]string) (got, degs []string) {
+func mavenPkgs(t *testing.T, files map[string]string, opts ...AnalyzerOption) (got, degs []string) {
 	t.Helper()
-	inv, d, _ := scanManifestTree(t, files, WithOSVDisabled())
+	inv, d, _ := scanManifestTree(t, files, append([]AnalyzerOption{WithOSVDisabled()}, opts...)...)
 	for _, p := range inv.Packages() {
 		if p.Ecosystem == "maven" {
 			got = append(got, p.Name+"@"+p.Version)

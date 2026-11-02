@@ -35,3 +35,17 @@ func networkNotice(cfg *nox.ScanConfig, offline, noOSV, depsScanned bool, depCou
 		"Source code, file paths and findings were not sent. "+
 		"Opt out: --offline or scan.osv.disabled: true makes no network request.", depCount, osv)
 }
+
+// mavenNetworkNotice says that Maven parent and BOM coordinates were sent to
+// fetch their POMs. It is a separate line because it is a separate request with
+// a separate reason, and a scan of a project with no external parent never
+// makes it. It returns "" when none were sent.
+func mavenNetworkNotice(cfg *nox.ScanConfig, requested int) string {
+	if requested == 0 {
+		return ""
+	}
+	return fmt.Sprintf("[network] Maven resolution: the group, artifact and version of %d published parent or BOM POM(s) "+
+		"the repository does not contain were sent to %s, which fetched them from Maven Central so dependency versions "+
+		"managed there could be resolved. Same opt-outs as the dependency lookup.",
+		requested, cfg.Scan.Intelligence.ResolvedEndpoint())
+}

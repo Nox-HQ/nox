@@ -52,3 +52,19 @@ func TestNetworkNotice(t *testing.T) {
 		}
 	})
 }
+
+// Maven parent and BOM coordinates leave the machine in their own request;
+// a scan that sent some says so, and one that sent none prints nothing.
+func TestMavenNetworkNotice(t *testing.T) {
+	t.Setenv(nox.IntelligenceEndpointEnv, "")
+	def := func() *nox.ScanConfig { return &nox.ScanConfig{} }
+	if got := mavenNetworkNotice(def(), 0); got != "" {
+		t.Errorf("no POMs requested printed %q", got)
+	}
+	got := mavenNetworkNotice(def(), 3)
+	for _, want := range []string{"3 published parent or BOM POM(s)", "Maven Central", "https://intel.klarlabs.de"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("notice %q lacks %q", got, want)
+		}
+	}
+}
