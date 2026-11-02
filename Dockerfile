@@ -1,7 +1,7 @@
 # Build stage
 # nox:ignore IAC-121 -- nox is a one-shot CLI; a HEALTHCHECK has nothing to poll
 # nox:ignore IAC-124 -- maintainer is carried by the OCI labels on the runtime stage
-FROM golang:1.27-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS builder
+FROM golang:1.27-alpine@sha256:d200d2dd76b03a99b52651fd1325aff7dcd35422c35c01bac56571b0507f3deb AS builder
 
 ARG VERSION=dev
 ARG COMMIT=none
