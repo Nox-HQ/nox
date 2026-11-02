@@ -11,9 +11,9 @@ the scan. If a sentence here is not true of the binary, that is a bug.
 |---|---|---|
 | every online scan with a lockfile | `(ecosystem, package, version)` per dependency, as one `/v1/querybatch` request — byte-for-byte the request OSV.dev has always received | the intelligence service, then the reference database (verification) |
 | `scan.intelligence.contribute: true` **only** | redacted observations: per finding, the fields in `nox intel allowlist` — fingerprint, rule id, ecosystem/package/version range, verdict — never a path, a line, a snippet, a secret, or a prompt | the intelligence service |
-| never | source code, file paths, file contents, prompts, credentials, customer data | — |
-
+| every online scan of a Maven project whose parent POM or imported BOM is not in the repository | `(groupId, artifactId, version)` of each such parent and BOM, as `/v1/maven/poms` requests; the service returns the published `pom.xml` from Maven Central and nox resolves the versions itself. A separate `[network]` line counts them | the intelligence service, which fetches from Maven Central |
 | every online scan, when a signed feed is not cached or has expired (24h) | two plain `GET`s of public files: `/v1/feeds/slopsquat` and, when the scan found registry-launched MCP servers, `/v1/feeds/mcp`. Nothing about the project is sent | the intelligence service |
+| never | source code, file paths, file contents, prompts, credentials, customer data | — |
 
 A scan that made the lookup says so once, in a `[network]` line after the
 results: how many dependencies, where they went, and how to opt out. A scan that

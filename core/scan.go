@@ -690,6 +690,11 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			src = newIntel(degradations)
 		}
 		depsOpts = append(depsOpts, deps.WithSource(src))
+		// Maven parents and BOMs the repository does not contain are fetched
+		// through the same service, under the same switch: offline, or with
+		// intelligence disabled, nothing is asked and those dependencies are
+		// reported unresolved.
+		depsOpts = append(depsOpts, deps.WithPOMSource(intelPOMSource{intel.NewClient(endpoint, intelHTTPClient())}))
 	}
 
 	depsAnalyzer := deps.NewAnalyzer(depsOpts...)

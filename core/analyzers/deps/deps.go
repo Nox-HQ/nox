@@ -97,6 +97,17 @@ type PackageInventory struct {
 	mu    sync.Mutex
 	pkgs  []Package
 	vulns map[int][]Vulnerability
+	// pomsRequested counts the Maven parent and BOM coordinates sent to the
+	// POM source, so the scan can say what left the machine.
+	pomsRequested int
+}
+
+// MavenPOMsRequested is how many published Maven POM coordinates the scan asked
+// its POM source for. Zero on an offline scan.
+func (pi *PackageInventory) MavenPOMsRequested() int {
+	pi.mu.Lock()
+	defer pi.mu.Unlock()
+	return pi.pomsRequested
 }
 
 // Add appends a package to the inventory.
@@ -246,6 +257,10 @@ type Analyzer struct {
 
 	// advisoryCache is applied to the default OSV source when one is built.
 	advisoryCache osvsource.AdvisoryCache
+
+	// pomSource fetches Maven parents and BOMs the repository does not
+	// contain (maven_remote.go). Nil on an offline scan.
+	pomSource POMSource
 
 	// degradations collects the checks this analyzer could not complete. It is
 	// optional: a nil collector discards records, so library callers that do
@@ -476,6 +491,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			}
 		}
 	}
+	mavenFetched := poms.fetchRemote(ctx, a.pomSource)
+	inventory.pomsRequested = mavenFetched.requested
 	var mavenUnresolved []unresolvedMaven
 
 	for _, art := range artifacts {
@@ -541,7 +558,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	}
 
 	if len(mavenUnresolved) > 0 {
-		detail, impact := mavenDegradation(mavenUnresolved)
+		detail, impact := mavenDegradation(mavenUnresolved, mavenFetched)
 		a.degradations.Add(degrade.Lockfile, detail, impact)
 	}
 
