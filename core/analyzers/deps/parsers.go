@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -629,58 +628,6 @@ func unquoteTOML(s string) string {
 		return s[1 : len(s)-1]
 	}
 	return s
-}
-
-// reGradleDep matches Gradle dependency declarations such as:
-//
-//	implementation 'group:artifact:version'
-//	implementation "group:artifact:version"
-//	api("group:artifact:version")
-//	compile 'group:artifact:version'
-//	testImplementation("group:artifact:version")
-var reGradleDep = regexp.MustCompile(
-	`(?:implementation|api|compile|compileOnly|runtimeOnly|testImplementation|testCompileOnly|testRuntimeOnly|classpath|annotationProcessor)\s*[\("']+([^:'"]+):([^:'"]+):([^'")\s]+)`,
-)
-
-// parseBuildGradle extracts dependencies from a Gradle build file
-// (build.gradle or build.gradle.kts) using line-based regex matching.
-func parseBuildGradle(content []byte) ([]Package, error) {
-	var pkgs []Package
-	type key struct{ name, ver string }
-	seen := make(map[key]struct{})
-
-	scanner := newLineScanner(bytes.NewReader(content))
-	for scanner.Scan() {
-		line := scanner.Text()
-		matches := reGradleDep.FindAllStringSubmatch(line, -1)
-		for _, m := range matches {
-			if len(m) < 4 {
-				continue
-			}
-			group, artifact, ver := m[1], m[2], m[3]
-			// Skip Gradle property references.
-			if strings.HasPrefix(ver, "$") {
-				continue
-			}
-			name := group + ":" + artifact
-			k := key{name, ver}
-			if _, exists := seen[k]; exists {
-				continue
-			}
-			seen[k] = struct{}{}
-			pkgs = append(pkgs, Package{
-				Name:      name,
-				Version:   ver,
-				Ecosystem: "gradle",
-			})
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scanning build.gradle: %w", err)
-	}
-
-	return pkgs, nil
 }
 
 // nugetPackagesLock is the structure of a NuGet packages.lock.json file.
