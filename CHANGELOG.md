@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Dependency findings record NOX Intelligence's advisory priority (`nox_priority`, rule `epss-first-severity-cwe/v1`): `priority_score`, `priority_rule`, `priority_band`, `priority_why`, `priority_epss`, `priority_epss_percentile`. Reports order findings that tie on severity, reachability and confidence by it, highest first; findings without one keep their location order. It never changes a severity, gates, or hides a finding (`docs/intelligence.md`). Measured by the service on 2025+ GitHub package advisories: 54% of weaponised advisories in the top tenth, against 39% for EPSS alone.
+
+### Changed
+
+- `nox-core` decodes `nox_priority` and keeps `database_specific.cwe_ids` on records.
+
 ## [1.56.0] - 2026-11-02
 
 Language reach, measured on real repositories. Maven versions managed by a parent pom, an imported BOM or a `${property}` are resolved (offline from the repository, online from published parents and BOMs fetched through NOX Intelligence), and what cannot be resolved is reported instead of silently skipped: unchecked Maven dependencies went 25→0 on spring-petclinic, 23→0 WebGoat, 354→0 dropwizard, 635→1 quarkus-quickstarts. Gradle builds report their versionless dependencies and resolve `$variables`. Routes and missing-authentication leads for Spring, JAX-RS, Go (net/http, Gin, Echo, Chi), ASP.NET Core, Rails and Laravel; SwiftPM, mix, Gradle, CocoaPods and Conan lockfiles; JVM framework parameters as taint sources. Side by side with osv-scanner 2.6.0 and Trivy 0.75.0: identical to osv-scanner on uv.lock and pnpm projects (202/202, 346/346; Trivy 180, 306); every finding osv-scanner has that nox lacks is a transitive dependency. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.11, fingerprints included (209 and 126).

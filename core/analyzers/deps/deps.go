@@ -867,6 +867,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						}
 					}
 					addProvenanceMetadata(meta, &ov)
+					addPriorityMetadata(meta, &ov)
 					if fix := fixedVersion(&ov, pkg.Name, pkg.Ecosystem, pkg.Version); fix != "" {
 						meta["fixed_in"] = fix
 						meta["remediation_action"] = "upgrade"
