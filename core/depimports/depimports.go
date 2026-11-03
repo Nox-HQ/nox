@@ -205,7 +205,7 @@ var (
 	rsExternRE = regexp.MustCompile(`(?m)^\s*extern\s+crate\s+([A-Za-z_]\w*)`)
 	// import "x" / import name "x" / the paths inside import ( ... )
 	goImportOneRE   = regexp.MustCompile(`(?m)^import\s+(?:[\w.]+\s+)?"([^"]+)"`)
-	goImportBlockRE = regexp.MustCompile(`(?ms)^import\s*\((.*?)^\)`)
+	goImportBlockRE = regexp.MustCompile(`(?ms)^import\s*\((.*?)\n\)`)
 	goQuotedRE      = regexp.MustCompile(`"([^"]+)"`)
 	// import 'package:foo/bar.dart'
 	dartRE = regexp.MustCompile(`(?m)^\s*(?:import|export)\s+['"]package:([^/'"]+)`)
