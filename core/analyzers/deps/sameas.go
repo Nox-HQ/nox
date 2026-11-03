@@ -14,9 +14,11 @@ import (
 // NOX Intelligence merges nothing: a Go module advisory and its GitHub
 // advisory both arrive, each carrying nox_same_as naming the other. Reported
 // as they arrive they are two findings for one flaw, which doubles the count a
-// gate reads and the work a reviewer does. Records are joined only through
-// nox_same_as, which the service computed over this one answer; an alias
-// listed in `aliases` that is not also in the answer joins nothing.
+// gate reads and the work a reviewer does. Records are joined through
+// nox_same_as, which the service computed over this one answer. A source that
+// sends none (OSV.dev, an older service) is joined by the service's own rule:
+// records in this answer that share a name, their id or an alias, are one
+// vulnerability. An alias naming a record absent from the answer joins nothing.
 //
 // The surviving record is chosen so that collapsing can never lower what the
 // scan reports and never depends on arrival order: a gating status beats a
@@ -25,8 +27,7 @@ import (
 // aliases, because a waiver or baseline written against either name must keep
 // matching. What reachability reads (each affected package's import paths and
 // symbols, and nox_symbols) is joined from every member: in a Go answer the
-// survivor is usually the GitHub advisory and the symbols are on the Go one. A source that sends no nox_same_as (OSV.dev, an older service)
-// leaves the list untouched.
+// survivor is usually the GitHub advisory and the symbols are on the Go one.
 //
 // The second result maps each survivor's id to the records it absorbed, as they
 // arrived, so the caller can recover what their findings used to be.
@@ -37,9 +38,6 @@ func collapseSameAs(recs []vulnsource.Record) (survivors []vulnsource.Record, ab
 			linked = true
 			break
 		}
-	}
-	if !linked {
-		return recs, nil
 	}
 
 	index := make(map[string]int, len(recs))
@@ -59,10 +57,23 @@ func collapseSameAs(recs []vulnsource.Record) (survivors []vulnsource.Record, ab
 		}
 		return i
 	}
-	for i := range recs {
-		for _, other := range recs[i].SameAs {
-			if j, ok := index[other]; ok {
-				parent[find(i)] = find(j)
+	if linked {
+		for i := range recs {
+			for _, other := range recs[i].SameAs {
+				if j, ok := index[other]; ok {
+					parent[find(i)] = find(j)
+				}
+			}
+		}
+	} else {
+		owner := map[string]int{} // a name -> the first record that carries it
+		for i := range recs {
+			for _, name := range append([]string{recs[i].ID}, recs[i].Aliases...) {
+				if j, ok := owner[name]; ok {
+					parent[find(i)] = find(j)
+				} else {
+					owner[name] = i
+				}
 			}
 		}
 	}
@@ -75,6 +86,9 @@ func collapseSameAs(recs []vulnsource.Record) (survivors []vulnsource.Record, ab
 			roots = append(roots, r)
 		}
 		groups[r] = append(groups[r], i)
+	}
+	if len(roots) == len(recs) {
+		return recs, nil // nothing joined: the list as it arrived
 	}
 
 	out := make([]vulnsource.Record, 0, len(groups))
