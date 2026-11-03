@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -274,10 +275,34 @@ func (s *sourceImports) get() *depimports.Index {
 		if err != nil {
 			continue
 		}
-		ix.Add(p, content)
+		name := p
+		if strings.HasSuffix(p, ".go") && s.rel[p] != "" {
+			// Go source is filtered by where it sits in the project (tests,
+			// vendor/, testdata/), which the absolute path cannot say: a
+			// project checked out under a directory named testdata would
+			// lose every file.
+			name = s.rel[p]
+		}
+		ix.Add(name, content)
 	}
 	s.index = ix
 	return ix
+}
+
+// addImportedMetadata records whether this project's own non-test Go source
+// imports the module (dependency_imported: true or false), when any Go source
+// was read. It establishes no rung and changes no verdict: the linked set
+// decides those. It orders findings nothing decided. Measured on 500 Go
+// repositories (nox-intelligence docs/design/learning-loop.md): among decided
+// findings, 7.6% of those whose module the project imports were impacting,
+// against 0.4% of the rest, and as an order it scored average precision 0.170
+// where nox_priority scored 0.021 (base rate 0.020).
+func addImportedMetadata(meta map[string]string, src *sourceImports, module string) {
+	ix := src.get()
+	if !ix.Known("go") {
+		return // no Go source read: the question was never put
+	}
+	meta["dependency_imported"] = strconv.FormatBool(ix.ImportsModule(module))
 }
 
 // importApplicability answers the SymbolUsed rung for the ecosystems whose

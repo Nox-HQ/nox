@@ -84,3 +84,41 @@ func TestUnsupportedEcosystemsSaySo(t *testing.T) {
 		}
 	}
 }
+
+func TestGoImportsModule(t *testing.T) {
+	ix := New()
+	ix.Add("cmd/app/main.go", []byte("package main\n\nimport (\n\t\"fmt\"\n\tx \"golang.org/x/net/http2\"\n\t_ \"github.com/lib/pq\"\n)\n\nimport \"github.com/Masterminds/semver/v3\"\n"))
+	ix.Add("internal/thing_test.go", []byte("package thing\n\nimport \"github.com/stretchr/testify/assert\"\n"))
+	ix.Add("vendor/github.com/foo/bar/bar.go", []byte("package bar\n\nimport \"github.com/vendored/only\"\n"))
+	ix.Add("testdata/fixture.go", []byte("package fixture\n\nimport \"github.com/fixture/only\"\n"))
+	if !ix.Known("go") || !ix.Known("golang") {
+		t.Fatal("Go source was read, so the question is known")
+	}
+	for module, want := range map[string]bool{
+		"golang.org/x/net":                 true, // a package inside the module
+		"golang.org/x/ne":                  false,
+		"golang.org/x/netfoo":              false,
+		"github.com/lib/pq":                true, // a blank import is still an import
+		"github.com/Masterminds/semver/v3": true,
+		"github.com/masterminds/semver/v3": false, // Go paths are case-sensitive
+		"github.com/stretchr/testify":      false, // only a test imports it
+		"github.com/vendored/only":         false,
+		"github.com/fixture/only":          false,
+		"":                                 false,
+	} {
+		if got := ix.ImportsModule(module); got != want {
+			t.Errorf("ImportsModule(%q) = %v, want %v", module, got, want)
+		}
+	}
+	if Supported("go") {
+		t.Error("Go must not be Supported: the toolchain's linked set answers its applicability")
+	}
+}
+
+func TestGoKnownOnlyFromProjectSource(t *testing.T) {
+	ix := New()
+	ix.Add("a_test.go", []byte("package a\n\nimport \"golang.org/x/net/http2\"\n"))
+	if ix.Known("go") {
+		t.Error("a test file alone says nothing about what the project imports")
+	}
+}
