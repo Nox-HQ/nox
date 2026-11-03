@@ -25,6 +25,12 @@
 // Covered: npm, PyPI, Cargo, pub and RubyGems — the ecosystems whose import
 // statement names the distribution, so a match means what it appears to mean.
 //
+// Go is indexed too, for one narrower question (ImportsModule): does this
+// project's own non-test source import any package of a module? It is not in
+// Supported and establishes no rung: Go applicability is answered by the
+// toolchain's linked set, which sees through dependencies. The fact only orders
+// findings nothing decided (findings.SortByPriority), where it was measured.
+//
 // Not covered: Maven, NuGet, Packagist and Hex, whose imports name a namespace
 // (`com.fasterxml.jackson.databind`, `System.Text.Json`) that the manifest does
 // not carry. Resolving those needs the package's own metadata, not its name.
@@ -66,12 +72,16 @@ var ecosystemFor = map[string]string{
 	".rs":   "cargo",
 	".dart": "pub",
 	".rb":   "rubygems",
+	".go":   "go",
 }
 
 // Add reads one file's imports into the index. Unknown extensions are ignored.
 func (ix *Index) Add(filePath string, content []byte) {
 	eco, ok := ecosystemFor[strings.ToLower(path.Ext(filePath))]
 	if !ok {
+		return
+	}
+	if eco == "go" && !goProjectSource(filePath) {
 		return
 	}
 	// Seeing the file is what makes a later absence meaningful, so record it
@@ -110,6 +120,31 @@ func (ix *Index) Imports(ecosystem, pkg string) bool {
 	return ok
 }
 
+// ImportsModule reports whether the source imports the Go module or any package
+// in it. Go import paths are case-sensitive and a module is a path prefix:
+// golang.org/x/net/http2 is in golang.org/x/net, golang.org/x/netfoo is not.
+// False means only that no import matched.
+func (ix *Index) ImportsModule(module string) bool {
+	module = strings.TrimSpace(module)
+	if module == "" {
+		return false
+	}
+	for p := range ix.imports["go"] {
+		if p == module || strings.HasPrefix(p, module+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// goProjectSource reports whether a .go file is this project's own non-test
+// source: tests, vendored copies and test fixtures do not say what the
+// application uses.
+func goProjectSource(filePath string) bool {
+	p := "/" + strings.ReplaceAll(filePath, "\\", "/")
+	return !strings.HasSuffix(p, "_test.go") && !strings.Contains(p, "/vendor/") && !strings.Contains(p, "/testdata/")
+}
+
 // Supported reports whether this ecosystem's import statements name the
 // distribution closely enough for a match to mean anything.
 func Supported(ecosystem string) bool {
@@ -134,6 +169,8 @@ func normalizeEco(e string) string {
 		return "pub"
 	case "rubygems", "gem", "ruby":
 		return "rubygems"
+	case "go", "golang":
+		return "go"
 	}
 	return strings.ToLower(strings.TrimSpace(e))
 }
@@ -143,6 +180,9 @@ func normalizeEco(e string) string {
 // position; npm scopes are case-sensitive only in theory and lowercase in
 // practice.
 func normalizeName(eco, name string) string {
+	if eco == "go" {
+		return strings.TrimSpace(name) // Go module paths are case-sensitive
+	}
 	n := strings.ToLower(strings.TrimSpace(name))
 	switch eco {
 	case "cargo", "pypi":
@@ -163,6 +203,10 @@ var (
 	// use crate::x is internal; use foo::bar names crate foo
 	rsUseRE    = regexp.MustCompile(`(?m)^\s*(?:pub\s+)?use\s+([A-Za-z_]\w*)\s*(?:::|;)`)
 	rsExternRE = regexp.MustCompile(`(?m)^\s*extern\s+crate\s+([A-Za-z_]\w*)`)
+	// import "x" / import name "x" / the paths inside import ( ... )
+	goImportOneRE   = regexp.MustCompile(`(?m)^import\s+(?:[\w.]+\s+)?"([^"]+)"`)
+	goImportBlockRE = regexp.MustCompile(`(?ms)^import\s*\((.*?)^\)`)
+	goQuotedRE      = regexp.MustCompile(`"([^"]+)"`)
 	// import 'package:foo/bar.dart'
 	dartRE = regexp.MustCompile(`(?m)^\s*(?:import|export)\s+['"]package:([^/'"]+)`)
 	// require 'foo' / require "foo/bar"
@@ -194,6 +238,11 @@ func extract(eco, src string) []string {
 		add(dartRE.FindAllStringSubmatch(src, -1), func(s string) string { return s })
 	case "rubygems":
 		add(rbRequireRE.FindAllStringSubmatch(src, -1), topSegment)
+	case "go":
+		add(goImportOneRE.FindAllStringSubmatch(src, -1), func(s string) string { return s })
+		for _, block := range goImportBlockRE.FindAllStringSubmatch(src, -1) {
+			add(goQuotedRE.FindAllStringSubmatch(block[1], -1), func(s string) string { return s })
+		}
 	}
 	return out
 }

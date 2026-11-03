@@ -1433,3 +1433,35 @@ func TestSortByPriorityUsesAdvisoryPriorityAsATiebreak(t *testing.T) {
 		t.Errorf("order = %v, want %v", order, want)
 	}
 }
+
+// Within one severity: a decided-impacting dependency finding first, a decided
+// not-impacting one last, and in between the undecided ordered by whether the
+// project imports the module before NOX Intelligence's advisory priority. The
+// reachability plugin's own key still ranks a non-dependency finding.
+func TestSortByPriorityRanksApplicabilityThenImportsThenAdvisory(t *testing.T) {
+	mk := func(file string, meta map[string]string) Finding {
+		return Finding{RuleID: "R", Severity: SeverityHigh, Confidence: ConfidenceHigh,
+			Location: Location{FilePath: file, StartLine: 1}, Metadata: meta}
+	}
+	fs := NewFindingSet()
+	for _, f := range []Finding{
+		mk("a-refuted", map[string]string{"applicability": "not_impacting", "priority_score": "9"}),
+		mk("b-not-imported", map[string]string{"applicability": "undetermined", "dependency_imported": "false", "priority_score": "5"}),
+		mk("c-unknown", map[string]string{"applicability": "undetermined", "priority_score": "3"}),
+		mk("d-imported", map[string]string{"applicability": "undetermined", "dependency_imported": "true", "priority_score": "0.01"}),
+		mk("e-impacting", map[string]string{"applicability": "impacting"}),
+		mk("f-plugin-reachable", map[string]string{"reachable": "true"}),
+		mk("g-imported-hot", map[string]string{"applicability": "undetermined", "dependency_imported": "true", "priority_score": "2"}),
+	} {
+		fs.Add(f)
+	}
+	fs.SortByPriority()
+	var order []string
+	for _, f := range fs.Findings() {
+		order = append(order, f.Location.FilePath)
+	}
+	want := "e-impacting f-plugin-reachable g-imported-hot d-imported c-unknown b-not-imported a-refuted"
+	if got := strings.Join(order, " "); got != want {
+		t.Errorf("order =\n  %s\nwant\n  %s", got, want)
+	}
+}

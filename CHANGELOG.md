@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Reports order dependency findings that tie on severity by what the scan established about this application: decided impacting first, decided not impacting last (`applicability`), then, among the undecided, whether the project's own source imports the module, and only then NOX Intelligence's advisory priority. Go findings record the fact as `dependency_imported` (`true` or `false`; absent when no Go source was read, and never from tests, `vendor/` or `testdata/`). It orders and decides nothing. Measured on 500 Go repositories pinned before 2024 (nox-intelligence `docs/design/learning-loop.md`): as an order of the findings nox could decide, it scored average precision 0.170 against 0.021 for advisory priority, at a base rate of 0.020, and 7.6% of findings whose module the project imports were impacting, against 0.4% of the rest.
+
+### Fixed
+
+- The display order ignored dependency reachability. It read `reachable`, which the dependency analyzer stopped writing when that key was split into `reach_*` and `applicability`, so an impacting finding ranked level with an undecided one of the same severity. It now reads `applicability`, whose conclusive outcomes are a call path the scan found and a deterministic refutation; the reachability plugin's `reachable` still ranks findings without one.
+
 ## [1.57.0] - 2026-11-03
 
 ### Fixed

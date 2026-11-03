@@ -912,6 +912,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					verdict := applicabilityFor(pkg, &ov, linkedGoPkgs, linkedGoKnown, srcImports, goGraph, goModDir)
 					if pkg.Ecosystem == "go" {
 						verdict = raiseOnListedSymbol(verdict, meta, goGraph, &ov, pkg.Name)
+						addImportedMetadata(meta, srcImports, pkg.Name)
 					} else {
 						verdict = raiseOnJSListedSymbol(verdict, meta, srcImports, &ov, pkg)
 					}

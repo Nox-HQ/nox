@@ -728,10 +728,23 @@ var confidencePriorityRank = map[Confidence]int{
 // import is in the linked set — reach.SymbolReferenced, a strictly weaker
 // proposition than the call-graph reachability this ranking is about. Two
 // producers writing one key with different meanings put a linker answer and a
-// call-graph answer in the same sort bucket. Dependency findings now carry
-// `reach_level` and rank neutral here, which is the honest position for a
-// question nothing in core answers.
+// call-graph answer in the same sort bucket. Dependency findings carry
+// `reach_level`, which is NOT read here.
+//
+// They rank by `applicability` instead, whose two conclusive outcomes are this
+// ranking's two ends and nothing weaker: "impacting" is only ever built from a
+// call path the scanner found (applicability.Established at CallReachable, with
+// a witness), and "not_impacting" only from a deterministic refutation (the
+// build links no affected package). Undetermined stays neutral. Before this, no
+// producer in core wrote "reachable" any more, so an impacting dependency
+// finding ranked level with an undetermined one of the same severity.
 func reachabilityRank(f *Finding) int {
+	switch f.Metadata["applicability"] {
+	case "impacting":
+		return 0
+	case "not_impacting":
+		return 2
+	}
 	switch f.Metadata["reachable"] {
 	case "true":
 		return 0
@@ -740,6 +753,23 @@ func reachabilityRank(f *Finding) int {
 	default: // "undetermined" or absent
 		return 1
 	}
+}
+
+// importedRank orders dependency findings the scanner could not decide by
+// whether the project's own source imports the module (dependency_imported):
+// imported first, then unknown, then not imported. It is an ordering, never a
+// verdict, and outranks advisoryPriority because on 500 Go repositories it
+// carried the signal that one does not: as an order of decided findings it
+// scored average precision 0.170 where nox_priority scored 0.021, at a base rate
+// of 0.020 (nox-intelligence docs/design/learning-loop.md).
+func importedRank(f *Finding) int {
+	switch f.Metadata["dependency_imported"] {
+	case "true":
+		return 0
+	case "false":
+		return 2
+	}
+	return 1
 }
 
 // advisoryPriority is NOX Intelligence's ranking of a dependency finding's
@@ -759,9 +789,10 @@ func advisoryPriority(f *Finding) float64 {
 
 // SortByPriority orders findings for a human reading top-down: active findings
 // before suppressed/baselined ones, then by severity, then by reachability
-// (confirmed-reachable up, likely-false-positive unreachable down — see the
-// reachability plugin), then confidence, then NOX Intelligence's advisory
-// priority (see advisoryPriority), then a stable location tiebreak. Use it for
+// (confirmed-reachable up, likely-false-positive unreachable down — see
+// reachabilityRank), then confidence, then whether the project imports the
+// dependency (importedRank), then NOX Intelligence's advisory priority (see
+// advisoryPriority), then a stable location tiebreak. Use it for
 // display/reporting; SortDeterministic remains the canonical order for
 // baselines and diffs.
 func (fs *FindingSet) SortByPriority() {
@@ -778,6 +809,9 @@ func (fs *FindingSet) SortByPriority() {
 		}
 		if ac, bc := confidencePriorityRank[a.Confidence], confidencePriorityRank[b.Confidence]; ac != bc {
 			return ac < bc
+		}
+		if ai, bi := importedRank(&a), importedRank(&b); ai != bi {
+			return ai < bi
 		}
 		if ap, bp := advisoryPriority(&a), advisoryPriority(&b); ap != bp {
 			return ap > bp
