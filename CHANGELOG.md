@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Outcome reports, off by default (`docs/intelligence.md`, "Outcome reports"). With `scan.intelligence.outcomes: true`, contribution on, and the separate outcome terms accepted (`nox intel consent outcomes`, version `outcomes-2026-11`), a scan sends one report of its dependency findings and their applicability verdicts to NOX Intelligence (`POST /v1/outcomes`), under a project pseudonym: an HMAC of the repository's root commit under the private reporter salt. It is what lets the service learn which undecided findings mattered. A shallow clone or a directory outside git sends nothing and the scan says why; the report is always anonymous, carries no severity, paths, repository name or commit hash, and `nox intel forget` now deletes outcome reports too and withdraws both consents. `nox intel allowlist --outcomes` lists its fields and `nox intel preview --outcomes` prints the exact report. Needs a service that accepts outcome reports (nox-intelligence 0.29.0); an older one refuses it and the scan records that.
+
 ### Changed
 
 - Reports order dependency findings that tie on severity by what the scan established about this application: decided impacting first, decided not impacting last (`applicability`), then, among the undecided, whether the project's own source imports the module, and only then NOX Intelligence's advisory priority. Go findings record the fact as `dependency_imported` (`true` or `false`; absent when no Go source was read, and never from tests, `vendor/` or `testdata/`). It orders and decides nothing. Measured on 500 Go repositories pinned before 2024 (nox-intelligence `docs/design/learning-loop.md`): as an order of the findings nox could decide, it scored average precision 0.170 against 0.021 for advisory priority, at a base rate of 0.020, and 7.6% of findings whose module the project imports were impacting, against 0.4% of the rest.

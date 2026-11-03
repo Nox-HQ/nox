@@ -161,7 +161,7 @@ next to the reporter salt (or beside `scan.intelligence.reporter_salt_path`).
 | `nox intel consent accept` | shows the terms and records acceptance after you type `yes`; `--accept-terms 2026-10` does it non-interactively and must name the current version |
 | `nox intel consent status` / `withdraw` | report / remove the acceptance (no network) |
 | `nox intel preview <path>` | the terms, your consent status, and the exact observations a scan would send |
-| `nox intel forget` | posts your reporter id and deletion key to `/v1/reporters/erase`, prints the counts the service returns, then withdraws consent and discards the reporter salt, so consenting again is a new, unlinkable reporter. Unreachable or refused: it exits non-zero and changes nothing locally |
+| `nox intel forget` | posts your reporter id and deletion key to `/v1/reporters/erase`, prints the counts the service returns (outcome reports included), then withdraws consent (and outcome consent) and discards the reporter salt, so consenting again is a new, unlinkable reporter. Unreachable or refused: it exits non-zero and changes nothing locally |
 
 Observations are contribution schema 2: the allowlisted fields plus
 `schema_version`, `consent_version` (the terms version you accepted) and
@@ -181,6 +181,48 @@ Why contribute: independence is counted in distinct reporters, not
 observations. One organisation scanning itself a thousand times is one source.
 Every reporter that joins makes corroboration — and everything derived from
 it — possible for everyone else.
+
+### Outcome reports
+
+A finding nox could not decide is ordered by what is known about the advisory,
+never about your application. Learning which undecided findings matter needs to
+see what happened next (a finding gone after an upgrade) across many projects.
+An outcome report is one scan's dependency findings for one project, sent so the
+service can learn that (nox-intelligence `docs/design/learning-loop.md`).
+
+It is a third decision, on top of contribution: `scan.intelligence.outcomes:
+true`, **and** contribution on with its terms accepted, **and** the separate
+outcome terms accepted on this machine (`nox intel consent outcomes show |
+accept | status | withdraw`; current version `outcomes-2026-11`, text in
+`core/intel/outcome.go`). Any gate that is not met sends nothing, and the scan
+says which.
+
+| command | does |
+|---|---|
+| `nox intel allowlist --outcomes` | every field a report may carry |
+| `nox intel preview --outcomes <path>` | the outcome terms and the exact report a scan of `<path>` would send; sends nothing |
+
+The project is named by a **pseudonym**: an HMAC, under the private reporter
+salt, of the repository's root commit (the smallest, where histories were
+merged). The same repository scanned on this machine always gives the same
+pseudonym; another installation gets a different one; it cannot be turned back
+into a repository. A shallow clone has no root commit of its own (its apparent
+root is the depth boundary, new on every CI run), so it sends nothing and says
+so: in CI, check out with full history (`actions/checkout` `fetch-depth: 0`). A
+directory outside git sends nothing either.
+
+Per finding, a report carries the ecosystem, package, exact version, advisory
+id, the applicability verdict with its reason tokens (`reached`, `stopped_at`,
+`because`) and `imported` (`yes`/`no`, from `dependency_imported`). Not the
+finding's severity: a not-impacting finding is demoted to info, so its severity
+is the verdict again, and the service has the advisory's own. Never file names,
+paths, the repository's name or URL, commit hashes, routes or symbol names.
+
+Outcome reports are always anonymous, even with `scan.intelligence.attested`: a
+pseudonym joined to an organisation would name whose project it is. The service
+keeps one report per project and day, deletes it after its retention window,
+and publishes nothing per project. `nox intel forget` deletes them with
+everything else and withdraws both consents.
 
 ## Operator accounts
 

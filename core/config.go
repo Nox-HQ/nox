@@ -552,6 +552,13 @@ type IntelligenceConfig struct {
 	// to a contribution that cannot count.
 	Attested bool `yaml:"attested"`
 
+	// Outcomes sends one outcome report per scan: this project's dependency
+	// findings under a project pseudonym, so the network can learn which
+	// undecided findings mattered (docs/intelligence.md, "Outcome reports").
+	// A separate opt-in with separate terms (`nox intel consent outcomes`),
+	// on top of contribute: true, never implied by it. Off by default.
+	Outcomes bool `yaml:"outcomes"`
+
 	// ReporterSaltPath overrides where the private reporter salt is kept.
 	// Empty defaults to $HOME/.nox/reporter-salt. The salt never leaves the
 	// machine; only an HMAC derived from it does.

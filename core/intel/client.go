@@ -124,10 +124,13 @@ func (c *Client) submit(ctx context.Context, o *Observation) error {
 
 // ErasureResult is what the service reports it removed.
 type ErasureResult struct {
-	CandidatesAnonymised int    `json:"candidates_anonymised"`
-	IdentifiersRemoved   int    `json:"identifiers_removed"`
-	ConsentRemoved       bool   `json:"consent_removed"`
-	Proof                string `json:"proof"`
+	CandidatesAnonymised int  `json:"candidates_anonymised"`
+	IdentifiersRemoved   int  `json:"identifiers_removed"`
+	ConsentRemoved       bool `json:"consent_removed"`
+	// OutcomeReportsDeleted is absent from services that predate outcome
+	// reports, which never held any.
+	OutcomeReportsDeleted int    `json:"outcome_reports_deleted"`
+	Proof                 string `json:"proof"`
 }
 
 // Erase asks the service to remove reporterID from every report. It is a POST
