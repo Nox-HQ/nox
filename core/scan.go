@@ -1140,6 +1140,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// last, over the refined findings, so what is shared is what the scan
 	// actually concluded rather than an intermediate state.
 	contributeObservations(ctx, cfg, opts, allFindings.Findings(), degradations)
+	contributeOutcomes(ctx, cfg, opts, target, allFindings.Findings(), degradations)
 
 	var leads []Lead
 	var leadChecks []string

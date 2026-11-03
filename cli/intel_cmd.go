@@ -53,10 +53,11 @@ func runIntel(args []string) int {
 
 func printIntelUsage() {
 	fmt.Fprintf(os.Stderr, "Usage: nox intel <command>\n\n")
-	fmt.Fprintf(os.Stderr, "  allowlist        print every field an observation may carry\n")
-	fmt.Fprintf(os.Stderr, "  preview <path>   show exactly what a scan of <path> would contribute\n")
+	fmt.Fprintf(os.Stderr, "  allowlist        print every field an observation may carry (--outcomes, --attack: theirs)\n")
+	fmt.Fprintf(os.Stderr, "  preview <path>   show exactly what a scan of <path> would contribute (--outcomes: its outcome report)\n")
 	fmt.Fprintf(os.Stderr, "  id               print this installation's opaque reporter id\n")
-	fmt.Fprintf(os.Stderr, "  consent          show, accept or withdraw the contribution terms (show|status|accept|withdraw)\n")
+	fmt.Fprintf(os.Stderr, "  consent          show, accept or withdraw the contribution terms (show|status|accept|withdraw;\n")
+	fmt.Fprintf(os.Stderr, "                   'consent outcomes ...' and 'consent attack ...' for their own terms)\n")
 	fmt.Fprintf(os.Stderr, "  forget           erase this installation's reporter id from the service and stop contributing\n")
 	fmt.Fprintf(os.Stderr, "\nBlast radius (organisation token in NOX_INTEL_TOKEN; prints, sends with --upload):\n")
 	fmt.Fprintf(os.Stderr, "  components [path]            describe this service's dependencies and capabilities\n")
@@ -96,6 +97,16 @@ func runIntelAllowlist(args ...string) int {
 		fmt.Println("target responses, canary values, paths, source code, secrets, or the trace itself.")
 		return 0
 	}
+	if len(args) > 0 && (args[0] == "--outcomes" || args[0] == "outcomes") {
+		fmt.Println("Fields an outcome report may carry (scan.intelligence.outcomes, terms: nox intel consent outcomes show):")
+		fmt.Println()
+		for _, f := range intel.OutcomeAllowlist() {
+			fmt.Printf("  %-26s %s\n", f.Name, f.Purpose)
+		}
+		fmt.Println("\nNever transmitted: source code, file names or paths, the repository's name or URL,")
+		fmt.Println("commit hashes, branch names, routes, symbol names, secrets or prompts.")
+		return 0
+	}
 	if err := intel.PrintAllowlist(os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "nox intel: %v\n", err)
 		return 1
@@ -110,9 +121,16 @@ func runIntelAllowlist(args ...string) int {
 // values, derived from the operator's own repository, which is the only way to
 // check the claim against a codebase rather than against a promise.
 func runIntelPreview(args []string) int {
+	outcomes := false
+	if len(args) > 0 && args[0] == "--outcomes" {
+		outcomes, args = true, args[1:]
+	}
 	target := "."
 	if len(args) > 0 {
 		target = args[0]
+	}
+	if outcomes {
+		return previewOutcomes(target)
 	}
 
 	result, err := core.RunScanWithOptions(target, core.ScanOptions{ToolVersion: version})
@@ -156,6 +174,31 @@ func runIntelPreview(args []string) int {
 
 	fmt.Fprintf(os.Stderr, "\n%d observation(s) from %d finding(s). Nothing was sent.\n",
 		len(obs), len(result.Findings.Findings()))
+	return 0
+}
+
+// previewOutcomes prints the outcome report a scan of target would send,
+// without sending it.
+func previewOutcomes(target string) int {
+	result, err := core.RunScanWithOptions(target, core.ScanOptions{ToolVersion: version})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "nox intel preview: %v\n", err)
+		return 1
+	}
+	fmt.Fprint(os.Stderr, intel.OutcomeTerms)
+	fmt.Fprintln(os.Stderr)
+	report, skipped, err := core.OutcomeReport(target, saltPathFor(""), version, result.Findings.Findings(), time.Now())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "nox intel preview: no outcome report would be sent: %v\n", err)
+		return 1
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(report); err != nil {
+		fmt.Fprintf(os.Stderr, "nox intel preview: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(os.Stderr, "\n%d outcome finding(s), %d left out. Nothing was sent.\n", len(report.Findings), skipped)
 	return 0
 }
 
