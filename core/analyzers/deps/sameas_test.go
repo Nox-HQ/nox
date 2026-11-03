@@ -63,11 +63,42 @@ func TestCollapseSameAs_TransitiveAndIndependent(t *testing.T) {
 	}
 }
 
-// Without nox_same_as nothing is joined, even for records that list each other
-// as aliases: OSV.dev and an older service behave exactly as before.
-func TestCollapseSameAs_AliasesAloneJoinNothing(t *testing.T) {
-	in := []vulnsource.Record{rec("GO-1", nil, "", "GHSA-a"), rec("GHSA-a", nil, "", "GO-1")}
-	if got := mustCollapse(in); len(got) != 2 {
+// Without nox_same_as (OSV.dev directly, or an older service) records join by
+// the rule the service uses for nox_same_as: two records in one answer that
+// share a name, their id or an alias, are one vulnerability. Before, a scan
+// with NOX Intelligence off reported each GO-/GHSA- pair twice: 2,201 Go
+// findings for 947 vulnerabilities across 8 real repositories.
+func TestCollapseSameAs_SharedNamesJoinWithoutSameAs(t *testing.T) {
+	in := []vulnsource.Record{
+		rec("GO-1", nil, "", "CVE-1", "GHSA-a"),
+		rec("GHSA-a", nil, "HIGH", "CVE-1", "GO-1"),
+		rec("GHSA-b", nil, "", "CVE-1"), // only the CVE in common: still the same vulnerability
+		rec("GHSA-c", nil, "", "CVE-2"),
+	}
+	got := mustCollapse(in)
+	if !reflect.DeepEqual(ids(got), []string{"GHSA-a", "GHSA-c"}) {
+		t.Errorf("got %v, want [GHSA-a GHSA-c]", ids(got))
+	}
+}
+
+// A record's own id is one of its names: an advisory listing another's id
+// joins it even when the other lists nothing back.
+func TestCollapseSameAs_AnIdNamedAsAnAliasJoins(t *testing.T) {
+	in := []vulnsource.Record{rec("GO-1", nil, ""), rec("GHSA-a", nil, "", "GO-1")}
+	if got := mustCollapse(in); len(got) != 1 {
+		t.Errorf("got %v", ids(got))
+	}
+}
+
+// When the source does send nox_same_as, its verdict stands: shared aliases do
+// not join records it kept apart.
+func TestCollapseSameAs_SameAsFromTheSourceIsAuthoritative(t *testing.T) {
+	in := []vulnsource.Record{
+		rec("GO-1", []string{"GHSA-a"}, "", "GHSA-a"),
+		rec("GHSA-a", []string{"GO-1"}, "", "GO-1", "CVE-9"),
+		rec("GHSA-z", nil, "", "CVE-9"),
+	}
+	if got := mustCollapse(in); !reflect.DeepEqual(ids(got), []string{"GHSA-a", "GHSA-z"}) {
 		t.Errorf("got %v", ids(got))
 	}
 }
