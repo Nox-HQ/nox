@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- With NOX Intelligence on, Go dependency findings lost their reachability verdict. The service sends a Go module advisory and its GitHub advisory as two records marked as the same vulnerability; the scan keeps one, chosen for severity, which is usually the GitHub advisory, and only the Go advisory carries the affected import paths and symbols. Across 8 real Go repositories, 219 of 362 decided verdicts (187 not impacting, 32 impacting) fell back to undetermined against the same scan with the service off. The kept record now takes every member's import paths and symbols (`nox_symbols` too); a path listed without symbols stays "the whole package". After the fix both scans decide the same 362.
+
 ### Added
 
 - Dependency findings record NOX Intelligence's advisory priority (`nox_priority`, rule `epss-first-severity-cwe/v1`): `priority_score`, `priority_rule`, `priority_band`, `priority_why`, `priority_epss`, `priority_epss_percentile`. Reports order findings that tie on severity, reachability and confidence by it, highest first; findings without one keep their location order. It never changes a severity, gates, or hides a finding (`docs/intelligence.md`). Measured by the service on 2025+ GitHub package advisories: 54% of weaponised advisories in the top tenth, against 39% for EPSS alone.

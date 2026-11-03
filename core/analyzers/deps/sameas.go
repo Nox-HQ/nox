@@ -23,7 +23,9 @@ import (
 // theoretical one, then the higher severity wins, then the smaller id. Every
 // other id of the group (its id, its aliases) is kept on the survivor's
 // aliases, because a waiver or baseline written against either name must keep
-// matching. A source that sends no nox_same_as (OSV.dev, an older service)
+// matching. What reachability reads (each affected package's import paths and
+// symbols, and nox_symbols) is joined from every member: in a Go answer the
+// survivor is usually the GitHub advisory and the symbols are on the Go one. A source that sends no nox_same_as (OSV.dev, an older service)
 // leaves the list untouched.
 //
 // The second result maps each survivor's id to the records it absorbed, as they
@@ -123,7 +125,79 @@ func mergeGroup(recs []vulnsource.Record, members []int) vulnsource.Record {
 	merged.Provenance = dedupProvenance(prov)
 	merged.Disagreement = dedupStrings(disagree)
 	merged.SameAs = nil
+	joinReachability(&merged, recs, members)
 	return merged
+}
+
+// joinReachability gives the survivor every member's import paths and symbols
+// for the packages it affects, and every member's nox_symbols. A package the
+// survivor does not list gains nothing: its ranges are what decide a match.
+func joinReachability(merged *vulnsource.Record, recs []vulnsource.Record, members []int) {
+	affected := make([]vulnsource.Affected, len(merged.Affected))
+	copy(affected, merged.Affected)
+	for i := range affected {
+		var imports [][]vulnsource.Import
+		for _, m := range members {
+			for _, a := range recs[m].Affected {
+				if a.Package == affected[i].Package {
+					imports = append(imports, a.EcosystemSpecific.Imports)
+				}
+			}
+		}
+		affected[i].EcosystemSpecific.Imports = unionImports(imports)
+	}
+	merged.Affected = affected
+
+	var symbols []vulnsource.AffectedSymbols
+	seen := map[string]bool{}
+	for _, m := range members {
+		for _, as := range recs[m].Symbols {
+			key := as.AdvisoryID + "\x00" + as.Package + "\x00" + as.FixedVersion + "\x00" + as.Method
+			if !seen[key] {
+				seen[key] = true
+				symbols = append(symbols, as)
+			}
+		}
+	}
+	merged.Symbols = symbols
+}
+
+// unionImports joins import lists by path. A path listed without symbols means
+// the whole package, and stays that way whatever another list names.
+func unionImports(lists [][]vulnsource.Import) []vulnsource.Import {
+	var paths []string
+	whole := map[string]bool{}
+	syms := map[string]map[string]struct{}{}
+	for _, list := range lists {
+		for _, im := range list {
+			if _, ok := syms[im.Path]; !ok {
+				syms[im.Path] = map[string]struct{}{}
+				paths = append(paths, im.Path)
+			}
+			if len(im.Symbols) == 0 {
+				whole[im.Path] = true
+			}
+			for _, s := range im.Symbols {
+				syms[im.Path][s] = struct{}{}
+			}
+		}
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	sort.Strings(paths)
+	out := make([]vulnsource.Import, 0, len(paths))
+	for _, p := range paths {
+		im := vulnsource.Import{Path: p}
+		if !whole[p] {
+			for s := range syms[p] {
+				im.Symbols = append(im.Symbols, s)
+			}
+			sort.Strings(im.Symbols)
+		}
+		out = append(out, im)
+	}
+	return out
 }
 
 // betterRecord reports whether a should represent the group in place of b.

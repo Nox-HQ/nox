@@ -102,3 +102,59 @@ func mustCollapse(in []vulnsource.Record) []vulnsource.Record {
 	out, _ := collapseSameAs(in)
 	return out
 }
+
+func goRec(id string, sameAs []string, sev string, imports []vulnsource.Import, sym ...vulnsource.AffectedSymbols) vulnsource.Record {
+	r := rec(id, sameAs, sev)
+	r.Affected = []vulnsource.Affected{{
+		Package:           vulnsource.Package{Name: "golang.org/x/net", Ecosystem: "Go"},
+		EcosystemSpecific: vulnsource.EcosystemSpecific{Imports: imports},
+	}}
+	r.Symbols = sym
+	return r
+}
+
+// The survivor is chosen for severity and gating, which in a Go answer is
+// usually the GitHub advisory; the Go module advisory carries the import paths
+// and symbols reachability reads. Collapsing kept only the survivor's, so with
+// NOX Intelligence on, 219 of 362 decided Go verdicts across 8 real
+// repositories fell back to undetermined. The absorbed record's scope and
+// symbols must reach the survivor.
+func TestCollapseSameAs_KeepsTheAbsorbedRecordsImportsAndSymbols(t *testing.T) {
+	served := vulnsource.AffectedSymbols{AdvisoryID: "GO-2026-1", Ecosystem: "Go", Package: "golang.org/x/net",
+		Method: "model-fix-diff", Status: vulnsource.SymbolStatusOK,
+		Imports: []vulnsource.ImportSymbols{{Path: "golang.org/x/net/http2", Symbols: []string{"Server.ServeConn"}}}}
+	in := []vulnsource.Record{
+		goRec("GHSA-a", []string{"GO-2026-1"}, "HIGH", nil),
+		goRec("GO-2026-1", []string{"GHSA-a"}, "", []vulnsource.Import{
+			{Path: "golang.org/x/net/html", Symbols: []string{"Parse", "Tokenizer.Next"}},
+		}, served),
+	}
+	for _, order := range [][]int{{0, 1}, {1, 0}} {
+		got := mustCollapse([]vulnsource.Record{in[order[0]], in[order[1]]})
+		if len(got) != 1 || got[0].ID != "GHSA-a" {
+			t.Fatalf("order %v: got %v", order, ids(got))
+		}
+		r := got[0]
+		if s := r.ListedSymbols("golang.org/x/net", "golang.org/x/net/html"); !reflect.DeepEqual(s, []string{"Parse", "Tokenizer.Next"}) {
+			t.Errorf("order %v: the Go advisory's symbols = %v", order, s)
+		}
+		if s := r.ListedSymbols("golang.org/x/net", "golang.org/x/net/http2"); !reflect.DeepEqual(s, []string{"Server.ServeConn"}) {
+			t.Errorf("order %v: the served nox_symbols = %v", order, s)
+		}
+	}
+}
+
+// An import path listed without symbols means the whole package is affected.
+// Joining it with a list for the same path must keep "the whole package", not
+// narrow it to the list.
+func TestCollapseSameAs_WholePackageBeatsASymbolList(t *testing.T) {
+	in := []vulnsource.Record{
+		goRec("GHSA-a", []string{"GO-1"}, "HIGH", []vulnsource.Import{{Path: "golang.org/x/net/html", Symbols: []string{"Parse"}}}),
+		goRec("GO-1", []string{"GHSA-a"}, "", []vulnsource.Import{{Path: "golang.org/x/net/html"}}),
+	}
+	got := mustCollapse(in)
+	imps := got[0].Affected[0].EcosystemSpecific.Imports
+	if len(imps) != 1 || imps[0].Path != "golang.org/x/net/html" || len(imps[0].Symbols) != 0 {
+		t.Errorf("imports = %+v, want the whole package", imps)
+	}
+}
