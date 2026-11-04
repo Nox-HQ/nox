@@ -207,7 +207,9 @@ func TestServer_Serve_WritesAddr(t *testing.T) {
 	// Wait briefly for the server to start and write the address.
 	// We cancel immediately since we just need to verify the address output.
 	cancel()
-	<-done
+	if err := <-done; err != nil {
+		t.Fatalf("Serve after cancel: %v", err)
+	}
 
 	output := buf.String()
 	if !strings.HasPrefix(output, "NOX_PLUGIN_ADDR=") {
@@ -242,7 +244,9 @@ func serveAndWaitForAddr(t *testing.T, srv *PluginServer) (addr string, stop fun
 
 	stop = func() {
 		cancel()
-		<-done
+		if err := <-done; err != nil {
+			t.Errorf("Serve did not shut down cleanly: %v", err)
+		}
 	}
 
 	select {
