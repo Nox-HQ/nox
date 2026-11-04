@@ -14,10 +14,16 @@ import (
 	"github.com/nox-hq/nox/core/intel"
 )
 
-// gitRepo makes a repository with two commits and returns its directory.
+// gitRepo makes a repository with two commits and returns its directory. The
+// directory has a distinctive name, so a test can look for it in what was
+// sent: t.TempDir's own base is a number such as "002", which turns up by
+// chance in any hex digest.
 func gitRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "outcome-probe-repository")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	for _, args := range [][]string{
 		{"init", "-q", "-b", "main"},
 		{"-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "first"},
