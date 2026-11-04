@@ -69,7 +69,9 @@ func intelConsent(args []string, in io.Reader, out, errw io.Writer) int {
 		_, _ = fmt.Fprintln(out, "Consent withdrawn. This machine will not contribute. Reports already sent stay on the service until you run: nox intel forget")
 		return 0
 	default:
-		_, _ = fmt.Fprintf(errw, "Usage: nox intel consent [show|status|accept|withdraw]\n       nox intel consent attack [show|status|accept|withdraw]\n")
+		_, _ = fmt.Fprint(errw, "Usage: nox intel consent [show|status|accept|withdraw]\n"+
+			"       nox intel consent outcomes [show|status|accept|withdraw]\n"+
+			"       nox intel consent attack [show|status|accept|withdraw]\n")
 		return 2
 	}
 }
