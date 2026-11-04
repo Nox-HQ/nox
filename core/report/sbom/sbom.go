@@ -316,8 +316,19 @@ type SPDXPackage struct {
 	DeclaredLicense  string            `json:"licenseDeclared"`
 	DownloadLocation string            `json:"downloadLocation"`
 	FilesAnalyzed    bool              `json:"filesAnalyzed"`
+	Checksums        []SPDXChecksum    `json:"checksums,omitempty"`
+	PrimaryPurpose   string            `json:"primaryPackagePurpose,omitempty"`
 	ExternalRefs     []SPDXExternalRef `json:"externalRefs,omitempty"`
 }
+
+// SPDXChecksum is a package checksum.
+type SPDXChecksum struct {
+	Algorithm     string `json:"algorithm"`
+	ChecksumValue string `json:"checksumValue"`
+}
+
+// spdxSubjectID is the SPDX element for the artifact a document describes.
+const spdxSubjectID = "SPDXRef-Subject"
 
 // SPDXExternalRef is a reference to an external resource.
 type SPDXExternalRef struct {
@@ -336,6 +347,19 @@ type SPDXRelationship struct {
 // SPDXReporter generates SPDX 2.3 JSON SBOMs.
 type SPDXReporter struct {
 	ToolVersion string
+	subject     *spdxSubject
+}
+
+type spdxSubject struct{ name, sha256 string }
+
+// WithSubject makes the document describe one artifact, such as a release
+// archive: it is named after the artifact, the artifact is a package carrying
+// its SHA-256, and every inventoried package is CONTAINED by it. Without a
+// subject the document describes the packages themselves, as a scan of a
+// working tree does.
+func (r *SPDXReporter) WithSubject(name, sha256Hex string) *SPDXReporter {
+	r.subject = &spdxSubject{name: name, sha256: sha256Hex}
+	return r
 }
 
 // NewSPDXReporter returns a reporter configured with the given tool version.
@@ -431,19 +455,38 @@ func (r *SPDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, error
 
 		spdxPkgs = append(spdxPkgs, pkg)
 
-		relationships = append(relationships, SPDXRelationship{
-			SPDXElementID:      "SPDXRef-DOCUMENT",
-			RelationshipType:   "DESCRIBES",
-			RelatedSPDXElement: spdxID,
-		})
+		rel := SPDXRelationship{SPDXElementID: "SPDXRef-DOCUMENT", RelationshipType: "DESCRIBES", RelatedSPDXElement: spdxID}
+		if r.subject != nil {
+			rel = SPDXRelationship{SPDXElementID: spdxSubjectID, RelationshipType: "CONTAINS", RelatedSPDXElement: spdxID}
+		}
+		relationships = append(relationships, rel)
+	}
+
+	name, namespace := "nox-scan", spdxNamespace("scan", spdxPkgs)
+	if s := r.subject; s != nil {
+		name = s.name
+		// The artifact's digest identifies it, which is what the namespace is for.
+		namespace = "https://github.com/nox-hq/nox/spdx/" + s.sha256
+		spdxPkgs = append([]SPDXPackage{{
+			SPDXID:           spdxSubjectID,
+			Name:             s.name,
+			VersionInfo:      "NOASSERTION",
+			DeclaredLicense:  "NOASSERTION",
+			DownloadLocation: "NOASSERTION",
+			Checksums:        []SPDXChecksum{{Algorithm: "SHA256", ChecksumValue: s.sha256}},
+			PrimaryPurpose:   "ARCHIVE",
+		}}, spdxPkgs...)
+		relationships = append([]SPDXRelationship{{
+			SPDXElementID: "SPDXRef-DOCUMENT", RelationshipType: "DESCRIBES", RelatedSPDXElement: spdxSubjectID,
+		}}, relationships...)
 	}
 
 	doc := SPDXDocument{
 		SPDXVersion:       "SPDX-2.3",
 		DataLicense:       "CC0-1.0",
 		SPDXID:            "SPDXRef-DOCUMENT",
-		Name:              "nox-scan",
-		DocumentNamespace: "https://github.com/nox-hq/nox/scans",
+		Name:              name,
+		DocumentNamespace: namespace,
 		CreationInfo: SPDXCreationInfo{
 			Created:  report.GeneratedAt(),
 			Creators: []string{fmt.Sprintf("Tool: nox-%s", r.ToolVersion)},
@@ -493,6 +536,21 @@ func buildPURL(p deps.Package) string {
 		return fmt.Sprintf("pkg:%s/%s/%s@%s", purlType, parts[0], parts[1], p.Version)
 	}
 	return fmt.Sprintf("pkg:%s/%s@%s", purlType, p.Name, p.Version)
+}
+
+// spdxNamespace derives a document namespace from the package set. SPDX 2.3
+// requires the namespace to be unique per document; the constant nox used
+// before made every nox SBOM claim the same identity. A content hash keeps
+// output reproducible, like deterministicSerialURN does for CycloneDX.
+func spdxNamespace(kind string, pkgs []SPDXPackage) string {
+	h := sha256.New()
+	for i := range pkgs {
+		_, _ = fmt.Fprintf(h, "%s\x00%s\n", pkgs[i].Name, pkgs[i].VersionInfo)
+		for _, ref := range pkgs[i].ExternalRefs {
+			_, _ = fmt.Fprintf(h, "\x00%s", ref.ReferenceLocator)
+		}
+	}
+	return fmt.Sprintf("https://github.com/nox-hq/nox/spdx/%s-%x", kind, h.Sum(nil))
 }
 
 // deterministicSerialURN returns a valid RFC-4122 UUID URN derived from the

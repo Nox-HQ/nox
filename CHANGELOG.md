@@ -7,7 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Compiled Go executables are inventoried from their embedded build info:
+  modules at their built versions and `stdlib` at the exact Go release, so
+  advisories against the standard library now match. Applicability for these
+  packages stays undetermined instead of being judged by the source tree's
+  link set, which would refute advisories for code the binary shipped.
+- `nox sbom <artifact>`: the SPDX SBOM of a release archive or file, with the
+  artifact as the document's subject (name and SHA-256). Offline and
+  deterministic.
+
+### Changed
+
+- nox's release SBOMs are written by nox (`nox sbom`), not syft. GoReleaser's
+  `sboms:` named no command, so every release since February ran its default,
+  syft. The package sets match: 50 packages for the v1.58.0 darwin/arm64
+  archive, none only one side has.
+
 ### Fixed
+
+- SPDX documents carry a namespace derived from their content. It was one
+  constant URI for every document nox wrote, and SPDX 2.3 requires it to be
+  unique per document.
+- Binary content holds no waivers. A scan that walked a compiled executable
+  parsed the `nox:ignore` text embedded in it (nox's own embeds rule
+  remediations) and reported each as a waiver matching no finding.
 
 - `nox intel consent` usage names the `outcomes` scope alongside `attack`; an
   unknown subcommand no longer hides that outcome consent exists.
