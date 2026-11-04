@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/nox-hq/nox/core/textual"
+
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -526,22 +528,9 @@ func fileMatchesRule(path string, rule *Rule) bool {
 	return false
 }
 
-// isBinary reports whether content appears to be a binary file by checking for
-// null bytes in the first 512 bytes. Text files (source, config, YAML, JSON)
-// do not contain null bytes, so this is a reliable heuristic that prevents
-// false positives when scanning compiled binaries that embed rule patterns.
-func isBinary(content []byte) bool {
-	limit := 512
-	if len(content) < limit {
-		limit = len(content)
-	}
-	for _, b := range content[:limit] {
-		if b == 0 {
-			return true
-		}
-	}
-	return false
-}
+// isBinary reports whether content is binary; see textual.IsBinary, which
+// the waiver parser applies to the same files.
+func isBinary(content []byte) bool { return textual.IsBinary(content) }
 
 // matchLocation converts a match into a Location that describes the span the
 // match actually covers. The engine matches whole documents, so a pattern can

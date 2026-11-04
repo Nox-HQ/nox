@@ -80,7 +80,15 @@ type Package struct {
 	// than a resolved or pinned version. Empty for lockfile entries and exact
 	// pins. A finding against such a package says so.
 	Spec string
+	// Origin says where the package was read from when that changes what can
+	// be said about it. Empty for manifests and lockfiles; OriginGoBinary for a
+	// module embedded in a compiled Go executable, whose link set is not the
+	// source tree's.
+	Origin string
 }
+
+// OriginGoBinary marks a package read from a Go executable's build info.
+const OriginGoBinary = "go-binary"
 
 // Vulnerability describes a known security issue for a package.
 type Vulnerability struct {
@@ -579,6 +587,27 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 	}
 
+	// Compiled Go executables, read from the build info they embed. Only
+	// files nothing else claimed are probed; see gobinary.go.
+	for _, art := range artifacts {
+		if art.Type != discovery.Unknown {
+			continue
+		}
+		bin, err := readGoBinary(art.AbsPath, art.Size)
+		if err != nil {
+			continue
+		}
+		for _, p := range bin.packages {
+			inventory.Add(p)
+			sources = append(sources, pkgSource{lockfilePath: art.Path})
+		}
+		if len(bin.localReplaces) > 0 {
+			a.degradations.Add(degrade.Lockfile,
+				fmt.Sprintf("%s links modules replaced by a local directory: %s", art.Path, strings.Join(bin.localReplaces, ", ")),
+				"the binary records no version for them, so they were NOT checked for vulnerabilities")
+		}
+	}
+
 	if len(gradleUnresolved) > 0 {
 		detail, impact := gradleDegradation(gradleUnresolved)
 		a.degradations.Add(degrade.Lockfile, detail, impact)
@@ -910,10 +939,19 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// because "we could not tell" and "we did not look" are the
 					// answers a reader most needs and least often gets.
 					verdict := applicabilityFor(pkg, &ov, linkedGoPkgs, linkedGoKnown, srcImports, goGraph, goModDir)
-					if pkg.Ecosystem == "go" {
+					// The source tree's link set and call graph describe what
+					// this repository builds. A module read from a compiled
+					// binary is judged by neither: the binary may have been
+					// built from other code, so a refutation borrowed from the
+					// tree would downgrade an advisory for code that shipped.
+					goFromSource := pkg.Ecosystem == "go" && pkg.Origin != OriginGoBinary
+					switch {
+					case goFromSource:
 						verdict = raiseOnListedSymbol(verdict, meta, goGraph, &ov, pkg.Name)
 						addImportedMetadata(meta, srcImports, pkg.Name)
-					} else {
+					case pkg.Ecosystem == "go":
+						meta["package_origin"] = OriginGoBinary
+					default:
 						verdict = raiseOnJSListedSymbol(verdict, meta, srcImports, &ov, pkg)
 					}
 					meta["applicability"] = string(verdict.Outcome)
@@ -938,7 +976,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						// not tell" arrived looking exactly like "nobody asked",
 						// which is the one distinction this vocabulary exists to
 						// preserve.
-						r, _ := goSymbolReferenced(affected, linkedGoPkgs, linkedGoKnown)
+						linked, linkedKnown := linkedGoPkgs, linkedGoKnown
+						if !goFromSource {
+							// Asked, and not answerable from this tree.
+							linked, linkedKnown = nil, false
+						}
+						r, _ := goSymbolReferenced(affected, linked, linkedKnown)
 						if len(affected) > 0 {
 							meta["affected_imports"] = strings.Join(affected, ",")
 						}
@@ -1035,6 +1078,12 @@ func applicabilityFor(pkg Package, ov *osvVuln, linked map[string]struct{}, link
 		return applicability.Undeterminable(reached, applicability.SymbolUsed, capability.Unsupported)
 	}
 
+	if pkg.Origin == OriginGoBinary {
+		// Build info names modules, not the packages the binary linked, and
+		// the source tree's link set is not this binary's. A limit of what nox
+		// reads today, not an answer.
+		return applicability.Undeterminable(reached, applicability.SymbolUsed, capability.Unsupported)
+	}
 	affected := goAffectedImports(ov, pkg.Name)
 	reachable, determined := goVulnReachable(affected, linked, linkedKnown)
 	if !determined {
