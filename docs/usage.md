@@ -2465,6 +2465,14 @@ See [`docs/plugin-authoring.md`](plugin-authoring.md) for the full SDK guide and
 
 When policy is configured via `.nox.yaml`, the exit code reflects the policy evaluation result rather than raw finding count. Findings below the `fail_on` threshold do not cause exit code 1.
 
+Without a policy, any active finding gives exit code 1, with one exception: a
+dependency vulnerability (VULN-001) nox decided is **not impacting** (its
+`applicability` is `not_impacting`, because the scan established that the
+affected package is not linked, or its code not reached, by this build). It
+stays in every report at info severity and is written to the CycloneDX SBOM as
+a VEX analysis, `state: not_affected` with justification `code_not_present` or
+`code_not_reachable`, but it does not fail the scan on its own.
+
 Use exit codes in CI to gate deployments:
 
 ```bash

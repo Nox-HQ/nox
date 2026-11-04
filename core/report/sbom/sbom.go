@@ -76,6 +76,9 @@ type CDXVulnerability struct {
 	Ratings     []CDXRating `json:"ratings,omitempty"`
 	Description string      `json:"description,omitempty"`
 	Affects     []CDXAffect `json:"affects"`
+	// Analysis is set when nox decided the vulnerability does not affect
+	// this product (see WithFindings).
+	Analysis *CDXAnalysis `json:"analysis,omitempty"`
 }
 
 // CDXSource identifies the vulnerability database source.
@@ -100,6 +103,9 @@ type CycloneDXReporter struct {
 	// aiInventory supplies the machine-learning-model components (the
 	// ML-BOM). Nil writes a dependency-only SBOM.
 	aiInventory *ai.Inventory
+	// verdicts are the not-impacting decisions from the scan's findings,
+	// written as each vulnerability's analysis. Nil writes none.
+	verdicts map[verdictKey]*CDXAnalysis
 }
 
 // NewCycloneDXReporter returns a reporter configured with the given tool version.
@@ -206,11 +212,12 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 		type vulnEntry struct {
 			origIdx int
 			vuln    deps.Vulnerability
+			pkg     deps.Package
 		}
 		var entries []vulnEntry
 		for idx, vulns := range allVulns {
 			for _, v := range vulns {
-				entries = append(entries, vulnEntry{origIdx: idx, vuln: v})
+				entries = append(entries, vulnEntry{origIdx: idx, vuln: v, pkg: pkgs[idx]})
 			}
 		}
 		sort.Slice(entries, func(i, j int) bool {
@@ -239,6 +246,7 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 				},
 				Description: e.vuln.Summary,
 				Affects:     []CDXAffect{{Ref: ref}},
+				Analysis:    r.analysisFor(e.pkg, e.vuln),
 			}
 			if e.vuln.Severity != "" {
 				cdxVuln.Ratings = []CDXRating{{Severity: string(e.vuln.Severity)}}

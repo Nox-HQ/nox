@@ -883,7 +883,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 				fmt.Fprintf(os.Stderr, "[scope] %s not written: dependencies were not scanned\n", path)
 				continue
 			}
-			r := sbom.NewCycloneDXReporter(version).WithAIInventory(result.AIInventory)
+			r := result.CycloneDX(version)
 			if err := r.WriteToFile(result.Inventory, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
@@ -971,8 +971,12 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		return result.PolicyResult.ExitCode
 	}
 
-	if findingCount > 0 {
-		return 1
+	// Without a policy every active finding fails the scan, except a
+	// dependency vulnerability nox decided is not impacting (#1012).
+	for i := range activeFindings {
+		if activeFindings[i].GatesByDefault() {
+			return 1
+		}
 	}
 	return 0
 }
