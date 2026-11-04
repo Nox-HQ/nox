@@ -493,7 +493,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 			keywords:     []string{"cancel-in-progress"},
 			filePatterns: ghaFilePatterns,
 			tags:         []string{"iac", "github-actions", "best-practice"},
-			remediation:  "Ensure that cancelling in-progress runs is intentional. For deployment workflows, cancellation may leave infrastructure in a partially applied state.",
+			remediation:  "Ensure that cancelling in-progress runs is intentional. For deployment workflows, cancellation may leave infrastructure in a partially applied state. Once verified, record why with a waiver on the line above or at the end of the line, e.g. # nox:ignore IAC-309 -- superseded runs of the same ref are safe to cancel; the finding is then reported as suppressed, with the reason.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
 		// IAC-310 retired into IAC-018, which already reported this condition.

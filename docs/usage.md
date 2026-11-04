@@ -1867,6 +1867,23 @@ to the next line of code.
 
 Suppressed findings are marked with `status: "suppressed"` in the output and do not count toward policy failure.
 
+**Recording a verified "verify intent" finding.** Some rules report a setting
+that is fine once someone has checked it: IAC-309 (`cancel-in-progress: true`)
+and IAC-245 (a Kustomize patch that removes a field) say "verify intent". A
+comment explaining the setting is not read as that record; a waiver with a
+reason is, and it keeps the reason next to the setting:
+
+```yaml
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # nox:ignore IAC-309 -- superseded runs of the same ref are safe to cancel
+  cancel-in-progress: true
+```
+
+The finding stays in the report as `suppressed`, with the reason, and stops
+counting toward policy failure. If the setting moves or is removed, nox reports
+the waiver as suppressing nothing.
+
 ---
 
 ## Output Formats
