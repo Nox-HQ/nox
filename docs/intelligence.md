@@ -158,7 +158,7 @@ next to the reporter salt (or beside `scan.intelligence.reporter_salt_path`).
 | command | does |
 |---|---|
 | `nox intel consent show` | prints the contribution terms (the single source: `core/intel/terms.go`) |
-| `nox intel consent accept` | shows the terms and records acceptance after you type `yes`; `--accept-terms 2026-10` does it non-interactively and must name the current version |
+| `nox intel consent accept` | shows the terms and records acceptance after you type `yes`; `--accept-terms 2026-11` does it non-interactively and must name the current version |
 | `nox intel consent status` / `withdraw` | report / remove the acceptance (no network) |
 | `nox intel preview <path>` | the terms, your consent status, and the exact observations a scan would send |
 | `nox intel forget` | posts your reporter id and deletion key to `/v1/reporters/erase`, prints the counts the service returns (outcome reports included), then withdraws consent (and outcome consent) and discards the reporter salt, so consenting again is a new, unlinkable reporter. Unreachable or refused: it exits non-zero and changes nothing locally |
@@ -169,7 +169,16 @@ Observations are contribution schema 2: the allowlisted fields plus
 HMAC of the private salt under a fixed label; the key is sent only to the erase
 endpoint, so only this machine can erase its id once the service has bound the
 verifier. If the terms version changes, contribution pauses until you accept the
-new one, and each scan says so. With contribution off, a scan makes no
+new one, and each scan says so.
+
+Every terms version is published, unchanged, at
+`https://nox-hq.dev/terms/<version>` (`/terms/2026-11`, `/terms/outcomes-2026-11`,
+`/terms/attack-2026-11`; earlier versions stay at their own address), and each
+text names its page. The page shows the text's SHA-256, the value
+`core/intel` pins, so you can check that the page is the text the CLI showed
+you. The texts name who runs the service at intel.klarlabs.de (Felix Geelhaar,
+klarlabs-studio; nox@felixgeelhaar.de), where it is hosted (Hetzner, Germany and
+Finland), the legal basis (consent) and your rights. With contribution off, a scan makes no
 contribution request and says nothing about it. An observation without a
 `consent_version` is never sent.
 
@@ -307,8 +316,7 @@ it and shows it as a triage signal but **never counts it as an independent sourc
 Two ways to be counted, both **attributed to your organisation**: the service
 authenticates your token and can link the contribution to your organisation, which an
 anonymous contribution never allows. That is the price of counting, so both are off by
-default. The scan contribution terms (2026-10) describe the anonymous case and are
-unchanged; attributed scanning is disclosed here and in the attack-evidence terms
+default. The scan contribution terms (2026-11) describe the anonymous case; attributed scanning is disclosed here and in the attack-evidence terms
 (`nox intel consent attack show`), and you opt in to it separately with
 `scan.intelligence.attested: true`.
 
@@ -321,7 +329,7 @@ unchanged; attributed scanning is disclosed here and in the attack-evidence term
 - Attack evidence from your CI: `nox attack run|replay ... --contribute --candidate
   <fingerprint>`. Needs `NOX_INTEL_TOKEN` and the separate attack-evidence terms
   (`nox intel consent attack show|accept|withdraw`, or `--accept-attack-terms
-  attack-2026-10`). `nox intel allowlist --attack` prints every field. Nothing about
+  attack-2026-11`). `nox intel allowlist --attack` prints every field. Nothing about
   the target leaves: no URL, host, route, field names, payloads, responses or
   canaries; only the nox-core `RunReport` fields and a one-way digest of the trace.
   Only runs that actually executed against a target with a sound control and no

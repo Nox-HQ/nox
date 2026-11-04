@@ -8,13 +8,13 @@ const WireSchemaVersion = 2
 // consent_version and recorded locally when an operator accepts. Changing the
 // text of Terms without changing this string would let an operator be bound to
 // words they never saw, so TestTermsVersionPinsTheText fails until both move.
-const TermsVersion = "2026-10"
+const TermsVersion = "2026-11"
 
 // Terms is the one place the contribution terms are written. `nox intel
 // consent`, `nox intel preview` and the docs all print this constant.
 //
 // REQUIRES OWNER REVIEW BEFORE RELEASE: this is user-facing terms text.
-const Terms = `NOX Intelligence contribution terms, version 2026-10
+const Terms = `NOX Intelligence contribution terms, version 2026-11
 
 Contribution is optional. Scanning, and asking NOX Intelligence for
 advisories, work the same with it off. It stays off until you turn it on
@@ -48,5 +48,27 @@ How to erase and withdraw
   (including published ones) and turns contribution off on this machine.
   "nox intel consent withdraw" turns it off without contacting the service.
 
+Who is responsible
+  NOX Intelligence at intel.klarlabs.de is run by Felix Geelhaar
+  (klarlabs-studio), who is the controller of what it receives. Write to
+  nox@felixgeelhaar.de with questions, or to see what the service holds about
+  you ("nox intel preview" prints your reporter id). The service and its
+  backups run on Hetzner servers in Germany and Finland (Helsinki), inside the
+  EU. A self-hosted service (scan.intelligence.endpoint) is the responsibility
+  of whoever runs it.
+
+Legal basis and your rights
+  Your consent (GDPR Art. 6(1)(a)). You can withdraw it at any time; that does
+  not make what was sent before unlawful. You may ask for access to, correction
+  of or erasure of your data, and complain to a data protection supervisory
+  authority.
+
+These terms are published, unchanged, at https://nox-hq.dev/terms/2026-11
+
 If these terms change, contribution pauses until you accept the new version.
 `
+
+// TermsURL is where the text of one terms version is published, unchanged.
+func TermsURL(version string) string {
+	return "https://nox-hq.dev/terms/" + version
+}

@@ -81,6 +81,23 @@ How to erase and withdraw
   contributions and turns both off on this machine. Withdraw here, without
   contacting the service, with "nox intel consent outcomes withdraw".
 
+Who is responsible
+  NOX Intelligence at intel.klarlabs.de is run by Felix Geelhaar
+  (klarlabs-studio), who is the controller of what it receives. Write to
+  nox@felixgeelhaar.de with questions, or to see what the service holds about
+  you ("nox intel preview --outcomes" prints your reporter id and project
+  pseudonym). The service and its backups run on Hetzner servers in Germany
+  and Finland (Helsinki), inside the EU. A self-hosted service
+  (scan.intelligence.endpoint) is the responsibility of whoever runs it.
+
+Legal basis and your rights
+  Your consent (GDPR Art. 6(1)(a)). You can withdraw it at any time; that does
+  not make what was sent before unlawful. You may ask for access to, correction
+  of or erasure of your data, and complain to a data protection supervisory
+  authority.
+
+These terms are published, unchanged, at https://nox-hq.dev/terms/outcomes-2026-11
+
 If these terms change, outcome reports pause until you accept the new version.
 `
 

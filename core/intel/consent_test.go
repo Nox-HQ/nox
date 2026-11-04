@@ -21,10 +21,10 @@ import (
 // bumping TermsVersion would bind someone to words they never saw, so the text
 // is pinned to its version: change the text, change TermsVersion, update this.
 func TestTermsVersionPinsTheText(t *testing.T) {
-	const pinned = "bb0d3024ddd4af5bbe76ec55c749455fcff1be168c33c53a9fb99d6a000d8b42"
+	const pinned = "d11ed96d88b62ace6a07224412dc72eee18ba4a6d67ee8d22aa3e8233c9bb86b"
 	sum := sha256.Sum256([]byte(Terms))
 	got := hex.EncodeToString(sum[:])
-	if TermsVersion == "2026-10" && got != pinned {
+	if TermsVersion == "2026-11" && got != pinned {
 		t.Fatalf("Terms text changed but TermsVersion is still %s (sha256 %s). Bump TermsVersion, and the service's NOXINTEL_CONSENT_TERMS, then update this pin.", TermsVersion, got)
 	}
 	if !strings.Contains(Terms, "version "+TermsVersion) {
@@ -183,5 +183,19 @@ func TestErase_Contract(t *testing.T) {
 	}
 	if _, err := c.Erase(context.Background(), "rid", "wrong"); err == nil || !strings.Contains(err.Error(), "bound a deletion key") {
 		t.Errorf("a 403 must be an error carrying the reason: %v", err)
+	}
+}
+
+// Each terms text names the page that publishes it, at its own version, so the
+// words a user accepted can be read again without the binary that showed them.
+func TestTermsNameTheirPublishedPage(t *testing.T) {
+	for version, text := range map[string]string{
+		TermsVersion:        Terms,
+		AttackTermsVersion:  AttackTerms,
+		OutcomeTermsVersion: OutcomeTerms,
+	} {
+		if url := TermsURL(version); !strings.Contains(text, url) {
+			t.Errorf("terms %s do not name their page %s", version, url)
+		}
 	}
 }

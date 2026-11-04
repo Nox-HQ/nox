@@ -22,7 +22,7 @@ import (
 func TestOutcomeTermsVersionPinsTheText(t *testing.T) {
 	sum := sha256.Sum256([]byte(OutcomeTerms))
 	got := hex.EncodeToString(sum[:])
-	const pinned = "b35abf917564571ea3fcf2259e7ea1f4158733ca0c544c9549776a018017a39f"
+	const pinned = "5511172db175e9dd3379092981be1325834bb07ec4b0e26082fe14caae649772"
 	if OutcomeTermsVersion == "outcomes-2026-11" && got != pinned {
 		t.Fatalf("outcome terms changed but version is still %s (sha256 %s). Bump OutcomeTermsVersion, "+
 			"and the service's NOXINTEL_OUTCOME_TERMS, then update this pin.", OutcomeTermsVersion, got)
