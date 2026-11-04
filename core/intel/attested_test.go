@@ -60,8 +60,8 @@ func TestSubmitRunNeedsATokenAndAValidReport(t *testing.T) {
 func TestAttackTermsVersionPinsTheText(t *testing.T) {
 	sum := sha256.Sum256([]byte(AttackTerms))
 	got := hex.EncodeToString(sum[:])
-	const pinned = "7262cc7867997f8abceb5c421b3c21d742bc171ce8bdb31029b6b616bb3f2911"
-	if AttackTermsVersion == "attack-2026-10" && got != pinned {
+	const pinned = "72bcdefaef32ea2e898e81eeef20918814b11ef650643cb00ed1f4f2e4fecdfe"
+	if AttackTermsVersion == "attack-2026-11" && got != pinned {
 		t.Fatalf("attack terms changed but version is still %s (sha256 %s)", AttackTermsVersion, got)
 	}
 	if !strings.Contains(AttackTerms, "version "+AttackTermsVersion) {

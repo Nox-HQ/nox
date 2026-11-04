@@ -40,7 +40,7 @@ func newContractDouble(t *testing.T) *contractDouble {
 		d.bodies = append(d.bodies, m)
 		d.mu.Unlock()
 		if r.URL.Path == "/v1/observations" {
-			if m["schema_version"] != float64(2) || m["consent_version"] != "2026-10" {
+			if m["schema_version"] != float64(2) || m["consent_version"] != intel.TermsVersion {
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}

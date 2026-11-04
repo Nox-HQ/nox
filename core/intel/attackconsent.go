@@ -12,13 +12,13 @@ import (
 // contribution shares a fact about a package, an attack contribution shares that
 // you ran an exploit against your own system and what happened. Changing
 // AttackTerms without changing this string is caught by a test.
-const AttackTermsVersion = "attack-2026-10"
+const AttackTermsVersion = "attack-2026-11"
 
 // AttackTerms is what an operator agrees to before `nox attack ... --contribute`
 // sends anything.
 //
 // REQUIRES OWNER REVIEW BEFORE RELEASE: this is user-facing terms text.
-const AttackTerms = `NOX Intelligence attack-evidence terms, version attack-2026-10
+const AttackTerms = `NOX Intelligence attack-evidence terms, version attack-2026-11
 
 Contributing attack evidence is optional and off by default. It needs an
 organisation token (NOX_INTEL_TOKEN) and --contribute on the command, and these
@@ -53,6 +53,23 @@ How to erase
   "nox intel forget --attested" (with NOX_INTEL_TOKEN) removes your
   organisation's contributions from the service. Withdraw here, without
   contacting the service, with "nox intel consent attack withdraw".
+
+Who is responsible
+  NOX Intelligence at intel.klarlabs.de is run by Felix Geelhaar
+  (klarlabs-studio), who is the controller of what it receives. Write to
+  nox@felixgeelhaar.de with questions, or to see what the service holds about
+  you (attack evidence is held against your organisation, so say which one).
+  The service and its backups run on Hetzner servers in Germany and Finland
+  (Helsinki), inside the EU. A self-hosted service
+  (scan.intelligence.endpoint) is the responsibility of whoever runs it.
+
+Legal basis and your rights
+  Your consent (GDPR Art. 6(1)(a)). You can withdraw it at any time; that does
+  not make what was sent before unlawful. You may ask for access to, correction
+  of or erasure of your data, and complain to a data protection supervisory
+  authority.
+
+These terms are published, unchanged, at https://nox-hq.dev/terms/attack-2026-11
 
 If these terms change, attack contribution pauses until you accept the new
 version.
