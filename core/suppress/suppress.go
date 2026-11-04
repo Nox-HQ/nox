@@ -21,6 +21,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nox-hq/nox/core/textual"
+
 	"github.com/nox-hq/nox/core/lexctx"
 )
 
@@ -182,7 +184,9 @@ func ScanForSuppressions(content []byte, filePath string) []Suppression {
 	// so a file or line without it holds none. Checked before any regex: the
 	// pattern has no literal prefix, and running it over every line of the
 	// lockfiles a VULN finding points at cost llama_index 11 s.
-	if !bytes.Contains(content, []byte("nox:")) {
+	if !bytes.Contains(content, []byte("nox:")) || textual.IsBinary(content) {
+		// Binary content holds no comments, so no waivers: an executable
+		// embedding "nox:ignore" text (nox's own does) is not waiving anything.
 		return nil
 	}
 	var result []Suppression
