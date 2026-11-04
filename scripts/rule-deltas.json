@@ -15,7 +15,7 @@
     "written against: if it does not match the tag rule-diff resolved, the ledger",
     "is stale as a whole and says so rather than silently passing."
   ],
-  "nox_release": "v1.57.0",
+  "nox_release": "v1.58.0",
   "classifications": {
     "duplicate-retired": "a second rule reported the same condition; one ID was retired into the other, which carries the alias",
     "applicability-narrowed": "the rule does not apply to this subject or resource kind, and now says so",
@@ -30,18 +30,5 @@
     "duplicate-merged": "the vulnerability source reported one vulnerability under two identifiers (nox_same_as, e.g. a Go module advisory and its GitHub advisory); they are now one finding that keeps every id in aliases",
     "equivalent-accepted": "the absence rule's required property is now also satisfied by its standard equivalent, written the way that standard writes it"
   },
-  "entries": [
-    {
-      "rule": "IAC-124",
-      "classification": "equivalent-accepted",
-      "reason": "org.opencontainers.image.authors (the OCI image-spec key) now satisfies the rule as well as maintainer, as a key anywhere in a LABEL instruction: after other keys, quoted, or on a continuation line (#1009)",
-      "pr": 1015
-    },
-    {
-      "rule": "IAC-153",
-      "classification": "applicability-narrowed",
-      "reason": "an upload in a workflow triggered only by pull_request or merge_group, or in a step that runs after a failure (if: always(), failure(), !cancelled()), keeps diagnostics rather than publishing a build, so provenance does not apply; the finding moves to the first upload that could be a build and is dropped only when none is (#1010)",
-      "pr": 1015
-    }
-  ]
+  "entries": []
 }
