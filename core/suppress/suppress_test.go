@@ -502,3 +502,19 @@ func TestScanForSuppressions_NestedInCommentIsDocExample(t *testing.T) {
 		})
 	}
 }
+
+// A compiled binary holds no comments, so it holds no waivers. nox's own
+// executable embeds rule remediation text such as "# nox:ignore IAC-245 -- ...";
+// read as text, a scan of a release archive found fourteen "waivers" in it and
+// reported each as matching no finding. Content with a NUL byte in its head is
+// binary, the test the rule engine applies to the same files.
+func TestBinaryContentHoldsNoWaivers(t *testing.T) {
+	text := "# nox:ignore IAC-245 -- generated example\nresource \"x\" \"y\" {}\n"
+	if got := ScanForSuppressions([]byte(text), "main.tf"); len(got) != 1 {
+		t.Fatalf("the text form must parse (fixture check): %d suppressions", len(got))
+	}
+	bin := append([]byte("\x7fELF\x02\x01\x01\x00\x00\x00"), text...)
+	if got := ScanForSuppressions(bin, "nox"); len(got) != 0 {
+		t.Errorf("%d waivers read from binary content: %+v", len(got), got)
+	}
+}
