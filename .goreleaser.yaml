@@ -153,10 +153,21 @@ homebrew_casks:
     # variable is unset.
     skip_upload: '{{ if eq (envOrDefault "SKIP_BREW" "") "true" }}true{{ else }}auto{{ end }}'
 
+# Each archive's SBOM is written by nox itself (`nox sbom`), built from this
+# release's commit by release.yml. Until v1.58.0 this section named no command,
+# so GoReleaser ran its default, syft. nox reads the archive offline and the Go
+# binary inside from its embedded build info; SOURCE_DATE_EPOCH pins the
+# document's creation time to the commit, so the SBOM is reproducible.
 sboms:
   - artifacts: archive
     ids:
       - nox-archive
+    cmd: nox
+    args: ["sbom", "$artifact", "-output", "$document"]
+    documents:
+      - "{{ .ArtifactName }}.sbom.json"
+    env:
+      - SOURCE_DATE_EPOCH={{ .CommitTimestamp }}
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"

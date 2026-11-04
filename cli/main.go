@@ -150,6 +150,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "Usage: nox <command> [flags]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
 		fmt.Fprintf(os.Stderr, "  scan <path>      Scan a directory for security issues\n")
+		fmt.Fprintf(os.Stderr, "  sbom <artifact>  SPDX SBOM of a release archive or file (offline, deterministic)\n")
 		fmt.Fprintf(os.Stderr, "  show [path]      Inspect findings interactively\n")
 		fmt.Fprintf(os.Stderr, "  explain <path>   Explain findings using an LLM\n")
 		fmt.Fprintf(os.Stderr, "  confirm          ACTIVE: dynamically confirm AI prompt-injection findings against a running --target (opt-in)\n")
@@ -209,6 +210,8 @@ func run(args []string) int {
 	switch command {
 	case "scan":
 		return runScan(remaining[1:], formatFlag, outputDir, rulesFlag, quietFlag, verboseFlag)
+	case "sbom":
+		return runSBOM(remaining[1:])
 	case "protect":
 		return runProtect(remaining[1:])
 	case "show":

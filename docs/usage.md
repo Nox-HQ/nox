@@ -1971,6 +1971,32 @@ Generated from dependency lockfile analysis. Lockfiles nox reads:
 | `Podfile.lock` | CocoaPods (inventory only, see below) |
 | `conan.lock` | Conan (inventory only, see below) |
 | `bom.json` (CycloneDX), `sbom.json` (SPDX) | any |
+| compiled Go executables (ELF, Mach-O, PE) | Go, including `stdlib` |
+
+A Go executable is read from the build information the Go toolchain embeds in
+it (what `go version -m` prints), with no execution: its modules at the
+versions it was built with, the main module when it carries a version, and the
+standard library as `stdlib` at the exact Go release, which no `go.mod` states.
+Its packages are located at the binary and marked `package_origin: go-binary`.
+Applicability for them stays undetermined: build info names modules, not the
+packages a binary linked, and the source tree's link set is not the binary's.
+A module replaced by a local directory has no recorded version and is reported
+as a degradation.
+
+#### `nox sbom`: the SBOM of a built artifact
+
+```bash
+nox sbom nox_1.58.0_darwin_arm64.tar.gz -output nox_1.58.0_darwin_arm64.tar.gz.sbom.json
+```
+
+Writes the SPDX 2.3 SBOM of one release archive (`.tar.gz`, `.tgz`, `.tar`,
+`.zip`) or single file. The document's subject is the artifact: named after it,
+with its SHA-256, and containing every package found inside. It is offline and
+dependency-only, so the same artifact yields the same document; set
+`SOURCE_DATE_EPOCH` to fix its creation time too. Archive entries that would
+land outside the extraction directory, links and special files fail the
+artifact rather than being skipped, and extraction is bounded (2 GiB, 100,000
+files). nox's own release SBOMs are written this way.
 
 `Package.resolved`, `Podfile.lock` and `conan.lock` are read into the dependency
 inventory and the SBOM, but the advisory pipeline has no OSV ecosystem for

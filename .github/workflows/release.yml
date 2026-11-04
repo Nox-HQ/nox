@@ -28,9 +28,14 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
-        with:
-          syft-version: v1.22.0
+      # The release's SBOMs are written by nox (.goreleaser.yaml sboms), the
+      # nox of this very commit, so they describe the archives with the code
+      # being released.
+      - name: Build nox for the release SBOMs
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          go build -trimpath -o "$RUNNER_TEMP/bin/nox" ./cli
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       # The delta ledger's lifecycle belongs to the release that moves the
       # baseline it is written against.
