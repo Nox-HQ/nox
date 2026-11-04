@@ -80,7 +80,11 @@ answer depend on when it ran.
    official language images (`golang`, `node`, `python`, each `-alpine` and
    Debian based) and distroless.
 3. Go toolchain `VERSION` and build info, which turns `golang:*` into exact
-   `stdlib` findings.
+   `stdlib` findings. The build-info half exists: a Go executable anywhere in
+   a scanned tree is read from its embedded build info
+   (`core/analyzers/deps/gobinary.go`), which is also how nox writes its own
+   release SBOMs. What remains is applying it to files read out of image
+   layers.
 4. RPM, then language packages inside images.
 5. Measure on pinned real Dockerfiles: findings per image, precision against
    each distribution's own security tracker, scan-time cost with a cold and a
