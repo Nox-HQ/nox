@@ -14,21 +14,17 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 )
 
-// copyTestBinary copies the running test binary, a real Go executable with
-// embedded build information, into dir under name.
+// copyTestBinary copies the built fixture (testdata/gobin), a real Go
+// executable with embedded build info, into dir under name.
 func copyTestBinary(t *testing.T, dir, name string) (art discovery.Artifact, bi *buildinfo.BuildInfo) {
 	t.Helper()
-	self, err := os.Executable()
+	src := buildGoFixture(t)
+	data, err := os.ReadFile(src)
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(self)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bi, err = buildinfo.ReadFile(self)
-	if err != nil {
-		t.Skipf("the test binary carries no build info: %v", err)
+	if bi, err = buildinfo.ReadFile(src); err != nil {
+		t.Fatalf("the fixture carries no build info: %v", err)
 	}
 	p := filepath.Join(dir, name)
 	if err := os.WriteFile(p, data, 0o755); err != nil {
@@ -58,7 +54,10 @@ func TestGoBinaryIsInventoriedFromItsBuildInfo(t *testing.T) {
 		t.Errorf("stdlib: %+v, want version %s from a Go binary", std, want)
 	}
 	if len(bi.Deps) == 0 {
-		t.Fatal("the test binary links no modules; the fixture proves nothing")
+		t.Fatal("the fixture links no modules; it proves nothing")
+	}
+	if p, ok := got["golang.org/x/sync"]; !ok || p.Version == "" {
+		t.Errorf("golang.org/x/sync, which the fixture imports: %+v", p)
 	}
 	for _, d := range bi.Deps {
 		name, version := d.Path, d.Version

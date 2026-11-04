@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -21,9 +22,13 @@ import (
 // the same on every run. Flags after the artifact are accepted, as GoReleaser
 // passes them.
 func TestSBOMCommandDescribesAReleaseArchive(t *testing.T) {
-	self, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
+	// A real Go executable with a known dependency, built here so its build
+	// info does not depend on how this test binary was built.
+	dir := t.TempDir()
+	self := filepath.Join(dir, "gobin")
+	if out, err := exec.Command("go", "build", "-o", self,
+		"github.com/nox-hq/nox/core/analyzers/deps/testdata/gobin").CombinedOutput(); err != nil {
+		t.Fatalf("building the Go fixture: %v\n%s", err, out)
 	}
 	bin, err := os.ReadFile(self)
 	if err != nil {
@@ -31,10 +36,9 @@ func TestSBOMCommandDescribesAReleaseArchive(t *testing.T) {
 	}
 	bi, err := buildinfo.ReadFile(self)
 	if err != nil || len(bi.Deps) == 0 {
-		t.Skipf("the test binary carries no module build info: %v", err)
+		t.Fatalf("the fixture carries no module build info: %v", err)
 	}
 
-	dir := t.TempDir()
 	archive := filepath.Join(dir, "nox_9.9.9_linux_amd64.tar.gz")
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
