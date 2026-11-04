@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `nox intel consent` usage names the `outcomes` scope alongside `attack`; an
+  unknown subcommand no longer hides that outcome consent exists.
+
 ## [1.58.0] - 2026-11-04
 
 ### Added
