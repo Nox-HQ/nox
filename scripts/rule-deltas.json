@@ -35,6 +35,11 @@
       "rule": "IAC-124",
       "classification": "equivalent-accepted",
       "reason": "org.opencontainers.image.authors (the OCI image-spec key) now satisfies the rule as well as maintainer, as a key anywhere in a LABEL instruction: after other keys, quoted, or on a continuation line (#1009)"
+    },
+    {
+      "rule": "IAC-153",
+      "classification": "applicability-narrowed",
+      "reason": "an upload in a workflow triggered only by pull_request or merge_group, or in a step that runs after a failure (if: always(), failure(), !cancelled()), keeps diagnostics rather than publishing a build, so provenance does not apply; the finding moves to the first upload that could be a build and is dropped only when none is (#1010)"
     }
   ]
 }
