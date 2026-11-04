@@ -1,0 +1,81 @@
+name: macOS signing check
+
+# Proves the Developer ID signing and notarization in .goreleaser.yaml without
+# publishing anything: a snapshot build signs and notarizes (GoReleaser skips
+# that only for --skip=notarize), then the darwin binaries are checked the way
+# Gatekeeper will check them. A pre-release cannot do this job: release.yml
+# runs only for full semver tags.
+#
+# Manual only. Run it after changing the signing configuration or rotating a
+# MACOS_* secret, before the next release depends on it.
+
+on:
+  workflow_dispatch: # nox:ignore IAC-308 -- a manual check is the point; the release environment gates each run
+
+permissions:
+  contents: read
+
+jobs:
+  sign-and-verify:
+    # The signing key is used here, so each run waits for approval, as the
+    # publishing workflows do.
+    environment: release
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Require the signing secrets
+        env:
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+        run: |
+          # Without them the notarize block is disabled and the build would
+          # pass unsigned, which is the answer this check exists to rule out.
+          if [ -z "$MACOS_SIGN_P12" ]; then
+            echo "::error title=No signing secret::MACOS_SIGN_P12 is not set; nothing would be signed."
+            exit 1
+          fi
+
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          version: 'v2.19.0'
+          args: release --snapshot --clean
+        env:
+          SKIP_BREW: 'true'
+          TAP_GITHUB_TOKEN: ''
+          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
+          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+
+      - name: Verify signature and notarization
+        run: |
+          bins=$(find dist -path '*darwin*' -type f -name nox)
+          [ -n "$bins" ] || { echo "::error::no darwin binaries in dist/"; exit 1; }
+          fail=0
+          for b in $bins; do
+            echo "== $b"
+            codesign --verify --strict --verbose=2 "$b" || fail=1
+            info=$(codesign -dvv "$b" 2>&1); echo "$info"
+            echo "$info" | grep -q '^Authority=Developer ID Application:' \
+              || { echo "::error file=$b::not signed with a Developer ID Application certificate"; fail=1; }
+            echo "$info" | grep -q 'flags=.*runtime' \
+              || { echo "::error file=$b::hardened runtime is off; notarization requires it"; fail=1; }
+            # A bare CLI binary is not an app bundle, so assess it as a
+            # document opened under its own signature. Gatekeeper's answer
+            # must name the notarization, not just a valid signature.
+            verdict=$(spctl --assess --type open --context context:primary-signature -vv "$b" 2>&1); echo "$verdict"
+            echo "$verdict" | grep -q 'source=Notarized Developer ID' \
+              || { echo "::error file=$b::Gatekeeper does not see a notarization"; fail=1; }
+          done
+          [ "$fail" -eq 0 ] || exit 1
+          echo "all darwin binaries are Developer ID signed and notarized"
+
