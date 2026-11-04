@@ -73,10 +73,10 @@ func relocateIAC153(path string, in []findings.Finding, content []byte, drop ref
 // firstBuildUpload returns the 1-based line of the first upload-artifact
 // reference outside a comment whose step does not run after a failure, and the
 // text that matched; 0 when there is none.
-func firstBuildUpload(lines []string) (int, string) {
+func firstBuildUpload(lines []string) (line int, match string) {
 	for i, l := range lines {
 		loc := uploadArtifactRe.FindStringIndex(l)
-		if loc == nil || inYAMLComment(l, loc[0]) {
+		if len(loc) < 2 || inYAMLComment(l, loc[0]) {
 			continue
 		}
 		if stepRunsAfterFailure(lines, i) {
@@ -128,7 +128,7 @@ func stepRunsAfterFailure(lines []string, i int) bool {
 		if k > start && t != "" && !strings.HasPrefix(t, "#") && indentOf(lines[k]) <= dash {
 			break
 		}
-		if m := stepIfRe.FindStringSubmatch(lines[k]); m != nil && runsAfterFailureRe.MatchString(m[1]) {
+		if m := stepIfRe.FindStringSubmatch(lines[k]); len(m) > 1 && runsAfterFailureRe.MatchString(m[1]) {
 			return true
 		}
 	}
