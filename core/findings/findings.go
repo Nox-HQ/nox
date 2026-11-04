@@ -1153,3 +1153,13 @@ func (fs *FindingSet) SetMetadata(i int, key, value string) {
 	}
 	fs.items[i].Metadata[key] = value
 }
+
+// GatesByDefault reports whether an active finding fails a scan that has no
+// policy. Every finding does, except a dependency vulnerability (VULN-001)
+// nox decided is not impacting: the scan established deterministically that
+// the vulnerable code is not linked or not reached by this build. It stays in
+// every report, at info severity and as a VEX `not_affected` in the SBOM; a
+// policy (`policy.fail_on`) decides for itself as before.
+func (f *Finding) GatesByDefault() bool {
+	return f.RuleID != "VULN-001" || f.Metadata["applicability"] != "not_impacting"
+}

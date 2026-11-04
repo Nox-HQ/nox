@@ -154,6 +154,7 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	// scan.
 	drop := a.refuter(path)
 	out := dropArtifactsWhenAlways(results, content, drop)
+	out = relocateIAC153(path, out, content, drop)
 	out = dropMatchesInComments(path, out, content, drop)
 	out = dropKindReferences(path, out, content, drop)
 	// A seccomp profile on the pod is inherited by its containers. See

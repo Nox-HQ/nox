@@ -1867,6 +1867,23 @@ to the next line of code.
 
 Suppressed findings are marked with `status: "suppressed"` in the output and do not count toward policy failure.
 
+**Recording a verified "verify intent" finding.** Some rules report a setting
+that is fine once someone has checked it: IAC-309 (`cancel-in-progress: true`)
+and IAC-245 (a Kustomize patch that removes a field) say "verify intent". A
+comment explaining the setting is not read as that record; a waiver with a
+reason is, and it keeps the reason next to the setting:
+
+```yaml
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # nox:ignore IAC-309 -- superseded runs of the same ref are safe to cancel
+  cancel-in-progress: true
+```
+
+The finding stays in the report as `suppressed`, with the reason, and stops
+counting toward policy failure. If the setting moves or is removed, nox reports
+the waiver as suppressing nothing.
+
 ---
 
 ## Output Formats
@@ -2447,6 +2464,14 @@ See [`docs/plugin-authoring.md`](plugin-authoring.md) for the full SDK guide and
 | `2` | Error (invalid arguments, scan failure, config error) |
 
 When policy is configured via `.nox.yaml`, the exit code reflects the policy evaluation result rather than raw finding count. Findings below the `fail_on` threshold do not cause exit code 1.
+
+Without a policy, any active finding gives exit code 1, with one exception: a
+dependency vulnerability (VULN-001) nox decided is **not impacting** (its
+`applicability` is `not_impacting`, because the scan established that the
+affected package is not linked, or its code not reached, by this build). It
+stays in every report at info severity and is written to the CycloneDX SBOM as
+a VEX analysis, `state: not_affected` with justification `code_not_present` or
+`code_not_reachable`, but it does not fail the scan on its own.
 
 Use exit codes in CI to gate deployments:
 

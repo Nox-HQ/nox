@@ -809,11 +809,10 @@ func (s *Server) handleGetFindingDetail(_ context.Context, input getFindingDetai
 // severity, confidence, and rule family, plus dependency / AI-component totals.
 // This is the cheap "what am I looking at?" call an agent (or human) makes
 // before deciding whether to page through individual findings.
-// cycloneDX builds the CycloneDX reporter for a cached scan, with the scan's
-// AI inventory so the ML-BOM carries the models the scan detected. Every
-// CycloneDX surface goes through here so none of them can drop the models.
+// cycloneDX builds the CycloneDX reporter for a cached scan (see
+// nox.ScanResult.CycloneDX).
 func (s *Server) cycloneDX(result *nox.ScanResult) *sbom.CycloneDXReporter {
-	return sbom.NewCycloneDXReporter(s.version).WithAIInventory(result.AIInventory)
+	return result.CycloneDX(s.version)
 }
 
 func (s *Server) handleSummary(_ context.Context, _ emptyInput) (mcp.StructuredResult, error) {

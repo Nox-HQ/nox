@@ -173,7 +173,7 @@ func builtinKustomizeRules() []rules.Rule {
 			keywords:     []string{"patchesJson6902", "remove"},
 			filePatterns: kustomizeFilePatterns,
 			tags:         []string{"iac", "kustomize", "best-practice"},
-			remediation:  "Review JSON6902 remove operations carefully. Removing fields like security contexts, resource limits, or network policies can weaken the security posture of workloads.",
+			remediation:  "Review JSON6902 remove operations carefully. Removing fields like security contexts, resource limits, or network policies can weaken the security posture of workloads. Once verified, record why with a waiver on the line above, e.g. # nox:ignore IAC-245 -- removes the sidecar annotation only; the finding is then reported as suppressed, with the reason.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
 	}
