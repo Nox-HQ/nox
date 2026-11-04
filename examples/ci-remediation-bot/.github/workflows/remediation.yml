@@ -79,7 +79,7 @@ jobs:
 
       - name: Upload remediation plan
         if: always()
-        uses: actions/upload-artifact@v4 # nox:ignore IAC-153 -- example CI artifact, not a released binary
+        uses: actions/upload-artifact@v4
         with:
           name: remediation-plan
           path: remediation-plan.txt

@@ -50,7 +50,7 @@ jobs:
 
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4 # nox:ignore IAC-153 -- example CI artifact, not a released binary
+        uses: actions/upload-artifact@v4
         with:
           name: nox-mcp-findings
           path: nox-out/
