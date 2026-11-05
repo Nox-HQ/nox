@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/npmtree"
 )
 
 // fixRuleID is the finding rule that carries dependency-upgrade metadata.
@@ -77,23 +78,42 @@ type UpgradeAction struct {
 // generic form shown in a plan. The CLI applier may run a directory-aware
 // variant (npm in the manifest's directory); this is the canonical display and
 // the exact command the MCP fix_plan tool surfaces.
-func (a UpgradeAction) Command() string {
-	v := strings.TrimPrefix(a.To, "v")
-	switch a.Ecosystem {
+func (a UpgradeAction) Command() string { return UpgradeCommand(a.Ecosystem, a.Package, a.To) }
+
+// CommandIn is the command for this upgrade in the project at root. For npm it
+// is what nox fix apply runs there (core/npmtree): the workspace's package
+// manager, and `npm update` for a package package.json does not list; empty
+// when the lockfile shows a parent's range holds the package below the fix.
+// Without a root, or for other ecosystems, it is Command.
+func (a UpgradeAction) CommandIn(root string) string {
+	if a.Ecosystem != "npm" || root == "" {
+		return a.Command()
+	}
+	return npmtree.AdviceFor(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.To).Command
+}
+
+// UpgradeCommand is the generic command that moves pkg to version in an
+// ecosystem, for when nothing about the project is known. It is the one table:
+// findings, plans and the MCP server all print from it.
+func UpgradeCommand(ecosystem, pkg, version string) string {
+	v := strings.TrimPrefix(version, "v")
+	switch ecosystem {
 	case "go":
-		return "go get " + a.Package + "@v" + v
+		return "go get " + pkg + "@v" + v
 	case "npm":
-		return "npm install " + a.Package + "@" + v
+		return "npm install " + pkg + "@" + v
 	case "pypi":
-		return "pip install '" + a.Package + ">=" + v + "'"
+		return "pip install '" + pkg + ">=" + v + "'"
 	case "rubygems":
-		return "bundle update " + a.Package + " --conservative"
+		return "bundle update " + pkg + " --conservative"
 	case "cargo":
-		return "cargo update -p " + a.Package + " --precise " + v
+		return "cargo update -p " + pkg + " --precise " + v
 	case "composer":
-		return "composer update " + a.Package
+		return "composer update " + pkg
 	case "nuget":
-		return "dotnet add package " + a.Package + " --version " + v
+		return "dotnet add package " + pkg + " --version " + v
+	case "maven", "gradle":
+		return "upgrade " + pkg + " to " + v + " in your build file"
 	}
 	return ""
 }

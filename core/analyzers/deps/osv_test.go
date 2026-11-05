@@ -442,23 +442,6 @@ func TestFixedVersion_NeverBelowInstalled(t *testing.T) {
 	}
 }
 
-func TestUpgradeCommand_ByEcosystem(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		eco, pkg, ver, want string
-	}{
-		{"go", "github.com/foo/bar", "1.2.4", "go get github.com/foo/bar@v1.2.4"},
-		{"npm", "express", "4.19.0", "npm install express@4.19.0"},
-		{"pypi", "requests", "2.32.0", "pip install 'requests>=2.32.0'"},
-	}
-	for _, tt := range tests {
-		got := upgradeCommand(tt.eco, tt.pkg, tt.ver)
-		if got != tt.want {
-			t.Errorf("upgradeCommand(%s, %s, %s) = %q, want %q", tt.eco, tt.pkg, tt.ver, got, tt.want)
-		}
-	}
-}
-
 // ---------------------------------------------------------------------------
 // ecosystemToOSV tests
 // ---------------------------------------------------------------------------

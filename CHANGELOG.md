@@ -27,6 +27,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A finding, `nox fix plan`, the MCP fix plan and `nox fix` apply now give
+  one answer for an npm fix, from one place (`core/npmtree`): the command
+  apply runs there (the workspace's package manager, the section and
+  specifier style package.json already uses, `npm update` for a package it
+  does not list), or, when the lockfile shows a parent's range holds the
+  package, no command and the parent and `overrides` entry named. They had
+  disagreed: the plan printed `npm install <pkg>@<fixed>` where apply ran
+  `pnpm update` or `npm update`, and apply ran `npm update` on a held
+  package to find out it could not move, after listing it as `plan:` in
+  `--dry-run`. Apply now lists it as `held:` and runs nothing. A test runs
+  real npm against a local registry and checks every offered command fixes
+  the finding and every held one really is held.
+- The finding's and the plan's per-ecosystem command tables were two copies
+  that had drifted (only one knew composer, only the other maven); there is
+  one now, `fix.UpgradeCommand`.
 - A vulnerable npm package that the project does not list itself (a
   transitive one) no longer comes with `npm install <pkg>@<fixed>` as its
   fix. That command adds a second, direct copy and leaves the one the parent

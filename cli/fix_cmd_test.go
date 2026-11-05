@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nox-hq/nox/core/npmtree"
+
 	"github.com/nox-hq/nox/core/fix"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -295,7 +297,7 @@ func TestNpmCommand_FollowsTheLockfile(t *testing.T) {
 			touchFile(t, dir, tc.extra)
 		}
 
-		name, args := npmCommand(dir, "js-yaml", "4.3.1")
+		name, args := npmtree.Command(dir, "js-yaml", "4.3.1")
 		if got := name + " " + args[0]; got != tc.want {
 			t.Errorf("with %s%s: got %q, want %q", tc.lockfile, " "+tc.extra, got, tc.want)
 		}
@@ -335,7 +337,7 @@ func TestNpmCommand_TheManifestDecidesTheVerb(t *testing.T) {
 			t.Fatal(err)
 		}
 		touchFile(t, dir, "package-lock.json")
-		name, args := npmCommand(dir, tc.pkg, "9.9.9")
+		name, args := npmtree.Command(dir, tc.pkg, "9.9.9")
 		if got := name + " " + strings.Join(args, " "); got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.pkg, got, tc.want)
 		}
@@ -356,14 +358,14 @@ func TestNpmLockBelow_FindsCopiesStillShortOfTheFix(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "package-lock.json"), []byte(lock), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	below, err := npmLockBelow(dir, "fast-uri", "3.1.6")
+	below, err := npmtree.Below(dir, "fast-uri", "3.1.6")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(below) != 1 || !strings.Contains(below[0], "node_modules/ajv/node_modules/fast-uri@3.1.5") {
 		t.Errorf("want only the nested 3.1.5 copy; got %v", below)
 	}
-	if below, _ := npmLockBelow(dir, "not-fast-uri", "0.1.0"); len(below) != 0 {
+	if below, _ := npmtree.Below(dir, "not-fast-uri", "0.1.0"); len(below) != 0 {
 		t.Errorf("a satisfied package reported short: %v", below)
 	}
 }
@@ -473,7 +475,7 @@ func TestNpmCommand_KeepsTheSpecifierStyle(t *testing.T) {
 			t.Fatal(err)
 		}
 		touchFile(t, dir, "package-lock.json")
-		name, args := npmCommand(dir, "lodash", "4.18.0")
+		name, args := npmtree.Command(dir, "lodash", "4.18.0")
 		if got := name + " " + strings.Join(args, " "); got != tc.want {
 			t.Errorf("spec %q: got %q, want %q", tc.spec, got, tc.want)
 		}
@@ -497,7 +499,7 @@ func TestNpmCommand_YarnKeepsStyleAndEveryManagerIgnoresScripts(t *testing.T) {
 		if tc.extra != "" {
 			touchFile(t, dir, tc.extra)
 		}
-		name, args := npmCommand(dir, "lodash", "4.18.0")
+		name, args := npmtree.Command(dir, "lodash", "4.18.0")
 		if got := name + " " + strings.Join(args, " "); got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.lockfile+tc.extra, got, tc.want)
 		}
@@ -568,5 +570,39 @@ func TestPrintScriptsNotRun_NamesOnlyWhatRan(t *testing.T) {
 	}
 	if strings.Contains(out, "composer") {
 		t.Errorf("mentions an ecosystem that was not touched:\n%s", out)
+	}
+}
+
+// When the lockfile already shows a parent's range excludes the fix, apply
+// says so and does not run the package manager to find out. It used to run
+// `npm update`, which changed nothing, and only then report the hold.
+func TestApplyNpmUpgrade_HeldTransitiveRefusesBeforeRunningNpm(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"package.json": `{"dependencies":{"vscode-languageclient":"^10.1.2"}}`,
+		"package-lock.json": `{"lockfileVersion":3,"packages":{
+"":{"dependencies":{"vscode-languageclient":"^10.1.2"}},
+"node_modules/vscode-languageclient":{"version":"10.1.2","dependencies":{"minimatch":"^10.2.6"}},
+"node_modules/minimatch":{"version":"10.2.6"}}}`,
+	}
+	for name, body := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// No package manager is reachable: running one fails with "not found",
+	// not with the hold.
+	t.Setenv("PATH", t.TempDir())
+	err := applyNpmUpgrade(dir, upgradeAction{pkg: "minimatch", toVersion: "11.0.1", ecosystem: "npm"})
+	if err == nil {
+		t.Fatal("a held move was reported as applied")
+	}
+	for _, want := range []string{"vscode-languageclient@10.1.2 requires minimatch ^10.2.6", `"overrides": { "minimatch": "11.0.1" }`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not name %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "executable") {
+		t.Errorf("apply ran the package manager before refusing: %v", err)
 	}
 }

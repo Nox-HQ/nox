@@ -1845,7 +1845,7 @@ func (s *Server) handleFixPlan(ctx context.Context, input fixPlanInput) (mcp.Str
 			From:       a.From,
 			To:         a.To,
 			Ecosystem:  a.Ecosystem,
-			Command:    a.Command(),
+			Command:    a.CommandIn(pc.basePath),
 			Unverified: a.Unverified,
 		})
 	}

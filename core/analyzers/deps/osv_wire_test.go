@@ -86,6 +86,12 @@ func scanOneNPMPackage(t *testing.T, srv *httptest.Server, name, version string)
 	if err := os.WriteFile(lockPath, []byte(lock), 0o644); err != nil {
 		t.Fatalf("writing lockfile: %v", err)
 	}
+	// The project lists the package, as a real one does; a transitive package
+	// is offered a different command (transitive_command_test.go).
+	manifest := fmt.Sprintf(`{"dependencies":{%q:%q}}`, name, version)
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("writing package.json: %v", err)
+	}
 
 	analyzer := NewAnalyzer(WithOSVBaseURL(srv.URL), WithHTTPClient(srv.Client()))
 	_, fs, err := analyzer.ScanArtifacts(context.Background(), []discovery.Artifact{{
