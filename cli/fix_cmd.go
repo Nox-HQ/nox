@@ -495,30 +495,16 @@ func describeDir(root, dir string) string {
 // shell environment; nox doesn't try to manage them.
 func applyUpgrade(manifestRoot string, a upgradeAction) error {
 	switch a.ecosystem {
-	case "go":
-		return applyGoUpgrade(manifestRoot, a)
+	case "go", "cargo", "rubygems", "composer", "nuget":
+		return runInvocation(manifestRoot, a)
 	case "npm":
 		return applyNpmUpgrade(manifestRoot, a)
 	case "pypi":
 		return applyPyPIUpgrade(manifestRoot, a)
-	case "cargo":
-		return applyCargoUpgrade(manifestRoot, a)
-	case "rubygems":
-		return applyRubyGemsUpgrade(manifestRoot, a)
-	case "composer":
-		return applyComposerUpgrade(manifestRoot, a)
-	case "nuget":
-		return applyNuGetUpgrade(manifestRoot, a)
 	case "docker":
 		return applyImageUpgrade(manifestRoot, a)
 	}
 	return fmt.Errorf("ecosystem %q not supported by applyUpgrade", a.ecosystem)
-}
-
-// applyGoUpgrade runs `go get pkg@vVERSION` in manifestRoot.
-func applyGoUpgrade(manifestRoot string, a upgradeAction) error {
-	target := a.pkg + "@v" + strings.TrimPrefix(a.toVersion, "v")
-	return runIn(manifestRoot, "go", "get", target)
 }
 
 // applyNpmUpgrade drives whichever package manager the workspace actually
@@ -591,75 +577,24 @@ var scriptsOffEnv = []string{
 	"YARN_ENABLE_SCRIPTS=false",
 }
 
-// pipUpgradeArgs is `pip install --upgrade --only-binary :all: pkg==version`.
-// A source distribution is built by running the package's own setup code, so
-// only wheels are accepted: installing one runs nothing. A package that ships
-// no wheel fails loudly rather than executing its build.
-func pipUpgradeArgs(a upgradeAction) []string {
-	return []string{"install", "--upgrade", "--only-binary", ":all:", a.pkg + "==" + strings.TrimPrefix(a.toVersion, "v")}
-}
-
-// applyPyPIUpgrade runs pipUpgradeArgs. Operators who manage
+// applyPyPIUpgrade runs pip as fix.Invocation says. Operators who manage
 // requirements.txt / pyproject.toml directly should re-pin after running.
-// Plain pip is the lowest common denominator.
 func applyPyPIUpgrade(manifestRoot string, a upgradeAction) error {
-	err := runIn(manifestRoot, "pip", pipUpgradeArgs(a)...)
-	if err != nil {
+	if err := runInvocation(manifestRoot, a); err != nil {
 		return fmt.Errorf("%w (nox installs wheels only, because building a source distribution runs the package's code; "+
 			"if %s publishes no wheel for this platform, review it and install it yourself)", err, a.pkg)
 	}
 	return nil
 }
 
-// applyCargoUpgrade runs `cargo update -p pkg --precise version`.
-// Cargo has no separate "install" semantics for project deps; update
-// rewrites Cargo.lock. It resolves only: no crate is built, so no build.rs
-// runs.
-func applyCargoUpgrade(manifestRoot string, a upgradeAction) error {
-	return runIn(manifestRoot, "cargo", "update", "-p", a.pkg, "--precise", strings.TrimPrefix(a.toVersion, "v"))
-}
-
-// rubyGemsUpgradeArgs is `bundle lock --update <gem> --conservative`.
-//
-// Deliberately not `bundle update`, which installs the gems and so compiles
-// native extensions (extconf.rb is arbitrary Ruby). `bundle lock` resolves
-// and rewrites Gemfile.lock only; the next `bundle install` is the
-// operator's.
-//
-// Deliberately not a Gemfile rewrite either: the Gemfile constraint is the
-// operator's declared intent, and bundler resolving within it is the
-// behaviour a Ruby project expects. If the constraint pins below the latest
-// release, bundler says so rather than nox silently editing the pin away.
-func rubyGemsUpgradeArgs(a upgradeAction) []string {
-	return []string{"lock", "--update", a.pkg, "--conservative"}
-}
-
-func applyRubyGemsUpgrade(manifestRoot string, a upgradeAction) error {
-	return runIn(manifestRoot, "bundle", rubyGemsUpgradeArgs(a)...)
-}
-
-// composerUpgradeArgs is `composer update <vendor/pkg> --with-dependencies
-// --no-scripts --no-plugins`. Composer resolves within the composer.json
-// constraint for the same reason as bundler. Scripts (post-update-cmd and
-// friends) and plugins are code the project or its dependencies supply, and
-// both run during an update.
-func composerUpgradeArgs(a upgradeAction) []string {
-	return []string{"update", a.pkg, "--with-dependencies", "--no-scripts", "--no-plugins"}
-}
-
-func applyComposerUpgrade(manifestRoot string, a upgradeAction) error {
-	return runIn(manifestRoot, "composer", composerUpgradeArgs(a)...)
-}
-
-// nugetUpgradeArgs is `dotnet add package <id> --version <v> --no-restore`.
-// It rewrites the PackageReference in the project file and stops: restore
-// pulls MSBuild props and targets out of the new package, which are executed.
-func nugetUpgradeArgs(a upgradeAction) []string {
-	return []string{"add", "package", a.pkg, "--version", strings.TrimPrefix(a.toVersion, "v"), "--no-restore"}
-}
-
-func applyNuGetUpgrade(manifestRoot string, a upgradeAction) error {
-	return runIn(manifestRoot, "dotnet", nugetUpgradeArgs(a)...)
+// runInvocation runs the command fix.Invocation gives for a, the same one a
+// finding and the plan show.
+func runInvocation(manifestRoot string, a upgradeAction) error {
+	tool, args, ok := fix.Invocation(a.ecosystem, a.pkg, a.toVersion)
+	if !ok {
+		return fmt.Errorf("ecosystem %q has no upgrade command", a.ecosystem)
+	}
+	return runIn(manifestRoot, tool, args...)
 }
 
 func runIn(dir, name string, args ...string) error {
