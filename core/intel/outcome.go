@@ -33,7 +33,9 @@ const OutcomeSchemaVersion = 1
 // OutcomeTerms is what an operator agrees to before a scan sends an outcome
 // report.
 //
-// REQUIRES OWNER REVIEW BEFORE RELEASE: this is user-facing terms text.
+// User-facing terms text. Reviewed by the owner, who accepted this version
+// (outcomes-2026-11) on 2026-11-04. A change to it is a new version and needs
+// that review again.
 const OutcomeTerms = `NOX Intelligence outcome terms, version outcomes-2026-11
 
 Outcome reports are optional and off by default. They need contribution on

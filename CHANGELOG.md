@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `nox intel consent` reports every consent scope. It read only the
+  contribution terms and said "No terms accepted on this machine" while
+  accepted outcome terms were stored beside them. A scope typed after the
+  verb (`nox intel consent show outcomes`) is refused, naming the order that
+  works; it printed the contribution terms and ignored the word.
 - A finding, `nox fix plan`, the MCP fix plan and `nox fix` apply now give
   one answer for an npm fix, from one place (`core/npmtree`): the command
   apply runs there (the workspace's package manager, the section and
