@@ -27,6 +27,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A vulnerable npm package that the project does not list itself (a
+  transitive one) no longer comes with `npm install <pkg>@<fixed>` as its
+  fix. That command adds a second, direct copy and leaves the one the parent
+  resolves vulnerable, so the lockfile looks fixed while the finding stays.
+  Such findings now carry `remediation_scope: transitive` and a note saying
+  what decides the move.
+- `nox fix plan` checks a major-version fix for a transitive npm package
+  against the parents' declared ranges, as it already did for minor fixes.
+  It named minimatch 10.2.6 -> 11.0.1 a release-notes review, though every
+  `vscode-languageclient` release requires `^10.2.6`; it now names that
+  parent and the `overrides` entry that forces the version.
 - SPDX documents carry a namespace derived from their content. It was one
   constant URI for every document nox wrote, and SPDX 2.3 requires it to be
   unique per document.
