@@ -11,9 +11,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
-	"sort"
 	"strings"
+
+	"github.com/nox-hq/nox/core/npmtree"
 
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
@@ -131,6 +131,17 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 			fmt.Fprintf(os.Stderr, "skip: %s [%s]: %v\n", a.pkg, a.ecosystem, err)
 			unresolved++
 			continue
+		}
+		// A move the lockfile already shows is held is listed as held, not
+		// as a command about to be refused, and is not run: it stays unfixed.
+		if a.ecosystem == "npm" {
+			version := strings.TrimPrefix(a.toVersion, "v")
+			if reach := npmtree.ReachOf(dir, a.pkg, version); reach.Held() {
+				fmt.Printf("held: %s -> %s  (%s) in %s: %v\n",
+					a.pkg, a.toVersion, a.ruleID, describeDir(manifestRoot, dir), heldError(a.pkg, version, reach))
+				unresolved++
+				continue
+			}
 		}
 		dirs[i] = dir
 		fmt.Printf("plan: %s %s -> %s  (%s) in %s\n",
@@ -455,7 +466,7 @@ func treeDigest(dir, eco string) (string, bool) {
 // on the lockfile rather than on the ecosystem name.
 func commandFor(dir string, a upgradeAction) string {
 	if a.ecosystem == "npm" {
-		name, args := npmCommand(dir, a.pkg, a.toVersion)
+		name, args := npmtree.Command(dir, a.pkg, a.toVersion)
 		return name + " " + args[0]
 	}
 	return a.action
@@ -518,14 +529,23 @@ func applyGoUpgrade(manifestRoot string, a upgradeAction) error {
 // short of the fixed version means the advisory is still there.
 func applyNpmUpgrade(manifestRoot string, a upgradeAction) error {
 	version := strings.TrimPrefix(a.toVersion, "v")
-	name, args := npmCommand(manifestRoot, a.pkg, version)
+	name, args := npmtree.Command(manifestRoot, a.pkg, version)
+	isUpdate := name == "npm" && args[0] == "update"
+	// A transitive package whose parent's range the lockfile already shows
+	// excludes the fix cannot be moved by npm update; running it to find that
+	// out changes nothing and reads as an attempt.
+	if isUpdate {
+		if reach := npmtree.ReachOf(manifestRoot, a.pkg, version); reach.Held() {
+			return heldError(a.pkg, version, reach)
+		}
+	}
 	if err := runInEnv(manifestRoot, scriptsOffEnv, name, args...); err != nil {
 		return err
 	}
-	if name != "npm" || args[0] != "update" {
+	if !isUpdate {
 		return nil
 	}
-	below, err := npmLockBelow(manifestRoot, a.pkg, version)
+	below, err := npmtree.Below(manifestRoot, a.pkg, version)
 	if err != nil {
 		return fmt.Errorf("reading package-lock.json after npm update: %w", err)
 	}
@@ -537,129 +557,12 @@ func applyNpmUpgrade(manifestRoot string, a upgradeAction) error {
 	return nil
 }
 
-// npmDirectDeclaration names the package.json section that declares pkg and
-// the version specifier written there ("4.17.15", "^4.17.15", "~4.17.0").
-// Both are "" when pkg is only pulled in by another package.
-func npmDirectDeclaration(dir, pkg string) (section, spec string) {
-	raw, err := os.ReadFile(filepath.Join(dir, "package.json"))
-	if err != nil {
-		return "", ""
-	}
-	var manifest map[string]json.RawMessage
-	if json.Unmarshal(raw, &manifest) != nil {
-		return "", ""
-	}
-	for _, name := range []string{"dependencies", "devDependencies", "optionalDependencies"} {
-		var deps map[string]string
-		if json.Unmarshal(manifest[name], &deps) != nil {
-			continue
-		}
-		if s, ok := deps[pkg]; ok {
-			return name, s
-		}
-	}
-	return "", ""
-}
-
-// specStyle is how a package.json specifier pins a version.
-type specStyle int
-
-const (
-	// styleOther covers ranges, wildcards, tags and non-registry sources. The
-	// package manager's own default applies; nox has no faithful way to keep
-	// them.
-	styleOther specStyle = iota
-	styleExact
-	styleCaret
-	styleTilde
-)
-
-// styleOfSpec classifies a specifier so an upgrade can keep the operator's
-// choice. An exact pin is a decision (reproducible builds, a vetted version),
-// and rewriting it to a caret range silently widens what any later install
-// may resolve.
-func styleOfSpec(spec string) specStyle {
-	spec = strings.TrimSpace(spec)
-	switch {
-	case strings.HasPrefix(spec, "^"):
-		return styleCaret
-	case strings.HasPrefix(spec, "~"):
-		return styleTilde
-	case exactVersionRE.MatchString(spec):
-		return styleExact
-	}
-	return styleOther
-}
-
-var exactVersionRE = regexp.MustCompile(`^v?\d+\.\d+\.\d+([-+][0-9A-Za-z.+-]+)?$`)
-
-// saveFlags are the npm/yarn flags that make a written specifier match style.
-// styleOther gets none: the manager's default is the best nox can do.
-func saveFlags(tool string, style specStyle) []string {
-	switch tool {
-	case "npm":
-		switch style {
-		case styleExact:
-			return []string{"--save-exact"}
-		case styleTilde:
-			return []string{"--save-prefix=~"}
-		case styleCaret:
-			return []string{"--save-prefix=^"}
-		}
-	case "yarn":
-		switch style {
-		case styleExact:
-			return []string{"--exact"}
-		case styleTilde:
-			return []string{"--tilde"}
-		case styleCaret:
-			return []string{"--caret"}
-		}
-	}
-	// pnpm and bun keep the existing specifier's style when given an explicit
-	// version (measured, pnpm 10.24 and bun 1.x), so they need nothing.
-	return nil
-}
-
-// npmLockBelow lists every copy of pkg in dir's package-lock.json whose
-// version is still below version, as "path@version". Nested copies count:
-// node_modules/a/node_modules/pkg is installed and loaded just the same.
-func npmLockBelow(dir, pkg, version string) ([]string, error) {
-	copies, err := npmLockCopies(dir, pkg)
-	if err != nil {
-		return nil, err
-	}
-	var below []string
-	for path, v := range copies {
-		if v != "" && versionLess(v, version) {
-			below = append(below, path+"@"+v)
-		}
-	}
-	sort.Strings(below)
-	return below, nil
-}
-
-// npmLockCopies maps each lockfile path that installs pkg to its version.
-func npmLockCopies(dir, pkg string) (map[string]string, error) {
-	raw, err := os.ReadFile(filepath.Join(dir, "package-lock.json"))
-	if err != nil {
-		return nil, err
-	}
-	var lock struct {
-		Packages map[string]struct {
-			Version string `json:"version"`
-		} `json:"packages"`
-	}
-	if err := json.Unmarshal(raw, &lock); err != nil {
-		return nil, err
-	}
-	copies := map[string]string{}
-	for path, entry := range lock.Packages {
-		if path == "node_modules/"+pkg || strings.HasSuffix(path, "/node_modules/"+pkg) {
-			copies[path] = entry.Version
-		}
-	}
-	return copies, nil
+// heldError is the refusal for a move the lockfile shows is held, naming the
+// holders and the entry that forces the version, as nox fix plan does.
+func heldError(pkg, version string, reach npmtree.Reach) error {
+	return fmt.Errorf("%s is transitive and %s: the range excludes %s, so npm update cannot move it; "+
+		"upgrade %s to a release that allows it, or add to package.json: %s",
+		pkg, reach.HoldList(), version, reach.Holders(), npmtree.OverrideEntry(reach.Tool, pkg, version))
 }
 
 // alreadySatisfied reports whether an npm upgrade that rewrote nothing had
@@ -671,67 +574,12 @@ func alreadySatisfied(dir string, a upgradeAction) bool {
 	if a.ecosystem != "npm" {
 		return false
 	}
-	copies, err := npmLockCopies(dir, a.pkg)
+	copies, err := npmtree.Copies(dir, a.pkg)
 	if err != nil || len(copies) == 0 {
 		return false
 	}
-	below, err := npmLockBelow(dir, a.pkg, strings.TrimPrefix(a.toVersion, "v"))
+	below, err := npmtree.Below(dir, a.pkg, strings.TrimPrefix(a.toVersion, "v"))
 	return err == nil && len(below) == 0
-}
-
-// npmCommand picks the package manager from the lockfile in dir.
-//
-// "npm" is an OSV ecosystem, not a tool: the same ecosystem is served by npm,
-// pnpm, yarn and bun, and they do not share a lockfile. Running `npm install`
-// in a pnpm workspace writes a package-lock.json next to the pnpm-lock.yaml
-// and resolves a tree the workspace will never install from.
-//
-// pnpm gets --depth Infinity because most advisories land on transitive
-// dependencies, which a default-depth update does not reach.
-func npmCommand(dir, pkg, version string) (tool string, args []string) {
-	target := pkg + "@" + version
-	has := func(name string) bool {
-		_, err := os.Stat(filepath.Join(dir, name))
-		return err == nil
-	}
-	section, spec := npmDirectDeclaration(dir, pkg)
-	style := styleOfSpec(spec)
-	// Every command here installs packages, and installing runs their
-	// lifecycle scripts: arbitrary code from whatever version nox just chose.
-	// nox never executes untrusted code, so scripts are always off.
-	switch {
-	case has("pnpm-lock.yaml"):
-		return "pnpm", []string{"update", "--ignore-scripts", "--depth", "Infinity", target}
-	case has("yarn.lock"):
-		// Berry renamed the verb and is told apart by its own config file.
-		// Berry has no --ignore-scripts on `up`; applyNpmUpgrade sets
-		// YARN_ENABLE_SCRIPTS=false for it.
-		if has(".yarnrc.yml") {
-			return "yarn", append(append([]string{"up"}, saveFlags("yarn", style)...), target)
-		}
-		return "yarn", append(append([]string{"upgrade", "--ignore-scripts"}, saveFlags("yarn", style)...), target)
-	case has("bun.lock"), has("bun.lockb"):
-		return "bun", []string{"update", "--ignore-scripts", target}
-	}
-	// npm install writes whatever it is given into package.json: a transitive
-	// package becomes a new direct dependency, and a devDependency moves into
-	// dependencies. So the manifest decides. A declared package keeps its
-	// section; anything else is moved by `npm update`, which touches only the
-	// lockfile and takes no version — applyNpmUpgrade checks where it landed.
-	install := func(extra ...string) []string {
-		a := append([]string{"install", "--ignore-scripts"}, extra...)
-		a = append(a, saveFlags("npm", style)...)
-		return append(a, target)
-	}
-	switch section {
-	case "dependencies":
-		return "npm", install()
-	case "devDependencies":
-		return "npm", install("--save-dev")
-	case "optionalDependencies":
-		return "npm", install("--save-optional")
-	}
-	return "npm", []string{"update", "--ignore-scripts", pkg}
 }
 
 // scriptsOffEnv switches install scripts off for every JavaScript package

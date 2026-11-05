@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nox-hq/nox/core/discovery"
@@ -14,7 +15,8 @@ import (
 // new direct dependency and leaves the copy its parent resolves where it was:
 // the finding stays and the lockfile now looks fixed. minimatch in nox's own VS
 // Code extension came with exactly that command. A transitive npm finding
-// carries no install command; it says what decides the move instead.
+// carries the answer nox fix plan gives: the parent that holds it and the
+// overrides entry, or `npm update` when every parent allows the fix.
 func TestTransitiveNPMFindingOffersNoInstallCommand(t *testing.T) {
 	t.Parallel()
 	srv := fakeOSV(t,
@@ -24,18 +26,34 @@ func TestTransitiveNPMFindingOffersNoInstallCommand(t *testing.T) {
 			"ranges":[{"type":"SEMVER","events":[{"introduced":"7.0.0"},{"fixed":"11.0.1"}]}]}]}`})
 	defer srv.Close()
 
+	const heldLock = `{"packages":{
+"":{"dependencies":{"vscode-languageclient":"^10.1.2"}},
+"node_modules/vscode-languageclient":{"version":"10.1.2","dependencies":{"minimatch":"^10.2.6"}},
+"node_modules/minimatch":{"version":"10.2.6"}}}`
+	const movableLock = `{"packages":{
+"":{"dependencies":{"glob":"^12.0.0"}},
+"node_modules/glob":{"version":"12.0.0","dependencies":{"minimatch":"^10.2.6 || ^11.0.0"}},
+"node_modules/minimatch":{"version":"10.2.6"}}}`
+	const bareLock = `{"packages":{"node_modules/minimatch":{"version":"10.2.6"}}}`
 	for name, tc := range map[string]struct {
-		manifest    string
-		wantCommand bool
+		lock, manifest string
+		wantCommand    string
+		wantNote       []string // empty: no note
 	}{
-		"transitive":         {`{"dependencies":{"vscode-languageclient":"^10.1.2"}}`, false},
-		"direct":             {`{"dependencies":{"minimatch":"^10.2.6"}}`, true},
-		"direct dev":         {`{"devDependencies":{"minimatch":"^10.2.6"}}`, true},
-		"no manifest beside": {"", true}, // nothing is claimed about a manifest nox did not see
+		// The finding names what nox fix plan names: the parent and the entry.
+		"transitive, held by its parent": {heldLock, `{"dependencies":{"vscode-languageclient":"^10.1.2"}}`, "",
+			[]string{"vscode-languageclient@10.1.2 requires minimatch ^10.2.6", `"overrides": { "minimatch": "11.0.1" }`}},
+		// Every parent allows the fix: npm update moves it, as apply runs.
+		"transitive, every parent allows": {movableLock, `{"dependencies":{"glob":"^12.0.0"}}`, "npm update --ignore-scripts minimatch", nil},
+		// A listed package keeps its section and specifier style.
+		"direct":     {bareLock, `{"dependencies":{"minimatch":"^10.2.6"}}`, "npm install --ignore-scripts --save-prefix=^ minimatch@11.0.1", nil},
+		"direct dev": {bareLock, `{"devDependencies":{"minimatch":"~10.2.6"}}`, "npm install --ignore-scripts --save-dev --save-prefix=~ minimatch@11.0.1", nil},
+		// No package.json: what apply would run there, and no transitive claim.
+		"no manifest beside": {bareLock, "", "npm update --ignore-scripts minimatch", nil},
 	} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			lock := `{"packages":{"node_modules/minimatch":{"version":"10.2.6"}}}`
+			lock := tc.lock
 			lockPath := filepath.Join(dir, "package-lock.json")
 			if err := os.WriteFile(lockPath, []byte(lock), 0o644); err != nil {
 				t.Fatal(err)
@@ -64,17 +82,20 @@ func TestTransitiveNPMFindingOffersNoInstallCommand(t *testing.T) {
 			if f.Metadata["fixed_in"] != "11.0.1" {
 				t.Errorf("fixed_in = %q; the fixed version is a fact either way", f.Metadata["fixed_in"])
 			}
-			cmd := f.Metadata["remediation_command"]
-			if tc.wantCommand && cmd != "npm install minimatch@11.0.1" {
-				t.Errorf("command = %q, want the install command", cmd)
+			if cmd := f.Metadata["remediation_command"]; cmd != tc.wantCommand {
+				t.Errorf("command = %q, want %q", cmd, tc.wantCommand)
 			}
-			if !tc.wantCommand {
-				if cmd != "" {
-					t.Errorf("a transitive package got the install command %q", cmd)
+			note := f.Metadata["remediation_note"]
+			if len(tc.wantNote) == 0 && note != "" {
+				t.Errorf("unexpected note %q", note)
+			}
+			for _, want := range tc.wantNote {
+				if !strings.Contains(note, want) {
+					t.Errorf("note %q does not name %q", note, want)
 				}
-				if f.Metadata["remediation_scope"] != "transitive" || f.Metadata["remediation_note"] == "" {
-					t.Errorf("transitive finding does not say what decides the move: %v", f.Metadata)
-				}
+			}
+			if len(tc.wantNote) > 0 && f.Metadata["remediation_scope"] != "transitive" {
+				t.Errorf("remediation_scope = %q, want transitive", f.Metadata["remediation_scope"])
 			}
 		})
 	}

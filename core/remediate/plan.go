@@ -18,7 +18,6 @@
 package remediate
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -28,6 +27,7 @@ import (
 	"github.com/nox-hq/nox/core/catalog"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
+	"github.com/nox-hq/nox/core/npmtree"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -224,7 +224,7 @@ func classify(is *assess.Issue, in Input, reader *fileReader) Item {
 
 func classifyUpgrade(it *Item, is *assess.Issue, root string) {
 	a := is.Upgrade
-	it.Class, it.Kind, it.Upgrade, it.Command = ClassSafe, KindUpgrade, a, a.Command()
+	it.Class, it.Kind, it.Upgrade, it.Command = ClassSafe, KindUpgrade, a, a.CommandIn(root)
 	it.Why = "The fix is published and stays on the same major version (" + versionStep(a) +
 		"), so it should not change how your code uses the package."
 	if transitiveNPM(root, a) && !holdTransitive(it, a, root, false) {
@@ -246,8 +246,8 @@ func holdTransitive(it *Item, a *fix.UpgradeAction, root string, major bool) boo
 	if !transitiveNPM(root, a) {
 		return false
 	}
-	reach := analyzeNPMReach(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.To)
-	if reach.Established && len(reach.Holds) == 0 {
+	reach := npmtree.ReachOf(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.To)
+	if reach.Movable() {
 		return false
 	}
 	it.Class, it.Kind, it.Command = ClassReview, KindHeldUpgrade, ""
@@ -256,35 +256,18 @@ func holdTransitive(it *Item, a *fix.UpgradeAction, root string, major bool) boo
 }
 
 // transitiveNPM reports whether an npm upgrade targets a package the project's
-// package.json does not declare. False when that cannot be read: nothing is
+// package.json does not list. False when that cannot be read: nothing is
 // claimed about a manifest nox did not see.
 func transitiveNPM(root string, a *fix.UpgradeAction) bool {
 	if root == "" || a.Ecosystem != "npm" {
 		return false
 	}
-	data, err := os.ReadFile(filepath.Join(root, filepath.Dir(a.Manifest), "package.json"))
-	if err != nil {
-		return false
-	}
-	var manifest map[string]json.RawMessage
-	if json.Unmarshal(data, &manifest) != nil {
-		return false
-	}
-	for _, section := range []string{"dependencies", "devDependencies", "optionalDependencies"} {
-		var deps map[string]string
-		if json.Unmarshal(manifest[section], &deps) != nil {
-			continue
-		}
-		if _, ok := deps[a.Package]; ok {
-			return false
-		}
-	}
-	return true
+	return npmtree.Transitive(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package)
 }
 
 func classifyMajor(it *Item, is *assess.Issue, root string) {
 	a := is.Upgrade
-	it.Class, it.Kind, it.Upgrade, it.Command = ClassReview, KindMajorUpgrade, a, a.Command()
+	it.Class, it.Kind, it.Upgrade, it.Command = ClassReview, KindMajorUpgrade, a, a.CommandIn(root)
 	it.Title = strings.TrimSuffix(it.Title, assess.MajorNote)
 	if holdTransitive(it, a, root, true) {
 		return
