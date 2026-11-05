@@ -544,7 +544,7 @@ func TestPrintScriptsNotRun_NamesOnlyWhatRan(t *testing.T) {
 	}
 	printScriptsNotRun(&b, map[string]bool{"npm": true, "pypi": true})
 	out := b.String()
-	for _, want := range []string{"install scripts", "npm rebuild", "wheels"} {
+	for _, want := range []string{"install scripts", "npm rebuild", "nothing was installed"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q:\n%s", want, out)
 		}
@@ -585,5 +585,53 @@ func TestApplyNpmUpgrade_HeldTransitiveRefusesBeforeRunningNpm(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "executable") {
 		t.Errorf("apply ran the package manager before refusing: %v", err)
+	}
+}
+
+// Applying a Python fix edits the pin and runs no package manager: pip
+// installed into whatever environment it resolved to and never touched the
+// file the finding is about. A lockfile is refused, again without running one.
+func TestApplyPyPIEditsThePinAndRunsNothing(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // no pip, uv or poetry to run
+	dir := t.TempDir()
+	req := filepath.Join(dir, "requirements.txt")
+	if err := os.WriteFile(req, []byte("flask==3.0.0\nrequests==2.31.0  # http\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := upgradeAction{pkg: "requests", fromVer: "2.31.0", toVersion: "2.32.0", ecosystem: "pypi", manifest: "requirements.txt"}
+	if err := applyUpgrade(dir, a); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if got, _ := os.ReadFile(req); string(got) != "flask==3.0.0\nrequests==2.32.0  # http\n" {
+		t.Errorf("requirements.txt = %q", got)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "uv.lock"), []byte("version = 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a.manifest = "uv.lock"
+	err := applyUpgrade(dir, a)
+	if err == nil || !strings.Contains(err.Error(), "uv lock --upgrade-package requests") {
+		t.Errorf("uv.lock: %v, want a refusal naming uv's own command", err)
+	}
+	if err != nil && strings.Contains(err.Error(), "executable file not found") {
+		t.Errorf("apply tried to run a package manager: %v", err)
+	}
+}
+
+// After a pin edit, the regression check reads the pin back from the file the
+// finding names: it is the resolved version, so nothing is left unverified.
+func TestPyPIPinIsVerifiedAfterApply(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "requirements.txt"), []byte("Requests==2.32.0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := upgradeAction{pkg: "requests", fromVer: "2.31.0", toVersion: "2.32.0", ecosystem: "pypi", manifest: "requirements.txt"}
+	if v, ok := installedVersion(dir, a); !ok || v != "2.32.0" {
+		t.Errorf("installedVersion = %q, %v; want the pin 2.32.0", v, ok)
+	}
+	a.manifest = "poetry.lock" // nox never edits it, so it never claims to have read it
+	if _, ok := installedVersion(dir, a); ok {
+		t.Error("claimed a version from a file nox did not edit")
 	}
 }

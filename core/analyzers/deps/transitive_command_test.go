@@ -100,3 +100,49 @@ func TestTransitiveNPMFindingOffersNoInstallCommand(t *testing.T) {
 		})
 	}
 }
+
+// A Python finding offers the pin edit apply makes in its own file, or no
+// command and the resolver's own when the file is a lockfile.
+func TestPyPIFindingNamesTheEditOrTheResolver(t *testing.T) {
+	t.Parallel()
+	srv := fakeOSV(t,
+		map[string][]string{"requests": {"GHSA-rq"}},
+		map[string]string{"GHSA-rq": `{"id":"GHSA-rq","summary":"leak",
+			"affected":[{"package":{"name":"requests","ecosystem":"PyPI"},
+			"ranges":[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"2.32.0"}]}]}]}`})
+	defer srv.Close()
+	for file, tc := range map[string]struct{ body, command, note string }{
+		"requirements.txt": {"requests==2.31.0\n", "set requests==2.32.0 in requirements.txt", ""},
+		"poetry.lock":      {"[[package]]\nname = \"requests\"\nversion = \"2.31.0\"\n", "", "poetry update requests"},
+	} {
+		t.Run(file, func(t *testing.T) {
+			dir := t.TempDir()
+			p := filepath.Join(dir, file)
+			if err := os.WriteFile(p, []byte(tc.body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			a := NewAnalyzer(WithOSVBaseURL(srv.URL), WithHTTPClient(srv.Client()))
+			_, fs, err := a.ScanArtifacts(context.Background(), []discovery.Artifact{{
+				Path: file, AbsPath: p, Type: discovery.Lockfile, Size: int64(len(tc.body)),
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var f *findings.Finding
+			for _, x := range fs.Findings() {
+				if x.RuleID == "VULN-001" {
+					f = &x
+				}
+			}
+			if f == nil {
+				t.Fatal("no VULN-001")
+			}
+			if got := f.Metadata["remediation_command"]; got != tc.command {
+				t.Errorf("command = %q, want %q", got, tc.command)
+			}
+			if tc.note != "" && !strings.Contains(f.Metadata["remediation_note"], tc.note) {
+				t.Errorf("note = %q, want it to name %q", f.Metadata["remediation_note"], tc.note)
+			}
+		})
+	}
+}

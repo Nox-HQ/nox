@@ -29,6 +29,7 @@ import (
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
+	"github.com/nox-hq/nox/core/pypipin"
 	"github.com/nox-hq/nox/core/reach"
 	"github.com/nox-hq/nox/core/rules"
 )
@@ -908,6 +909,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						meta["remediation_command"] = fix.UpgradeCommand(pkg.Ecosystem, pkg.Name, fixVer)
 						if pkg.Ecosystem == "npm" && lockDir != "" {
 							addNPMRemediation(meta, npmProj.open(lockDir).Advice(pkg.Name, fixVer), pkg.Name, fixVer)
+						}
+						if pkg.Ecosystem == "pypi" && lockDir != "" {
+							addPyPIRemediation(meta, pypipin.AdviceFor(filepath.Join(lockDir, filepath.Base(lockfilePath)), pkg.Name, pkg.Version, fixVer))
 						}
 					}
 					// OSV scopes Go advisories to import paths. When the affected

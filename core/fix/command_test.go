@@ -12,7 +12,8 @@ func TestUpgradeCommand_ByEcosystem(t *testing.T) {
 	}{
 		{"go", "github.com/foo/bar", "1.2.4", "go get github.com/foo/bar@v1.2.4"},
 		{"npm", "express", "4.19.0", "npm install express@4.19.0"},
-		{"pypi", "requests", "2.32.0", "pip install --upgrade --only-binary :all: requests==2.32.0"},
+		// No file to read: pypi's fix is an edit of a pin, described.
+		{"pypi", "requests", "2.32.0", "set requests==2.32.0 in its requirements file"},
 		// The finding and the plan each kept a copy of this table, and they
 		// drifted: only the plan knew composer, only the finding maven.
 		{"composer", "symfony/http-kernel", "6.4.1", "composer update symfony/http-kernel --with-dependencies --no-scripts --no-plugins"},
@@ -37,7 +38,6 @@ func TestShownCommandIsTheOneApplyRuns(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ eco, want string }{
 		{"go", "go get example.com/pkg@v1.2.3"},
-		{"pypi", "pip install --upgrade --only-binary :all: pkg==1.2.3"},
 		{"cargo", "cargo update -p pkg --precise 1.2.3"},
 		{"rubygems", "bundle lock --update pkg --conservative"},
 		{"composer", "composer update pkg --with-dependencies --no-scripts --no-plugins"},

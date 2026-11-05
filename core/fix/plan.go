@@ -8,6 +8,7 @@ import (
 
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/npmtree"
+	"github.com/nox-hq/nox/core/pypipin"
 )
 
 // fixRuleID is the finding rule that carries dependency-upgrade metadata.
@@ -84,12 +85,20 @@ func (a UpgradeAction) Command() string { return UpgradeCommand(a.Ecosystem, a.P
 // is what nox fix apply runs there (core/npmtree): the workspace's package
 // manager, and `npm update` for a package package.json does not list; empty
 // when the lockfile shows a parent's range holds the package below the fix.
-// Without a root, or for other ecosystems, it is Command.
+// For pypi it is the pin edit in the file the finding names, or empty when the
+// fix is manual (core/pypipin). Without a root, or for other ecosystems, it is
+// Command.
 func (a UpgradeAction) CommandIn(root string) string {
-	if a.Ecosystem != "npm" || root == "" {
+	if root == "" {
 		return a.Command()
 	}
-	return npmtree.AdviceFor(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.To).Command
+	switch a.Ecosystem {
+	case "npm":
+		return npmtree.AdviceFor(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.To).Command
+	case "pypi":
+		return pypipin.AdviceFor(filepath.Join(root, a.Manifest), a.Package, a.From, a.To).Command
+	}
+	return a.Command()
 }
 
 // UpgradeCommand is the command that moves pkg to version, as a shell line:
@@ -103,6 +112,10 @@ func UpgradeCommand(ecosystem, pkg, version string) string {
 		return "npm install " + pkg + "@" + v
 	case "maven", "gradle":
 		return "upgrade " + pkg + " to " + v + " in your build file"
+	case "pypi":
+		// What apply does, without the file to name: CommandIn names it, or
+		// says the fix is manual.
+		return "set " + pkg + "==" + v + " in its requirements file"
 	}
 	if tool, args, ok := Invocation(ecosystem, pkg, version); ok {
 		return tool + " " + strings.Join(args, " ")
@@ -112,17 +125,14 @@ func UpgradeCommand(ecosystem, pkg, version string) string {
 
 // Invocation is the command nox fix apply runs to move pkg to version, for
 // every ecosystem but npm (whose command depends on the workspace:
-// core/npmtree.Command). Each form is chosen so that applying a fix resolves
+// core/npmtree.Command) and pypi (a pin edit in the file the finding names,
+// or manual: core/pypipin), which run no command. Each form is chosen so that applying a fix resolves
 // and records versions without running any dependency's code.
 func Invocation(ecosystem, pkg, version string) (tool string, args []string, ok bool) {
 	v := strings.TrimPrefix(version, "v")
 	switch ecosystem {
 	case "go":
 		return "go", []string{"get", pkg + "@v" + v}, true
-	case "pypi":
-		// Wheels only: a source distribution is built by running the
-		// package's own setup code; installing a wheel runs nothing.
-		return "pip", []string{"install", "--upgrade", "--only-binary", ":all:", pkg + "==" + v}, true
 	case "cargo":
 		// Resolves and rewrites Cargo.lock; no crate is built, so no build.rs.
 		return "cargo", []string{"update", "-p", pkg, "--precise", v}, true
