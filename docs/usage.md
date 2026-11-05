@@ -1987,11 +1987,16 @@ as a degradation.
 
 ```bash
 nox sbom nox_1.58.0_darwin_arm64.tar.gz -output nox_1.58.0_darwin_arm64.tar.gz.sbom.json
+nox sbom nox_1.58.0_darwin_arm64.tar.gz -format cyclonedx -output nox.cdx.json
 ```
 
-Writes the SPDX 2.3 SBOM of one release archive (`.tar.gz`, `.tgz`, `.tar`,
-`.zip`) or single file. The document's subject is the artifact: named after it,
-with its SHA-256, and containing every package found inside. It is offline and
+Writes the SBOM of one release archive (`.tar.gz`, `.tgz`, `.tar`, `.zip`) or
+single file, as SPDX 2.3 (the default) or CycloneDX 1.5 (`-format cyclonedx`).
+The document's subject is the artifact: named after it, with its SHA-256, and
+containing every package found inside. In SPDX that is the described package
+and its CONTAINS relationships; in CycloneDX it is `metadata.component` (type
+`file`, with a SHA-256 hash) and a `dependencies` entry for it, and the serial
+number derives from the artifact's digest. It is offline and
 dependency-only, so the same artifact yields the same document; set
 `SOURCE_DATE_EPOCH` to fix its creation time too. Archive entries that would
 land outside the extraction directory, links and special files fail the
