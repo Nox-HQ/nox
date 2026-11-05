@@ -6,6 +6,12 @@ name: macOS signing check
 # Gatekeeper will check them. A pre-release cannot do this job: release.yml
 # runs only for full semver tags.
 #
+# Signing runs where the release signs: on Linux, through quill. The first
+# version of this check built and signed on a macOS runner, which is not what
+# the release does, and cross-compiling six targets there ran past 40 minutes
+# before signing began. Only the verification needs macOS: codesign and spctl
+# are Apple's tools, and Gatekeeper's verdict is the answer that matters.
+#
 # Manual only. Run it after changing the signing configuration or rotating a
 # MACOS_* secret, before the next release depends on it.
 
@@ -16,12 +22,13 @@ permissions:
   contents: read
 
 jobs:
-  sign-and-verify:
+  sign:
     # The signing key is used here, so each run waits for approval, as the
     # publishing workflows do.
     environment: release
-    runs-on: macos-latest
-    timeout-minutes: 40
+    runs-on: ubuntu-latest
+    # Notarization alone may wait up to 20 minutes (.goreleaser.yaml).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -43,10 +50,19 @@ jobs:
             exit 1
           fi
 
+      - name: Build nox for the SBOMs
+        # The release's SBOMs are written by nox itself (release.yml).
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          go build -trimpath -o "$RUNNER_TEMP/bin/nox" ./cli
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           version: 'v2.19.0'
-          args: release --snapshot --clean
+          # The before hooks run the test suite; CI runs it on every change,
+          # and it says nothing about a signature.
+          args: release --snapshot --clean --skip=before
         env:
           SKIP_BREW: 'true'
           TAP_GITHUB_TOKEN: ''
@@ -56,12 +72,39 @@ jobs:
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
 
+      - name: Collect the darwin binaries
+        run: |
+          mkdir -p darwin
+          found=0
+          for b in dist/*darwin*/nox; do
+            [ -f "$b" ] || continue
+            cp "$b" "darwin/$(basename "$(dirname "$b")")"
+            found=1
+          done
+          [ "$found" -eq 1 ] || { echo "::error::no darwin binaries in dist/"; exit 1; }
+          ls -l darwin
+
+      # nox:ignore IAC-153 -- a one-day handoff to the verify job in the same run; nothing publishes it
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: darwin-binaries
+          path: darwin/
+          retention-days: 1
+
+  verify:
+    needs: sign
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: darwin-binaries
+          path: darwin
+
       - name: Verify signature and notarization
         run: |
-          bins=$(find dist -path '*darwin*' -type f -name nox)
-          [ -n "$bins" ] || { echo "::error::no darwin binaries in dist/"; exit 1; }
           fail=0
-          for b in $bins; do
+          for b in darwin/*; do
             echo "== $b"
             codesign --verify --strict --verbose=2 "$b" || fail=1
             info=$(codesign -dvv "$b" 2>&1); echo "$info"
@@ -78,4 +121,3 @@ jobs:
           done
           [ "$fail" -eq 0 ] || exit 1
           echo "all darwin binaries are Developer ID signed and notarized"
-
