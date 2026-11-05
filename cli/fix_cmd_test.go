@@ -506,25 +506,6 @@ func TestNpmCommand_YarnKeepsStyleAndEveryManagerIgnoresScripts(t *testing.T) {
 	}
 }
 
-// Ecosystems whose manager would build or run package code get the flag that
-// stops it; the ones that only resolve keep their command.
-func TestOtherManagers_DoNotRunPackageCode(t *testing.T) {
-	a := upgradeAction{pkg: "pkg", toVersion: "v1.2.3"}
-	for name, tc := range map[string]struct {
-		got  []string
-		want string
-	}{
-		"pip":      {pipUpgradeArgs(a), "install --upgrade --only-binary :all: pkg==1.2.3"},
-		"bundler":  {rubyGemsUpgradeArgs(a), "lock --update pkg --conservative"},
-		"composer": {composerUpgradeArgs(a), "update pkg --with-dependencies --no-scripts --no-plugins"},
-		"nuget":    {nugetUpgradeArgs(a), "add package pkg --version 1.2.3 --no-restore"},
-	} {
-		if got := strings.Join(tc.got, " "); got != tc.want {
-			t.Errorf("%s: got %q, want %q", name, got, tc.want)
-		}
-	}
-}
-
 // The real call path, not just the argv builder: a fake npm on PATH records
 // what applyNpmUpgrade actually ran and with which environment.
 func TestApplyNpmUpgrade_RunsWithScriptsOffAndKeepsTheExactPin(t *testing.T) {

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The upgrade command a finding, `nox fix plan` and the MCP fix plan show is
+  the one `nox fix` apply runs (`fix.Invocation`). For three ecosystems it
+  was the unsafe form apply avoids: `bundle update` (installs gems,
+  compiling native extensions), `composer update` without `--no-scripts
+  --no-plugins`, and `dotnet add package` without `--no-restore` (restore
+  runs the package's MSBuild targets).
 - Release SBOMs name their creator with the release version. v1.59.0's, the
   first nox wrote itself, said `Tool: nox-dev`: the nox that writes them was
   built without the version stamp the archives carry.

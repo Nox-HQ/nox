@@ -92,30 +92,55 @@ func (a UpgradeAction) CommandIn(root string) string {
 	return npmtree.AdviceFor(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.To).Command
 }
 
-// UpgradeCommand is the generic command that moves pkg to version in an
-// ecosystem, for when nothing about the project is known. It is the one table:
-// findings, plans and the MCP server all print from it.
+// UpgradeCommand is the command that moves pkg to version, as a shell line:
+// for every ecosystem nox fix drives, exactly what apply runs (Invocation).
+// npm is the exception only without a workspace to read; CommandIn reads it.
+// Findings, plans and the MCP server all print from here.
 func UpgradeCommand(ecosystem, pkg, version string) string {
 	v := strings.TrimPrefix(version, "v")
 	switch ecosystem {
-	case "go":
-		return "go get " + pkg + "@v" + v
 	case "npm":
 		return "npm install " + pkg + "@" + v
-	case "pypi":
-		return "pip install '" + pkg + ">=" + v + "'"
-	case "rubygems":
-		return "bundle update " + pkg + " --conservative"
-	case "cargo":
-		return "cargo update -p " + pkg + " --precise " + v
-	case "composer":
-		return "composer update " + pkg
-	case "nuget":
-		return "dotnet add package " + pkg + " --version " + v
 	case "maven", "gradle":
 		return "upgrade " + pkg + " to " + v + " in your build file"
 	}
+	if tool, args, ok := Invocation(ecosystem, pkg, version); ok {
+		return tool + " " + strings.Join(args, " ")
+	}
 	return ""
+}
+
+// Invocation is the command nox fix apply runs to move pkg to version, for
+// every ecosystem but npm (whose command depends on the workspace:
+// core/npmtree.Command). Each form is chosen so that applying a fix resolves
+// and records versions without running any dependency's code.
+func Invocation(ecosystem, pkg, version string) (tool string, args []string, ok bool) {
+	v := strings.TrimPrefix(version, "v")
+	switch ecosystem {
+	case "go":
+		return "go", []string{"get", pkg + "@v" + v}, true
+	case "pypi":
+		// Wheels only: a source distribution is built by running the
+		// package's own setup code; installing a wheel runs nothing.
+		return "pip", []string{"install", "--upgrade", "--only-binary", ":all:", pkg + "==" + v}, true
+	case "cargo":
+		// Resolves and rewrites Cargo.lock; no crate is built, so no build.rs.
+		return "cargo", []string{"update", "-p", pkg, "--precise", v}, true
+	case "rubygems":
+		// Not `bundle update`, which installs the gems and so compiles native
+		// extensions (extconf.rb is arbitrary Ruby). `bundle lock` resolves
+		// and rewrites Gemfile.lock only, within the Gemfile's constraint.
+		return "bundle", []string{"lock", "--update", pkg, "--conservative"}, true
+	case "composer":
+		// Scripts (post-update-cmd and friends) and plugins are code the
+		// project or its dependencies supply, and both run during an update.
+		return "composer", []string{"update", pkg, "--with-dependencies", "--no-scripts", "--no-plugins"}, true
+	case "nuget":
+		// Rewrites the PackageReference and stops: restore pulls MSBuild
+		// props and targets out of the new package, which are executed.
+		return "dotnet", []string{"add", "package", pkg, "--version", v, "--no-restore"}, true
+	}
+	return "", nil, false
 }
 
 // Options control planning.
