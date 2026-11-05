@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `nox fix` moves a vulnerable Python package by editing its exact pin in
+  the requirements file the finding names, and runs nothing. It ran `pip
+  install` instead, which installs into whatever environment pip resolves to
+  and never touched that file, so the finding could not go away (it then
+  said the version was "likely held by an override"). A range, a hash-pinned
+  file and a uv, poetry or pipenv lockfile are reported as manual, with the
+  reason and the tool's own command. Findings, `nox fix plan` and the MCP
+  fix plan say the same, from one place (`core/pypipin`).
 - The upgrade command a finding, `nox fix plan` and the MCP fix plan show is
   the one `nox fix` apply runs (`fix.Invocation`). For three ecosystems it
   was the unsafe form apply avoids: `bundle update` (installs gems,

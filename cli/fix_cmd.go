@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/nox-hq/nox/core/npmtree"
+	"github.com/nox-hq/nox/core/pypipin"
 
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
@@ -143,6 +144,15 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 				continue
 			}
 		}
+		if a.ecosystem == "pypi" {
+			adv := pypipin.AdviceFor(filepath.Join(dir, filepath.Base(a.manifest)), a.pkg, a.fromVer, a.toVersion)
+			if adv.Command == "" {
+				fmt.Printf("manual: %s -> %s  (%s) in %s: %s\n",
+					a.pkg, a.toVersion, a.ruleID, describeDir(manifestRoot, dir), adv.Manual)
+				unresolved++
+				continue
+			}
+		}
 		dirs[i] = dir
 		fmt.Printf("plan: %s %s -> %s  (%s) in %s\n",
 			commandFor(dir, a), a.pkg, a.toVersion, a.ruleID, describeDir(manifestRoot, dir))
@@ -238,7 +248,7 @@ var scriptsNotRun = []struct {
 	text      string
 }{
 	{"npm", "npm/pnpm/yarn/bun: install scripts (preinstall, install, postinstall, prepare) of the new versions were not run. Native addons and generated files may be missing until you review the packages and run `npm rebuild` (or your manager's equivalent)."},
-	{"pypi", "pip: only prebuilt wheels were installed; no source distribution was built, because building one runs the package's own setup code."},
+	{"pypi", "pip: the pin in the requirements file was edited and nothing was installed. Run `pip install -r` (or your tool's equivalent) after reviewing."},
 	{"rubygems", "bundler: Gemfile.lock was updated but the gems were not installed, so no native extension was compiled. Run `bundle install` after reviewing."},
 	{"composer", "composer: scripts and plugins were not run (--no-scripts --no-plugins)."},
 	{"nuget", "dotnet: the project file was updated but not restored (--no-restore), so no package build logic ran. Run `dotnet restore` after reviewing."},
@@ -361,7 +371,7 @@ func planUpgrades(items []findings.Finding, includeMajor bool) upgradePlan {
 var ecoManifests = map[string][]string{
 	"go":       {"go.mod"},
 	"npm":      {"package.json"},
-	"pypi":     {"requirements.txt", "pyproject.toml", "setup.py", "setup.cfg"},
+	"pypi":     {"requirements.txt", "pyproject.toml", "setup.py", "setup.cfg", "poetry.lock", "uv.lock", "Pipfile.lock"},
 	"cargo":    {"Cargo.toml"},
 	"rubygems": {"Gemfile"},
 	"composer": {"composer.json"},
@@ -465,6 +475,9 @@ func treeDigest(dir, eco string) (string, bool) {
 // commandFor is the command the plan line should claim, which for npm depends
 // on the lockfile rather than on the ecosystem name.
 func commandFor(dir string, a upgradeAction) string {
+	if a.ecosystem == "pypi" {
+		return "pin " + filepath.Base(a.manifest) // the edit pypipin makes
+	}
 	if a.ecosystem == "npm" {
 		name, args := npmtree.Command(dir, a.pkg, a.toVersion)
 		return name + " " + args[0]
@@ -577,14 +590,11 @@ var scriptsOffEnv = []string{
 	"YARN_ENABLE_SCRIPTS=false",
 }
 
-// applyPyPIUpgrade runs pip as fix.Invocation says. Operators who manage
-// requirements.txt / pyproject.toml directly should re-pin after running.
+// applyPyPIUpgrade edits the exact pin in the file the finding names, and
+// runs nothing. Anything a pin edit cannot do is refused with the reason and
+// the resolver's own command (core/pypipin).
 func applyPyPIUpgrade(manifestRoot string, a upgradeAction) error {
-	if err := runInvocation(manifestRoot, a); err != nil {
-		return fmt.Errorf("%w (nox installs wheels only, because building a source distribution runs the package's code; "+
-			"if %s publishes no wheel for this platform, review it and install it yourself)", err, a.pkg)
-	}
-	return nil
+	return pypipin.AdviceFor(filepath.Join(manifestRoot, filepath.Base(a.manifest)), a.pkg, a.fromVer, a.toVersion).Apply()
 }
 
 // runInvocation runs the command fix.Invocation gives for a, the same one a

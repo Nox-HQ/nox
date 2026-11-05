@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/nox-hq/nox/core/npmtree"
+	"github.com/nox-hq/nox/core/pypipin"
 )
 
 // npmProjects opens each npm workspace a scan reports on once: a lockfile is
@@ -51,4 +52,17 @@ func addNPMRemediation(meta map[string]string, adv npmtree.Advice, pkg, fixed st
 			" to a release that allows it, or add to package.json: " +
 			npmtree.OverrideEntry(adv.Reach.Tool, pkg, fixed)
 	}
+}
+
+// addPyPIRemediation writes the answer nox fix plan and apply give for a
+// Python package (core/pypipin): the pin edit in the finding's own file, or no
+// command and why, with the resolver's own command.
+func addPyPIRemediation(meta map[string]string, adv pypipin.Advice) {
+	if adv.Command != "" {
+		meta["remediation_command"] = adv.Command
+		return
+	}
+	delete(meta, "remediation_command")
+	meta["remediation_action"] = "manual"
+	meta["remediation_note"] = adv.Manual
 }

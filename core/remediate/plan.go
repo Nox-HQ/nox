@@ -28,6 +28,7 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
 	"github.com/nox-hq/nox/core/npmtree"
+	"github.com/nox-hq/nox/core/pypipin"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -227,6 +228,9 @@ func classifyUpgrade(it *Item, is *assess.Issue, root string) {
 	it.Class, it.Kind, it.Upgrade, it.Command = ClassSafe, KindUpgrade, a, a.CommandIn(root)
 	it.Why = "The fix is published and stays on the same major version (" + versionStep(a) +
 		"), so it should not change how your code uses the package."
+	if manualPyPI(it, a, root) {
+		return
+	}
 	if transitiveNPM(root, a) && !holdTransitive(it, a, root, false) {
 		it.Why += " It is not a package you list yourself; the packages that use it allow the fixed version, " +
 			"so nox asks npm to move it within their ranges."
@@ -255,6 +259,21 @@ func holdTransitive(it *Item, a *fix.UpgradeAction, root string, major bool) boo
 	return true
 }
 
+// manualPyPI marks it manual when a is a Python fix nox does not make itself
+// (a range, hashes, a lockfile: core/pypipin), and reports whether it did.
+func manualPyPI(it *Item, a *fix.UpgradeAction, root string) bool {
+	if a.Ecosystem != "pypi" || root == "" {
+		return false
+	}
+	adv := pypipin.AdviceFor(filepath.Join(root, a.Manifest), a.Package, a.From, a.To)
+	if adv.Command != "" {
+		return false
+	}
+	it.Class, it.Kind, it.Command = ClassInfo, KindManualUpgrade, ""
+	it.Needs = adv.Manual
+	return true
+}
+
 // transitiveNPM reports whether an npm upgrade targets a package the project's
 // package.json does not list. False when that cannot be read: nothing is
 // claimed about a manifest nox did not see.
@@ -269,7 +288,7 @@ func classifyMajor(it *Item, is *assess.Issue, root string) {
 	a := is.Upgrade
 	it.Class, it.Kind, it.Upgrade, it.Command = ClassReview, KindMajorUpgrade, a, a.CommandIn(root)
 	it.Title = strings.TrimSuffix(it.Title, assess.MajorNote)
-	if holdTransitive(it, a, root, true) {
+	if manualPyPI(it, a, root) || holdTransitive(it, a, root, true) {
 		return
 	}
 	it.Why = "The fix is a new major version (" + versionStep(a) +

@@ -163,3 +163,29 @@ func TestMajorTransitiveEveryParentAllowsStaysAMajorUpgrade(t *testing.T) {
 		t.Fatalf("got %s/%s command %q, want major_upgrade with a command; why=%s", it.Class, it.Kind, it.Command, it.Why)
 	}
 }
+
+func pyDep(file string) findings.Finding {
+	f := dep("requests", "2.31.0", "2.32.0", "GHSA-py", "fp-py", findings.SeverityMedium)
+	f.Location.FilePath = file
+	f.Metadata["ecosystem"] = "pypi"
+	return f
+}
+
+// A Python fix is an edit of the exact pin in the requirements file the
+// finding names; the plan shows that edit, not a pip command that installs
+// into some environment and leaves the file as it was.
+func TestPyPIExactPinIsAnEditInThePlan(t *testing.T) {
+	it := onlyItem(t, planFor(t, map[string]string{"requirements.txt": "requests==2.31.0\n"}, pyDep("requirements.txt")))
+	if it.Class != ClassSafe || it.Command != "set requests==2.32.0 in requirements.txt" {
+		t.Fatalf("got %s/%s command %q", it.Class, it.Kind, it.Command)
+	}
+}
+
+// A lockfile is its resolver's to move: manual, with the reason and the
+// resolver's own command, and nothing offered for apply to run.
+func TestPyPILockfileIsManualInThePlan(t *testing.T) {
+	it := onlyItem(t, planFor(t, map[string]string{"poetry.lock": ""}, pyDep("poetry.lock")))
+	if it.Kind != KindManualUpgrade || it.Command != "" || !strings.Contains(it.Needs, "poetry update requests") {
+		t.Fatalf("got %s/%s command %q needs %q", it.Class, it.Kind, it.Command, it.Needs)
+	}
+}
