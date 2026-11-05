@@ -260,6 +260,15 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
       "impact_statement": "The SEC-652 'Jenkins API Token' rule is a 20-char alphanumeric pattern gated by a file-level 'jenkins' keyword. Nox's Groovy support legitimately references Jenkins (Jenkinsfile detection, the pipeline sh/bat sinks) in code comments and identifiers, so the rule fires on ordinary camelCase symbol names (scanGroovyBlockComment, NewClassifierRegistry, analyzeUnitInterproc) and catalog note text in core/lexctx/scan_groovy.go, core/taint/engine/*.go, core/taint/data/catalog.json, and core/discovery/discovery.go. These are source identifiers and documentation, not credentials."
+    },
+    {
+      "vulnerability": "GHSA-g3hv-75wg-m249",
+      "products": [
+        "github.com/nox-hq/nox"
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "minimatch 10.2.6 reaches the VS Code extension (editors/vscode) only through vscode-languageclient, which constructs Minimatch with options that never set optimizationLevel (lib/common/fileOperations.js, lib/common/utils/globPattern.js); the default is 1, and the advisory's amplification is in firstPhasePreProcess(), which runs only at optimizationLevel >= 2. The glob patterns come from nox's own language server's file-operation registrations, not from an attacker. The fix (11.0.1) is outside every vscode-languageclient release's range (^10.2.6, through 11.0.0), so it cannot be applied without an override. Revisit when vscode-languageclient accepts minimatch 11."
     }
   ]
 }
