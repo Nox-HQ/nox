@@ -137,15 +137,22 @@ homebrew_casks:
     homepage: "https://github.com/nox-hq/nox"
     description: "Language-agnostic security scanner with first-class AI application security"
     license: "Apache-2.0"
-    # The macOS binaries are not Apple-notarized, so Gatekeeper would refuse to
-    # run them ("nox is damaged and cannot be opened"). Strip the quarantine bit
-    # after install, as GoReleaser's cask guide prescribes for un-notarized builds.
+    # The darwin binaries are signed with the Developer ID and notarized when
+    # MACOS_SIGN_P12 is set (the notarize block above), and Gatekeeper then
+    # accepts them as installed, quarantine and all (macOS signing check,
+    # run 42089842854: "source=Notarized Developer ID"). Only a release built
+    # without the signing secrets ships binaries Gatekeeper refuses ("nox is
+    # damaged and cannot be opened"); for that one the cask strips the
+    # quarantine bit, as GoReleaser's cask guide prescribes for un-notarized
+    # builds. One switch decides both, so they cannot disagree.
     hooks:
       post:
         install_steps: |
+          {{- if not (isEnvSet "MACOS_SIGN_P12") }}
           on_macos do
             run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/nox"]
           end
+          {{- end }}
     # "auto" already skips prereleases/snapshots. SKIP_BREW additionally skips
     # when the release workflow found TAP_GITHUB_TOKEN cannot reach the tap, so
     # an expired packaging credential cannot fail the release and take cosign

@@ -20,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- macOS binaries are signed with the Developer ID and notarized by Apple.
+  Gatekeeper accepts them as installed (`source=Notarized Developer ID`), so
+  the Homebrew cask no longer strips the quarantine attribute after install;
+  it still does for a release built without the signing secrets, whose
+  binaries are not notarized.
 - nox's release SBOMs are written by nox (`nox sbom`), not syft. GoReleaser's
   `sboms:` named no command, so every release since February ran its default,
   syft. The package sets match: 50 packages for the v1.58.0 darwin/arm64
