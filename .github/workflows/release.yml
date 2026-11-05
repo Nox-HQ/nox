@@ -30,11 +30,12 @@ jobs:
 
       # The release's SBOMs are written by nox (.goreleaser.yaml sboms), the
       # nox of this very commit, so they describe the archives with the code
-      # being released.
+      # being released. It is stamped with the release version as the archives
+      # are: each SBOM names its creator, and v1.59.0's said "nox-dev".
       - name: Build nox for the release SBOMs
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
-          go build -trimpath -o "$RUNNER_TEMP/bin/nox" ./cli
+          go build -trimpath -ldflags "-X main.version=${GITHUB_REF_NAME#v}" -o "$RUNNER_TEMP/bin/nox" ./cli
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       # The delta ledger's lifecycle belongs to the release that moves the

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Release SBOMs name their creator with the release version. v1.59.0's, the
+  first nox wrote itself, said `Tool: nox-dev`: the nox that writes them was
+  built without the version stamp the archives carry.
+
 ## [1.59.0] - 2026-11-05
 
 ### Added
