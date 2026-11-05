@@ -52,6 +52,16 @@ func intelConsent(args []string, in io.Reader, out, errw io.Writer) int {
 		return 2
 	}
 	sp := saltPathFor(*salt)
+	// A scope typed after the verb (`consent show outcomes`) would act on the
+	// contribution terms and drop the word.
+	if fs.NArg() > 0 {
+		if scope := fs.Arg(0); scope == "outcomes" || scope == "attack" {
+			_, _ = fmt.Fprintf(errw, "nox intel consent: the scope comes first: nox intel consent %s %s\n", scope, sub)
+		} else {
+			_, _ = fmt.Fprintf(errw, "nox intel consent %s: unexpected argument %q\n", sub, scope)
+		}
+		return 2
+	}
 
 	switch sub {
 	case "show":
@@ -76,17 +86,44 @@ func intelConsent(args []string, in io.Reader, out, errw io.Writer) int {
 	}
 }
 
+// consentStatus reports every scope. Each is accepted separately and stored
+// beside the others; reporting one alone told an owner whose outcome terms
+// were accepted that no terms were.
 func consentStatus(salt string, out io.Writer) int {
 	status, rec := intel.LoadConsent(salt)
 	switch status {
 	case intel.ConsentGranted:
-		_, _ = fmt.Fprintf(out, "Terms %s accepted at %s. Contribution still needs scan.intelligence.contribute: true.\n", rec.TermsVersion, rec.AcceptedAt)
+		_, _ = fmt.Fprintf(out, "Contribution terms %s accepted at %s. Contribution still needs scan.intelligence.contribute: true.\n", rec.TermsVersion, rec.AcceptedAt)
 	case intel.ConsentStale:
-		_, _ = fmt.Fprintf(out, "Terms %s were accepted; the current terms are %s. Contribution is paused until you run: nox intel consent accept\n", rec.TermsVersion, intel.TermsVersion)
+		_, _ = fmt.Fprintf(out, "Contribution terms %s were accepted; the current terms are %s. Contribution is paused until you run: nox intel consent accept\n", rec.TermsVersion, intel.TermsVersion)
 	default:
-		_, _ = fmt.Fprintf(out, "No terms accepted on this machine. Contribution is off. Read them: nox intel consent show\n")
+		_, _ = fmt.Fprintf(out, "No contribution terms accepted on this machine. Contribution is off. Read them: nox intel consent show\n")
 	}
+	outcomeStatus(salt, out)
+	attackStatus(salt, out)
 	return 0
+}
+
+func outcomeStatus(sp string, out io.Writer) {
+	switch status, rec := intel.LoadOutcomeConsent(sp); status {
+	case intel.ConsentGranted:
+		_, _ = fmt.Fprintf(out, "Outcome terms %s accepted at %s. Reports also need scan.intelligence.contribute and scan.intelligence.outcomes.\n", rec.TermsVersion, rec.AcceptedAt)
+	case intel.ConsentStale:
+		_, _ = fmt.Fprintf(out, "Outcome terms %s were accepted; current is %s. Run: nox intel consent outcomes accept\n", rec.TermsVersion, intel.OutcomeTermsVersion)
+	default:
+		_, _ = fmt.Fprintln(out, "No outcome terms accepted on this machine. Read them: nox intel consent outcomes show")
+	}
+}
+
+func attackStatus(sp string, out io.Writer) {
+	switch status, rec := intel.LoadAttackConsent(sp); status {
+	case intel.ConsentGranted:
+		_, _ = fmt.Fprintf(out, "Attack terms %s accepted at %s. Contribution also needs --contribute and NOX_INTEL_TOKEN.\n", rec.TermsVersion, rec.AcceptedAt)
+	case intel.ConsentStale:
+		_, _ = fmt.Fprintf(out, "Attack terms %s were accepted; current is %s. Run: nox intel consent attack accept\n", rec.TermsVersion, intel.AttackTermsVersion)
+	default:
+		_, _ = fmt.Fprintln(out, "No attack terms accepted on this machine. Read them: nox intel consent attack show")
+	}
 }
 
 func consentAccept(salt, flagVersion string, in io.Reader, out, errw io.Writer) int {
@@ -214,14 +251,7 @@ func intelAttackConsent(args []string, in io.Reader, out, errw io.Writer) int {
 		_, _ = fmt.Fprint(out, intel.AttackTerms)
 		return 0
 	case "status":
-		switch status, rec := intel.LoadAttackConsent(sp); status {
-		case intel.ConsentGranted:
-			_, _ = fmt.Fprintf(out, "Attack terms %s accepted at %s. Contribution also needs --contribute and NOX_INTEL_TOKEN.\n", rec.TermsVersion, rec.AcceptedAt)
-		case intel.ConsentStale:
-			_, _ = fmt.Fprintf(out, "Attack terms %s were accepted; current is %s. Run: nox intel consent attack accept\n", rec.TermsVersion, intel.AttackTermsVersion)
-		default:
-			_, _ = fmt.Fprintln(out, "No attack terms accepted on this machine. Read them: nox intel consent attack show")
-		}
+		attackStatus(sp, out)
 		return 0
 	case "accept":
 		if *accept != "" {
@@ -284,14 +314,7 @@ func intelOutcomeConsent(args []string, in io.Reader, out, errw io.Writer) int {
 		_, _ = fmt.Fprint(out, intel.OutcomeTerms)
 		return 0
 	case "status":
-		switch status, rec := intel.LoadOutcomeConsent(sp); status {
-		case intel.ConsentGranted:
-			_, _ = fmt.Fprintf(out, "Outcome terms %s accepted at %s. Reports also need scan.intelligence.contribute and scan.intelligence.outcomes.\n", rec.TermsVersion, rec.AcceptedAt)
-		case intel.ConsentStale:
-			_, _ = fmt.Fprintf(out, "Outcome terms %s were accepted; current is %s. Run: nox intel consent outcomes accept\n", rec.TermsVersion, intel.OutcomeTermsVersion)
-		default:
-			_, _ = fmt.Fprintln(out, "No outcome terms accepted on this machine. Read them: nox intel consent outcomes show")
-		}
+		outcomeStatus(sp, out)
 		return 0
 	case "accept":
 		if *accept != "" {
