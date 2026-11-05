@@ -211,7 +211,11 @@ func sortedKeys(m map[string]npmLockEntry) []string {
 // remedy names the entry to add, so the person does not have to look it up.
 func heldReason(a upgradePlan, reach npmReach) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "The fix (%s) is published on the same major version, but %s is not a package you list yourself", a.step, a.pkg)
+	if a.major {
+		fmt.Fprintf(&b, "The fix (%s) is a new major version, and %s is not a package you list yourself", a.step, a.pkg)
+	} else {
+		fmt.Fprintf(&b, "The fix (%s) is published on the same major version, but %s is not a package you list yourself", a.step, a.pkg)
+	}
 	if !reach.Established {
 		fmt.Fprintf(&b, " and nox could not read this workspace's %s to see whether the packages that need it allow the move", lockName(reach.Tool))
 	} else {
@@ -264,4 +268,7 @@ func overrideEntry(tool, pkg, to string) string {
 }
 
 // upgradePlan is the part of an upgrade the reason needs.
-type upgradePlan struct{ pkg, step, to string }
+type upgradePlan struct {
+	pkg, step, to string
+	major         bool
+}

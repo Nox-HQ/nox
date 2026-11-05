@@ -213,7 +213,7 @@ func classify(is *assess.Issue, in Input, reader *fileReader) Item {
 	case assess.KindUpgrade:
 		classifyUpgrade(&it, is, in.Root)
 	case assess.KindMajorUpgrade:
-		classifyMajor(&it, is)
+		classifyMajor(&it, is, in.Root)
 	case assess.KindNoFix:
 		classifyNoFix(&it, is)
 	default:
@@ -227,20 +227,32 @@ func classifyUpgrade(it *Item, is *assess.Issue, root string) {
 	it.Class, it.Kind, it.Upgrade, it.Command = ClassSafe, KindUpgrade, a, a.Command()
 	it.Why = "The fix is published and stays on the same major version (" + versionStep(a) +
 		"), so it should not change how your code uses the package."
-	if !transitiveNPM(root, a) {
-		return
-	}
-	// A transitive package moves only as far as every package that needs it
-	// allows. Promising "safe to apply" for one a parent pins is a plan apply
-	// cannot keep, so the lockfile decides.
-	reach := analyzeNPMReach(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.To)
-	if reach.Established && len(reach.Holds) == 0 {
+	if transitiveNPM(root, a) && !holdTransitive(it, a, root, false) {
 		it.Why += " It is not a package you list yourself; the packages that use it allow the fixed version, " +
 			"so nox asks npm to move it within their ranges."
-		return
+	}
+}
+
+// holdTransitive marks it held when a is a transitive npm upgrade that a
+// parent's declared range keeps below the fix, and reports whether it did. It
+// reports false, leaving it unchanged, for a package the project lists itself
+// and for one every parent allows; the caller's own wording then stands.
+//
+// A transitive package moves only as far as every package that needs it
+// allows, whatever the size of the step. Promising a move for one a parent pins
+// is a plan apply cannot keep, so the lockfile decides: for a minor fix and a
+// major one alike.
+func holdTransitive(it *Item, a *fix.UpgradeAction, root string, major bool) bool {
+	if !transitiveNPM(root, a) {
+		return false
+	}
+	reach := analyzeNPMReach(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.To)
+	if reach.Established && len(reach.Holds) == 0 {
+		return false
 	}
 	it.Class, it.Kind, it.Command = ClassReview, KindHeldUpgrade, ""
-	it.Why = heldReason(upgradePlan{pkg: a.Package, step: versionStep(a), to: a.To}, reach)
+	it.Why = heldReason(upgradePlan{pkg: a.Package, step: versionStep(a), to: a.To, major: major}, reach)
+	return true
 }
 
 // transitiveNPM reports whether an npm upgrade targets a package the project's
@@ -270,10 +282,13 @@ func transitiveNPM(root string, a *fix.UpgradeAction) bool {
 	return true
 }
 
-func classifyMajor(it *Item, is *assess.Issue) {
+func classifyMajor(it *Item, is *assess.Issue, root string) {
 	a := is.Upgrade
 	it.Class, it.Kind, it.Upgrade, it.Command = ClassReview, KindMajorUpgrade, a, a.Command()
 	it.Title = strings.TrimSuffix(it.Title, assess.MajorNote)
+	if holdTransitive(it, a, root, true) {
+		return
+	}
 	it.Why = "The fix is a new major version (" + versionStep(a) +
 		"). A major release is allowed to break code that uses the package, so check its release notes and run your tests."
 }

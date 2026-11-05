@@ -471,7 +471,11 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	// Track which lockfile each package came from for finding locations.
 	type pkgSource struct {
 		lockfilePath string
+		// absDir is the lockfile's directory on disk, where the manifest
+		// beside it is read. Empty for sources without one.
+		absDir string
 	}
+	var npmDeclared npmManifests
 	var sources []pkgSource
 
 	// Module root of the Go module under scan, used to enumerate the packages
@@ -583,7 +587,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 		for _, p := range pkgs {
 			inventory.Add(p)
-			sources = append(sources, pkgSource{lockfilePath: art.Path})
+			sources = append(sources, pkgSource{lockfilePath: art.Path, absDir: filepath.Dir(art.AbsPath)})
 		}
 	}
 
@@ -864,9 +868,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						})
 					}
 
-					lockfilePath := ""
+					lockfilePath, lockDir := "", ""
 					if pkgIdx < len(sources) {
-						lockfilePath = sources[pkgIdx].lockfilePath
+						lockfilePath, lockDir = sources[pkgIdx].lockfilePath, sources[pkgIdx].absDir
 					}
 
 					aliases := strings.Join(ov.Aliases, ",")
@@ -901,6 +905,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						meta["fixed_in"] = fix
 						meta["remediation_action"] = "upgrade"
 						meta["remediation_command"] = upgradeCommand(pkg.Ecosystem, pkg.Name, fix)
+						if pkg.Ecosystem == "npm" && lockDir != "" {
+							if listed, known := npmDeclared.declares(lockDir, pkg.Name); known && !listed {
+								delete(meta, "remediation_command")
+								meta["remediation_scope"] = "transitive"
+								meta["remediation_note"] = pkg.Name + " is " + transitiveRemediationNote
+							}
+						}
 					}
 					// OSV scopes Go advisories to import paths. When the affected
 					// packages are provably not linked, the finding is recorded

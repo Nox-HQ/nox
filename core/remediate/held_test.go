@@ -155,3 +155,42 @@ func TestNPMRanges(t *testing.T) {
 		}
 	}
 }
+
+// A major fix for a transitive package is held the same way a minor one is:
+// the parents' ranges decide whether npm can move it. Before this, the plan
+// said only "check the release notes" for minimatch 10.2.6 -> 11.0.1 in nox's
+// own VS Code extension, and apply --include-major ran npm update, which left
+// it at 10.2.6 because every vscode-languageclient release requires ^10.2.6.
+func TestHeldMajorTransitiveNamesItsParentInsteadOfReleaseNotes(t *testing.T) {
+	lock := `{"lockfileVersion":3,"packages":{
+"":{"dependencies":{"vscode-languageclient":"^10.1.2"}},
+"node_modules/vscode-languageclient":{"version":"10.1.2","dependencies":{"minimatch":"^10.2.6"}},
+"node_modules/minimatch":{"version":"10.2.6"}}}`
+	it := onlyItem(t, planFor(t, map[string]string{"package.json": `{"dependencies":{"vscode-languageclient":"^10.1.2"}}`, "package-lock.json": lock},
+		dep("minimatch", "10.2.6", "11.0.1", "GHSA-g3hv-75wg-m249", "fp-mm", findings.SeverityMedium)))
+	if it.Kind != KindHeldUpgrade || it.Command != "" {
+		t.Fatalf("got %s/%s command %q, want held_upgrade with no command; why=%s", it.Class, it.Kind, it.Command, it.Why)
+	}
+	for _, want := range []string{"vscode-languageclient@10.1.2 requires minimatch ^10.2.6", `"overrides": { "minimatch": "11.0.1" }`, "major"} {
+		if !strings.Contains(it.Why, want) {
+			t.Errorf("why = %q, want %q", it.Why, want)
+		}
+	}
+	if strings.Contains(it.Why, "same major version") {
+		t.Errorf("a major fix is described as same-major: %q", it.Why)
+	}
+}
+
+// A major fix that every parent's range admits stays an ordinary major
+// upgrade: release notes are then the right advice.
+func TestMajorTransitiveEveryParentAllowsStaysAMajorUpgrade(t *testing.T) {
+	lock := `{"lockfileVersion":3,"packages":{
+"":{"dependencies":{"glob":"^12.0.0"}},
+"node_modules/glob":{"version":"12.0.0","dependencies":{"minimatch":"^10.2.6 || ^11.0.0"}},
+"node_modules/minimatch":{"version":"10.2.6"}}}`
+	it := onlyItem(t, planFor(t, map[string]string{"package.json": `{"dependencies":{"glob":"^12.0.0"}}`, "package-lock.json": lock},
+		dep("minimatch", "10.2.6", "11.0.1", "GHSA-g3hv-75wg-m249", "fp-mm", findings.SeverityMedium)))
+	if it.Kind != KindMajorUpgrade || it.Command == "" {
+		t.Fatalf("got %s/%s command %q, want major_upgrade with a command; why=%s", it.Class, it.Kind, it.Command, it.Why)
+	}
+}
