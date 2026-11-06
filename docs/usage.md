@@ -1185,6 +1185,37 @@ For estate-wide blast radius (a paid capability), `nox intel components` and
 candidate. They print what they would send and upload only with `--upload`.
 See [Blast radius across the estate](intelligence.md#blast-radius-across-the-estate).
 
+### Base images (opt-in)
+
+A Dockerfile's `FROM` line names software nox does not otherwise see. With
+image reading on, nox reads what a **digest-pinned** base image has installed
+and checks it like any other dependency:
+
+```yaml
+scan:
+  images:
+    enabled: true   # default false: it downloads image layers
+    cache_dir: ""   # default ~/.nox/cache/oci, blobs by digest
+```
+
+For each `FROM name@sha256:…` nox fetches the manifest and layers by digest
+(anonymous pulls only; a registry that wants credentials is reported as not
+read), checks every blob against its digest, applies the layers' whiteouts,
+and reads only the files that list installed software: `os-release`, Alpine's
+apk database, Debian's dpkg status (and distroless `status.d`), and the Go
+toolchain's `VERSION`. Nothing in the image is executed. The packages are
+inventoried at the `FROM` line and reported with the image they came from;
+their advisories are not judged by this tree's code, which is not what the
+image runs. A tag-only reference is reported as not checked: a tag names no
+fixed content, so nox does not resolve it. An offline scan reads the cache
+only.
+
+Advisories for Alpine and Debian packages need nox-core's distribution
+ecosystems; until a release includes them, those packages are inventoried and
+listed as not checked. Ubuntu, RPM distributions, and runtimes bundled outside
+a package manager (Node's own OpenSSL, for one) are not read yet. See
+[docs/design/container-image-advisories.md](design/container-image-advisories.md).
+
 ### Predictive Slopsquat Feed (SLOP-002)
 
 The SLOP analyzer can consume a versioned, offline **predictive slopsquat
