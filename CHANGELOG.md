@@ -24,6 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fix advice for an npm package the project does not list reads yarn v1 and
+  text bun.lock lockfiles as it reads package-lock.json: it names the parent
+  whose range holds the package and the forcing entry (`resolutions` for
+  yarn), or offers the update. pnpm-lock.yaml records resolved versions, not
+  ranges, so for pnpm nox says it cannot tell beforehand, offers the update
+  for review, and checks the result.
+- `nox fix` checks where every package manager's update landed, not only
+  npm's: a transitive package a parent kept below the fix, or one the update
+  made a dependency of the project's own, is reported instead of applied.
+  Real pnpm runs in CI against a local registry to hold it to that.
 - `nox fix` moves a vulnerable Python package by editing its exact pin in
   the requirements file the finding names, and runs nothing. It ran `pip
   install` instead, which installs into whatever environment pip resolves to

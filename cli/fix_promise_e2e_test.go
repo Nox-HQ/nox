@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -174,7 +175,12 @@ func assertFixed(t *testing.T, dir string, osv *httptest.Server, fixed, by strin
 
 func childFinding(t *testing.T, dir string, osv *httptest.Server) findings.Finding {
 	t.Helper()
-	for _, f := range scanChild(t, dir, osv) {
+	return childFindingIn(t, dir, "package-lock.json", osv)
+}
+
+func childFindingIn(t *testing.T, dir, lockName string, osv *httptest.Server) findings.Finding {
+	t.Helper()
+	for _, f := range scanChildIn(t, dir, lockName, osv) {
 		if f.RuleID == "VULN-001" && f.Metadata["package"] == "child" {
 			return f
 		}
@@ -185,14 +191,19 @@ func childFinding(t *testing.T, dir string, osv *httptest.Server) findings.Findi
 
 func scanChild(t *testing.T, dir string, osv *httptest.Server) []findings.Finding {
 	t.Helper()
-	lock := filepath.Join(dir, "package-lock.json")
+	return scanChildIn(t, dir, "package-lock.json", osv)
+}
+
+func scanChildIn(t *testing.T, dir, lockName string, osv *httptest.Server) []findings.Finding {
+	t.Helper()
+	lock := filepath.Join(dir, lockName)
 	st, err := os.Stat(lock)
 	if err != nil {
 		t.Fatal(err)
 	}
 	a := deps.NewAnalyzer(deps.WithOSVBaseURL(osv.URL), deps.WithHTTPClient(osv.Client()))
 	_, fs, err := a.ScanArtifacts(context.Background(), []discovery.Artifact{{
-		Path: "package-lock.json", AbsPath: lock, Type: discovery.Lockfile, Size: st.Size(),
+		Path: lockName, AbsPath: lock, Type: discovery.Lockfile, Size: st.Size(),
 	}})
 	if err != nil {
 		t.Fatal(err)
@@ -364,4 +375,85 @@ func fakeAdvisory(t *testing.T, pkg, fixed string) *httptest.Server {
 	}))
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// pnpm-lock.yaml records resolved versions, not the ranges dependents allow,
+// so nox cannot say beforehand whether a parent holds a package. What it must
+// still never do is claim more than happened. For every shape the npm oracle
+// covers, with real pnpm against the same local registry:
+//
+//   - the finding and the plan offer the same command;
+//   - when apply reports success, no copy is below the fix, a rescan finds
+//     nothing, and the package did not become a dependency of the project's
+//     own;
+//   - when apply refuses, the finding really is still there.
+func TestPnpmFixesNeverClaimWhatDidNotHappen(t *testing.T) {
+	pnpm, err := exec.LookPath("pnpm")
+	if err != nil {
+		// CI installs pnpm on its Linux runner (ci.yml) so this runs rather
+		// than skips there.
+		if os.Getenv("CI") != "" && runtime.GOOS == "linux" {
+			t.Fatal("pnpm is not installed; the Linux CI runner must run this, not skip it")
+		}
+		t.Skip("pnpm is not installed")
+	}
+	parents := map[string]string{"parent-caret": "^1.0.0", "parent-exact": "1.0.0", "parent-wide": "^1.0.0 || ^2.0.0"}
+	cases := []struct {
+		name     string
+		rootDeps map[string]string
+		fixed    string
+	}{
+		{"transitive, minor fix its parent allows", map[string]string{"parent-caret": "1.0.0"}, "1.0.1"},
+		{"transitive, major fix its parent excludes", map[string]string{"parent-caret": "1.0.0"}, "2.0.0"},
+		{"transitive, minor fix an exact pin excludes", map[string]string{"parent-exact": "1.0.0"}, "1.0.1"},
+		{"transitive, major fix its parent allows", map[string]string{"parent-wide": "1.0.0"}, "2.0.0"},
+		{"direct, minor fix", map[string]string{"child": "^1.0.0"}, "1.0.1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := newFakeNPMRegistry(t)
+			reg.publish("child", "1.0.0", nil)
+			for name, rng := range parents {
+				reg.publish(name, "1.0.0", map[string]string{"child": rng})
+			}
+			osv := fakeAdvisory(t, "child", tc.fixed)
+			npmEnv(t, reg.URL())
+			t.Setenv("npm_config_store_dir", t.TempDir())
+
+			project := t.TempDir()
+			manifest, _ := json.Marshal(map[string]any{"name": "app", "version": "1.0.0", "dependencies": tc.rootDeps})
+			writeBytes(t, filepath.Join(project, "package.json"), manifest)
+			runNPM(t, pnpm, project, "install", "--ignore-scripts")
+			reg.publish("child", "1.0.1", nil)
+			reg.publish("child", "2.0.0", nil)
+
+			finding := childFindingIn(t, project, "pnpm-lock.yaml", osv)
+			fCmd := finding.Metadata["remediation_command"]
+			item := onlyPlanItem(t, remediate.Build(remediate.Input{Findings: []findings.Finding{finding}, Root: project}))
+			if item.Command != fCmd {
+				t.Errorf("plan offers %q, the finding %q", item.Command, fCmd)
+			}
+
+			applied := copyProject(t, project)
+			applyErr := applyNpmUpgrade(applied, upgradeAction{pkg: "child", toVersion: tc.fixed, ecosystem: "npm", manifest: "pnpm-lock.yaml"})
+			below, _ := npmtree.Below(applied, "child", tc.fixed)
+			still := false
+			for _, f := range scanChildIn(t, applied, "pnpm-lock.yaml", osv) {
+				if f.RuleID == "VULN-001" {
+					still = true
+				}
+			}
+			t.Logf("apply: err=%v below=%v finding-still-there=%v", applyErr, below, still)
+			if applyErr == nil {
+				if len(below) > 0 || still {
+					t.Errorf("apply reported success, yet %v is below %s (finding still there: %v)", below, tc.fixed, still)
+				}
+				if _, direct := tc.rootDeps["child"]; !direct && !npmtree.Transitive(applied, "child") {
+					t.Error("apply reported success after making child a dependency of the project's own")
+				}
+			} else if !still && len(below) == 0 {
+				t.Errorf("apply refused (%v), yet the package moved and the finding is gone", applyErr)
+			}
+		})
+	}
 }

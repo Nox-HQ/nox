@@ -46,6 +46,13 @@ func addNPMRemediation(meta map[string]string, adv npmtree.Advice, pkg, fixed st
 		return
 	}
 	meta["remediation_scope"] = "transitive"
+	if !adv.Reach.Established {
+		meta["remediation_note"] = pkg + " is not listed in package.json, and nox cannot tell beforehand whether the " +
+			"packages that depend on it allow " + fixed + ": " + adv.Reach.Why + ". nox fix applies the command and " +
+			"reads the lockfile back; if a parent kept it below " + fixed + ", force it with " +
+			npmtree.OverrideEntry(adv.Reach.Tool, pkg, fixed)
+		return
+	}
 	if adv.Reach.Held() {
 		meta["remediation_note"] = pkg + " is not listed in package.json, and " + adv.Reach.HoldList() +
 			": the range excludes " + fixed + ". Upgrade " + adv.Reach.Holders() +

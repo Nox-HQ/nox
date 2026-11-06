@@ -124,6 +124,12 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # The fix oracle runs real pnpm against a test-served registry
+      # (cli/fix_promise_e2e_test.go). npm ships on the runners; pnpm does not.
+      - name: Install pnpm for the fix oracle
+        if: matrix.os == 'ubuntu-latest'
+        run: npm install --global --ignore-scripts pnpm@10.24.0
+
       - name: Run tests with coverage
         shell: bash
         run: go test -race -coverprofile=coverage.out ./...

@@ -116,8 +116,13 @@ func TestTransitiveWithoutAReadableNPMLockfileIsNotPromised(t *testing.T) {
 	}
 	for name, files := range cases {
 		it := onlyItem(t, planFor(t, files, dep("qs", "6.13.0", "6.16.0", "GHSA-qs-1", "fp-qs", findings.SeverityMedium)))
-		if it.Class != ClassReview || it.Kind != KindHeldUpgrade {
-			t.Errorf("%s: got %s/%s, want needs_review/held_upgrade", name, it.Class, it.Kind)
+		// nox cannot tell beforehand: the command is offered for review, with
+		// why, and apply checks where it lands.
+		if it.Class != ClassReview || it.Kind != KindUpgrade || it.Command == "" {
+			t.Errorf("%s: got %s/%s command %q, want needs_review/upgrade with the command", name, it.Class, it.Kind, it.Command)
+		}
+		if !strings.Contains(it.Why, "cannot tell beforehand") {
+			t.Errorf("%s: why = %q, want it to say nox cannot tell beforehand", name, it.Why)
 		}
 		if !strings.Contains(it.Why, entry[name]) {
 			t.Errorf("%s: why = %q, want the entry %s", name, it.Why, entry[name])
