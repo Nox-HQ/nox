@@ -17,7 +17,8 @@ const AttackTermsVersion = "attack-2026-11"
 // AttackTerms is what an operator agrees to before `nox attack ... --contribute`
 // sends anything.
 //
-// REQUIRES OWNER REVIEW BEFORE RELEASE: this is user-facing terms text.
+// User-facing terms text, reviewed by the owner on 2026-11-06. A change to
+// the words needs that review again, and a new version.
 const AttackTerms = `NOX Intelligence attack-evidence terms, version attack-2026-11
 
 Contributing attack evidence is optional and off by default. It needs an

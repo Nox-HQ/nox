@@ -13,7 +13,8 @@ const TermsVersion = "2026-11"
 // Terms is the one place the contribution terms are written. `nox intel
 // consent`, `nox intel preview` and the docs all print this constant.
 //
-// REQUIRES OWNER REVIEW BEFORE RELEASE: this is user-facing terms text.
+// User-facing terms text, reviewed by the owner on 2026-11-06. A change to
+// the words needs that review again, and a new version.
 const Terms = `NOX Intelligence contribution terms, version 2026-11
 
 Contribution is optional. Scanning, and asking NOX Intelligence for
