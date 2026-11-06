@@ -116,3 +116,14 @@ Debian rates many of them `unimportant` in `ecosystem_specific.urgency`, and
 nox reports them at the CVSS severity. Carrying Debian's urgency, so a
 no-fix, unimportant entry does not read as high or critical, is the next
 precision step, and is why this stays off by default.
+
+Debian's urgency now travels with each finding (`distro_urgency`, nox-core
+0.15.0), and an entry Debian rates `unimportant` is recorded at info rather
+than its CVSS severity. On the same image: 36 of the 98 are `unimportant`
+(now info), 61 `not yet assigned` (Debian has not triaged them; they keep
+their CVSS severity), 1 `low`. 62 findings gate where 98 did. The advisory
+cache key carries a record-schema version, so entries cached before the
+field existed are fetched again rather than served without it.
+
+Before on by default: Ubuntu and RPM distributions, Go executables inside
+image layers, and a measurement across more images than three.

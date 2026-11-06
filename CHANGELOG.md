@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- A Debian advisory carries Debian's own rating for the release
+  (`distro_urgency`), and one Debian rates unimportant is recorded at info
+  instead of its CVSS severity. On node:22-bookworm-slim, 36 of 98
+  advisories are unimportant; 62 gate where 98 did. Advisories cached by
+  earlier versions are fetched once more, since they were stored without the
+  rating.
+
 ## [1.60.1] - 2026-11-06
 
 ### Fixed
