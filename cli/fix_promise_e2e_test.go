@@ -16,7 +16,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -390,10 +389,12 @@ func fakeAdvisory(t *testing.T, pkg, fixed string) *httptest.Server {
 func TestPnpmFixesNeverClaimWhatDidNotHappen(t *testing.T) {
 	pnpm, err := exec.LookPath("pnpm")
 	if err != nil {
-		// CI installs pnpm on its Linux runner (ci.yml) so this runs rather
-		// than skips there.
-		if os.Getenv("CI") != "" && runtime.GOOS == "linux" {
-			t.Fatal("pnpm is not installed; the Linux CI runner must run this, not skip it")
+		// ci.yml installs pnpm and sets NOX_REQUIRE_PNPM, so the oracle runs
+		// there rather than skips. The requirement is the workflow's to
+		// state: "Linux and CI" also matched the release build's test hook,
+		// which has no pnpm, and failed v1.60.0.
+		if os.Getenv("NOX_REQUIRE_PNPM") != "" {
+			t.Fatal("pnpm is not installed, and NOX_REQUIRE_PNPM says this runner must run the oracle, not skip it")
 		}
 		t.Skip("pnpm is not installed")
 	}

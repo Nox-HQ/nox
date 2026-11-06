@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.60.0] - 2026-11-06
+## [1.60.1] - 2026-11-06
+
+### Fixed
+
+- The release build runs again. v1.60.0 was tagged but never published: the
+  pnpm fix oracle failed rather than skipped on any Linux CI runner without
+  pnpm, and the release build's test hook is one. ci.yml now states the
+  requirement (NOX_REQUIRE_PNPM) where it installs pnpm. 1.60.1 carries
+  everything listed under 1.60.0.
+
+## [1.60.0] - 2026-11-06 [YANKED]
 
 ### Added
 
