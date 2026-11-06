@@ -29,6 +29,7 @@ import (
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
+	"github.com/nox-hq/nox/core/image"
 	"github.com/nox-hq/nox/core/pypipin"
 	"github.com/nox-hq/nox/core/reach"
 	"github.com/nox-hq/nox/core/rules"
@@ -91,6 +92,27 @@ type Package struct {
 
 // OriginGoBinary marks a package read from a Go executable's build info.
 const OriginGoBinary = "go-binary"
+
+// OriginImage marks software read from inside a container base image
+// (core/image). Like a binary's modules, it is not what this source tree
+// links, so the tree's link set and call graph do not judge it.
+const OriginImage = "image"
+
+// fromArtifact reports whether a package was read from a built artifact (a
+// binary or an image) rather than from this tree's manifests.
+func fromArtifact(p Package) bool { return p.Origin == OriginGoBinary || p.Origin == OriginImage }
+
+// ImageReader reads what a digest-pinned container image has installed.
+// *image.Client is the implementation.
+type ImageReader interface {
+	Contents(ctx context.Context, name, digest string) (image.Contents, error)
+}
+
+// WithImages turns on reading digest-pinned base images named in
+// Dockerfiles. Off by default: it fetches image layers.
+func WithImages(r ImageReader) AnalyzerOption {
+	return func(a *Analyzer) { a.images = r }
+}
 
 // Vulnerability describes a known security issue for a package.
 type Vulnerability struct {
@@ -276,6 +298,9 @@ type Analyzer struct {
 	// optional: a nil collector discards records, so library callers that do
 	// not supply one behave exactly as before.
 	degradations *degrade.Degradations
+
+	// images reads base images' installed software; nil leaves them unread.
+	images ImageReader
 }
 
 // WithDegradations gives the analyzer a collector to report incomplete checks
@@ -473,6 +498,10 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	// Track which lockfile each package came from for finding locations.
 	type pkgSource struct {
 		lockfilePath string
+		// line and image locate software read from a base image at the FROM
+		// line that names it; image is "name@digest".
+		line  int
+		image string
 		// absDir is the lockfile's directory on disk, where the manifest
 		// beside it is read. Empty for sources without one.
 		absDir string
@@ -665,12 +694,25 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		fromLines := dockerfileFromLines(content)
 
 		for i, img := range images {
-			inventory.Add(img)
-			sources = append(sources, pkgSource{lockfilePath: art.Path})
-
 			line := 1
 			if i < len(fromLines) {
 				line = fromLines[i]
+			}
+			var inside []Package
+			if a.images != nil {
+				var read bool
+				inside, read = a.readImage(ctx, art.Path, img)
+				if read {
+					// Checked through what it holds: not an unqueryable
+					// "docker" package any more.
+					img.Origin = OriginImage
+				}
+			}
+			inventory.Add(img)
+			sources = append(sources, pkgSource{lockfilePath: art.Path})
+			for _, p := range inside {
+				inventory.Add(p)
+				sources = append(sources, pkgSource{lockfilePath: art.Path, line: line, image: img.Name + "@" + img.Version})
 			}
 
 			// CONT-002: image uses "latest" tag (explicit or implicit).
@@ -818,7 +860,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 			defer cancel()
 
-			a.reportUnqueryableEcosystems(pkgs)
+			a.reportUnqueryableEcosystems(uncheckedImageRefs(pkgs))
 
 			src := a.vulnSource()
 			vulnMap, err := lookupDistinct(ctx, src, pkgs)
@@ -871,8 +913,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					}
 
 					lockfilePath, lockDir := "", ""
+					startLine, imageRef := 1, ""
 					if pkgIdx < len(sources) {
 						lockfilePath, lockDir = sources[pkgIdx].lockfilePath, sources[pkgIdx].absDir
+						if sources[pkgIdx].line > 0 {
+							startLine = sources[pkgIdx].line
+						}
+						imageRef = sources[pkgIdx].image
 					}
 
 					aliases := strings.Join(ov.Aliases, ",")
@@ -913,6 +960,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						if pkg.Ecosystem == "pypi" && lockDir != "" {
 							addPyPIRemediation(meta, pypipin.AdviceFor(filepath.Join(lockDir, filepath.Base(lockfilePath)), pkg.Name, pkg.Version, fixVer))
 						}
+						if pkg.Origin == OriginImage {
+							addImageRemediation(meta, imageRef, pkg.Name, fixVer)
+						}
+					}
+					if pkg.Origin == OriginImage {
+						meta["image"] = imageRef
 					}
 					// OSV scopes Go advisories to import paths. When the affected
 					// packages are provably not linked, the finding is recorded
@@ -956,13 +1009,15 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// binary is judged by neither: the binary may have been
 					// built from other code, so a refutation borrowed from the
 					// tree would downgrade an advisory for code that shipped.
-					goFromSource := pkg.Ecosystem == "go" && pkg.Origin != OriginGoBinary
+					goFromSource := pkg.Ecosystem == "go" && !fromArtifact(pkg)
 					switch {
 					case goFromSource:
 						verdict = raiseOnListedSymbol(verdict, meta, goGraph, &ov, pkg.Name)
 						addImportedMetadata(meta, srcImports, pkg.Name)
 					case pkg.Ecosystem == "go":
-						meta["package_origin"] = OriginGoBinary
+						meta["package_origin"] = pkg.Origin
+					case pkg.Origin == OriginImage:
+						meta["package_origin"] = OriginImage
 					default:
 						verdict = raiseOnJSListedSymbol(verdict, meta, srcImports, &ov, pkg)
 					}
@@ -1031,7 +1086,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						Confidence: confidence,
 						Location: findings.Location{
 							FilePath:  lockfilePath,
-							StartLine: 1,
+							StartLine: startLine,
 						},
 						Message:           message,
 						Metadata:          meta,
@@ -1090,7 +1145,7 @@ func applicabilityFor(pkg Package, ov *osvVuln, linked map[string]struct{}, link
 		return applicability.Undeterminable(reached, applicability.SymbolUsed, capability.Unsupported)
 	}
 
-	if pkg.Origin == OriginGoBinary {
+	if fromArtifact(pkg) {
 		// Build info names modules, not the packages the binary linked, and
 		// the source tree's link set is not this binary's. A limit of what nox
 		// reads today, not an answer.

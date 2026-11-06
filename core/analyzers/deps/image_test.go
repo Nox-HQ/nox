@@ -1,0 +1,170 @@
+package deps
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/nox-hq/nox-core/degrade"
+	"github.com/nox-hq/nox-core/vulnsource"
+
+	"github.com/nox-hq/nox/core/discovery"
+	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/image"
+)
+
+// fakeImages answers for named digests and records what it was asked.
+type fakeImages struct {
+	contents map[string]image.Contents // by name@digest
+	err      error
+	asked    []string
+}
+
+func (f *fakeImages) Contents(_ context.Context, name, digest string) (image.Contents, error) {
+	f.asked = append(f.asked, name+"@"+digest)
+	if f.err != nil {
+		return image.Contents{}, f.err
+	}
+	c, ok := f.contents[name+"@"+digest]
+	if !ok {
+		return image.Contents{}, errors.New("not found")
+	}
+	return c, nil
+}
+
+const goImageDigest = "sha256:df23b876380eb556f22bbba2fa57493e8684fc4fcabf06399fbfb65359978d28"
+
+func dockerfileTree(t *testing.T, from string) []discovery.Artifact {
+	t.Helper()
+	dir := t.TempDir()
+	mod := filepath.Join(dir, "go.mod")
+	_ = os.WriteFile(mod, []byte("module example.com/tree\n\ngo 1.21\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644)
+	df := filepath.Join(dir, "Dockerfile")
+	if err := os.WriteFile(df, []byte("# build\nFROM "+from+" AS build\nRUN go build ./...\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return []discovery.Artifact{
+		{Path: "go.mod", AbsPath: mod, Type: discovery.Lockfile},
+		{Path: "Dockerfile", AbsPath: df, Type: discovery.Container},
+	}
+}
+
+// A digest-pinned base image's installed software is inventoried at its FROM
+// line, and an advisory against it is judged as what it is: software inside
+// the image. The source tree beside the Dockerfile does not decide it, any
+// more than it decides a compiled binary's (the wrong-input hazard).
+func TestPinnedImageIsInventoriedAndNotJudgedByTheTree(t *testing.T) {
+	imgs := &fakeImages{contents: map[string]image.Contents{
+		"golang:1.26-alpine@" + goImageDigest: {Distro: "alpine:v3.24", Packages: []image.Package{
+			{Name: "stdlib", Version: "1.26.0", Ecosystem: "go", Path: "usr/local/go/VERSION"},
+			{Name: "openssl", Version: "3.5.1-r0", Ecosystem: "alpine:v3.24", Path: "lib/apk/db/installed"},
+		}},
+	}}
+	rec := vulnsource.Record{
+		ID: "GO-2099-0002", Summary: "smuggling",
+		Severity: []vulnsource.Severity{{Type: "CVSS_V3", Score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}},
+		Affected: []vulnsource.Affected{{
+			Package:           vulnsource.Package{Name: "stdlib", Ecosystem: "Go"},
+			EcosystemSpecific: vulnsource.EcosystemSpecific{Imports: []vulnsource.Import{{Path: "net/http"}}},
+		}},
+	}
+	src := &stubSource{name: "stub", records: map[string][]vulnsource.Record{"stdlib": {rec}}}
+	inv, fs, err := NewAnalyzer(WithSource(src), WithImages(imgs)).ScanArtifacts(context.Background(),
+		dockerfileTree(t, "golang:1.26-alpine@"+goImageDigest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var have []string
+	for _, p := range inv.Packages() {
+		switch {
+		case p.Ecosystem == "docker" && p.Origin != OriginImage:
+			t.Errorf("the image reference was read but not marked: %+v", p)
+		case p.Ecosystem == "docker":
+		case p.Origin == OriginImage:
+			have = append(have, p.Ecosystem+" "+p.Name+" "+p.Version)
+		}
+	}
+	if strings.Join(have, "|") != "go stdlib 1.26.0|alpine:v3.24 openssl 3.5.1-r0" &&
+		strings.Join(have, "|") != "alpine:v3.24 openssl 3.5.1-r0|go stdlib 1.26.0" {
+		t.Errorf("image packages %v", have)
+	}
+	var got *findings.Finding
+	for _, f := range fs.Findings() {
+		if f.RuleID == "VULN-001" && f.Metadata["package"] == "stdlib" {
+			got = &f
+		}
+	}
+	if got == nil {
+		t.Fatal("no finding for the image's stdlib")
+	}
+	if got.Location.FilePath != "Dockerfile" || got.Metadata["package_origin"] != OriginImage ||
+		got.Metadata["image"] != "golang:1.26-alpine@"+goImageDigest {
+		t.Errorf("located %q, origin %q, image %q", got.Location.FilePath, got.Metadata["package_origin"], got.Metadata["image"])
+	}
+	if got.Metadata["applicability"] != "undetermined" || got.Severity == findings.SeverityInfo {
+		t.Errorf("applicability %q severity %s: the tree decided an image's advisory", got.Metadata["applicability"], got.Severity)
+	}
+}
+
+// A tag names no fixed content, so it is not resolved: the scan says the image
+// was not checked and why, and nothing is fetched.
+func TestTaggedImageIsNotCheckedAndSaysWhy(t *testing.T) {
+	imgs := &fakeImages{}
+	d := &degrade.Degradations{}
+	a := NewAnalyzer(WithOSVDisabled(), WithImages(imgs), WithDegradations(d))
+	if _, _, err := a.ScanArtifacts(context.Background(), dockerfileTree(t, "golang:1.26-alpine")); err != nil {
+		t.Fatal(err)
+	}
+	if len(imgs.asked) != 0 {
+		t.Errorf("a tagged image was fetched: %v", imgs.asked)
+	}
+	if !degradationMentions(d, "golang:1.26-alpine", "digest") {
+		t.Errorf("no degradation saying the tagged image was not checked: %+v", d.Items())
+	}
+}
+
+// An image that cannot be read is named, with the reason.
+func TestUnreadableImageIsNamed(t *testing.T) {
+	imgs := &fakeImages{err: errors.New("registry-1.docker.io: the registry refused an anonymous pull")}
+	d := &degrade.Degradations{}
+	a := NewAnalyzer(WithOSVDisabled(), WithImages(imgs), WithDegradations(d))
+	if _, _, err := a.ScanArtifacts(context.Background(), dockerfileTree(t, "golang:1.26-alpine@"+goImageDigest)); err != nil {
+		t.Fatal(err)
+	}
+	if !degradationMentions(d, "golang:1.26-alpine@"+goImageDigest, "anonymous pull") {
+		t.Errorf("no degradation naming the unreadable image: %+v", d.Items())
+	}
+}
+
+// Without image checking on, nothing is fetched: it is opt-in until measured.
+func TestImagesAreNotReadUnlessOn(t *testing.T) {
+	inv, _, err := NewAnalyzer(WithOSVDisabled()).ScanArtifacts(context.Background(), dockerfileTree(t, "golang:1.26-alpine@"+goImageDigest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range inv.Packages() {
+		if p.Origin == OriginImage {
+			t.Errorf("an image package without image checking: %+v", p)
+		}
+	}
+}
+
+func degradationMentions(deg *degrade.Degradations, parts ...string) bool {
+	for _, d := range deg.Items() {
+		text := d.Detail + " " + d.Impact
+		all := true
+		for _, p := range parts {
+			if !strings.Contains(text, p) {
+				all = false
+			}
+		}
+		if all {
+			return true
+		}
+	}
+	return false
+}

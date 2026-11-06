@@ -92,3 +92,27 @@ answer depend on when it ran.
 
 Until then the degradation stays. It is the honest answer: the image is listed
 and was not checked.
+
+## Status (2026-11-06)
+
+Steps 1 to 3 are built, behind `scan.images.enabled` (`core/image`,
+`core/analyzers/deps/image.go`): the reader, os-release, apk, dpkg and
+distroless status.d, and the toolchain `VERSION`. Go executables inside image
+layers are not read yet. nox-core gained the `Alpine:` and `Debian:`
+ecosystems with apk-tools and dpkg version order (the semver order picked
+fixes wrong and read a `~` backport as fixed).
+
+First measurement, three pinned images, read with a cold cache in 7 to 9
+seconds each:
+
+| Image | Packages | Advisories |
+|---|---|---|
+| `golang:1.26-alpine` | 10 apk + Go 1.26 | 0 (OSV queried directly agrees: 0 for all 10) |
+| `node:22-bookworm-slim` | 63 dpkg | 98, none with a fix |
+| `gcr.io/distroless/static-debian12` | 5 dpkg | (not measured for advisories) |
+
+The 98 are matched correctly (each record is `introduced: 0`, no fix), but
+Debian rates many of them `unimportant` in `ecosystem_specific.urgency`, and
+nox reports them at the CVSS severity. Carrying Debian's urgency, so a
+no-fix, unimportant entry does not read as high or critical, is the next
+precision step, and is why this stays off by default.

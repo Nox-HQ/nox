@@ -622,6 +622,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	if !vulnLookupEnabled {
 		depsOpts = append(depsOpts, deps.WithOSVDisabled())
 	}
+	if r := imageReader(cfg.Scan.Images, opts); r != nil {
+		depsOpts = append(depsOpts, deps.WithImages(r))
+	}
 
 	// The advisory cache holds hydrated advisory documents between scans, keyed
 	// on the publisher's own `modified` stamp. It is a pure speed win with no
