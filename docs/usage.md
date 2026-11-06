@@ -1210,9 +1210,8 @@ image runs. A tag-only reference is reported as not checked: a tag names no
 fixed content, so nox does not resolve it. An offline scan reads the cache
 only.
 
-Advisories for Alpine and Debian packages need nox-core's distribution
-ecosystems; until a release includes them, those packages are inventoried and
-listed as not checked. Ubuntu, RPM distributions, and runtimes bundled outside
+Alpine and Debian packages are checked against OSV's `Alpine:` and `Debian:`
+advisories, compared in apk's and dpkg's own version order. Ubuntu, RPM distributions, and runtimes bundled outside
 a package manager (Node's own OpenSSL, for one) are not read yet. See
 [docs/design/container-image-advisories.md](design/container-image-advisories.md).
 
