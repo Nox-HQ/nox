@@ -254,6 +254,14 @@ func holdTransitive(it *Item, a *fix.UpgradeAction, root string, major bool) boo
 	if reach.Movable() {
 		return false
 	}
+	if !reach.Established {
+		// nox cannot tell beforehand. The command is offered, as the finding
+		// and apply offer it, for a person to look at first: apply reads the
+		// lockfile back and reports a copy a parent kept below the fix.
+		it.Class = ClassReview
+		it.Why = uncertainReason(upgradePlan{pkg: a.Package, step: versionStep(a), to: a.To, major: major}, reach)
+		return true
+	}
 	it.Class, it.Kind, it.Command = ClassReview, KindHeldUpgrade, ""
 	it.Why = heldReason(upgradePlan{pkg: a.Package, step: versionStep(a), to: a.To, major: major}, reach)
 	return true

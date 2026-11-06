@@ -529,11 +529,11 @@ func applyUpgrade(manifestRoot string, a upgradeAction) error {
 func applyNpmUpgrade(manifestRoot string, a upgradeAction) error {
 	version := strings.TrimPrefix(a.toVersion, "v")
 	name, args := npmtree.Command(manifestRoot, a.pkg, version)
-	isUpdate := name == "npm" && args[0] == "update"
+	transitive := npmtree.Transitive(manifestRoot, a.pkg)
 	// A transitive package whose parent's range the lockfile already shows
-	// excludes the fix cannot be moved by npm update; running it to find that
-	// out changes nothing and reads as an attempt.
-	if isUpdate {
+	// excludes the fix cannot be moved by an update, whichever manager runs
+	// it; running it to find that out changes nothing and reads as an attempt.
+	if transitive {
 		if reach := npmtree.ReachOf(manifestRoot, a.pkg, version); reach.Held() {
 			return heldError(a.pkg, version, reach)
 		}
@@ -541,17 +541,24 @@ func applyNpmUpgrade(manifestRoot string, a upgradeAction) error {
 	if err := runInEnv(manifestRoot, scriptsOffEnv, name, args...); err != nil {
 		return err
 	}
-	if !isUpdate {
+	if !transitive {
 		return nil
 	}
+	// Read back where it landed, in whichever lockfile the manager wrote. An
+	// update moves a transitive package only as far as its parents allow, and
+	// a copy still short of the fix means the advisory is still there.
 	below, err := npmtree.Below(manifestRoot, a.pkg, version)
 	if err != nil {
-		return fmt.Errorf("reading package-lock.json after npm update: %w", err)
+		return fmt.Errorf("reading the lockfile after %s: %w", name, err)
 	}
 	if len(below) > 0 {
-		return fmt.Errorf("%s is transitive and npm update left %s below %s: a parent's "+
-			"version range excludes the fix; upgrade that parent, or pin it with an "+
-			"\"overrides\" entry in package.json", a.pkg, strings.Join(below, ", "), version)
+		return fmt.Errorf("%s is transitive and %s left %s below %s: a parent's version range excludes "+
+			"the fix; upgrade that parent, or force it with %s in package.json",
+			a.pkg, name, strings.Join(below, ", "), version, npmtree.OverrideEntry(name, a.pkg, version))
+	}
+	if !npmtree.Transitive(manifestRoot, a.pkg) {
+		return fmt.Errorf("%s added %s to package.json as a dependency of your own; it was only ever a "+
+			"dependency of other packages. Review the change before keeping it", name, a.pkg)
 	}
 	return nil
 }
