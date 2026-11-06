@@ -997,6 +997,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 							meta["theoretical"] = "true"
 						}
 					}
+					sev, message = applyDistroUrgency(meta, &ov, pkg, sev, message)
 					// Applicability: how far the argument from "this advisory
 					// exists" to "an attacker can use it here" actually got, and
 					// why it stopped. Recorded on every dependency finding,

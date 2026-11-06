@@ -168,3 +168,51 @@ func degradationMentions(deg *degrade.Degradations, parts ...string) bool {
 	}
 	return false
 }
+
+// Debian rates each advisory for its release. An entry it calls unimportant
+// is recorded, not dropped, and out of gating severity whatever its CVSS says;
+// other ratings travel with the finding and leave the severity alone.
+func TestDebianUrgencyTravelsAndUnimportantDoesNotGate(t *testing.T) {
+	const digest = "sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d"
+	imgs := &fakeImages{contents: map[string]image.Contents{
+		"node:22-bookworm-slim@" + digest: {Distro: "debian:12", Packages: []image.Package{
+			{Name: "coreutils", Version: "9.1-1", Ecosystem: "debian:12"},
+			{Name: "glibc", Version: "2.36-9+deb12u14", Ecosystem: "debian:12"},
+		}},
+	}}
+	high := []vulnsource.Severity{{Type: "CVSS_V3", Score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}}
+	rec := func(id, pkg, urgency string) vulnsource.Record {
+		return vulnsource.Record{ID: id, Summary: id, Severity: high, Affected: []vulnsource.Affected{{
+			Package:           vulnsource.Package{Name: pkg, Ecosystem: "Debian:12"},
+			Ranges:            []vulnsource.Range{{Type: "ECOSYSTEM", Events: []vulnsource.Event{{Introduced: "0"}}}},
+			EcosystemSpecific: vulnsource.EcosystemSpecific{Urgency: urgency},
+		}}}
+	}
+	src := &stubSource{name: "stub", records: map[string][]vulnsource.Record{
+		"coreutils": {rec("DEBIAN-CVE-2025-5278", "coreutils", "unimportant")},
+		"glibc":     {rec("DEBIAN-CVE-2026-5435", "glibc", "low")},
+	}}
+	_, fs, err := NewAnalyzer(WithSource(src), WithImages(imgs)).ScanArtifacts(context.Background(),
+		dockerfileTree(t, "node:22-bookworm-slim@"+digest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]findings.Finding{}
+	for _, f := range fs.Findings() {
+		if f.RuleID == "VULN-001" {
+			got[f.Metadata["package"]] = f
+		}
+	}
+	cu, ok := got["coreutils"]
+	if !ok {
+		t.Fatal("the unimportant advisory was dropped; it must be recorded")
+	}
+	if cu.Severity != findings.SeverityInfo || cu.Metadata["distro_urgency"] != "unimportant" ||
+		!strings.Contains(cu.Message, "unimportant") {
+		t.Errorf("unimportant: severity %s, urgency %q, message %q", cu.Severity, cu.Metadata["distro_urgency"], cu.Message)
+	}
+	gl := got["glibc"]
+	if gl.Severity == findings.SeverityInfo || gl.Metadata["distro_urgency"] != "low" {
+		t.Errorf("low: severity %s, urgency %q; the rating should travel and the severity stay", gl.Severity, gl.Metadata["distro_urgency"])
+	}
+}
