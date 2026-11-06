@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Alpine and Debian packages are checked for advisories (nox-core v0.14.0),
+  compared in apk's and dpkg's own version order: semver had ranked 1.0-r10
+  below 1.0-r9 and a ~ backport above its fix. With `scan.images.enabled`, a
+  digest-pinned base image's distribution packages are now checked, not only
+  listed.
 - `scan.images.enabled` (opt-in) reads what a digest-pinned base image has
   installed, without running it: layers are fetched by digest, verified,
   cached under ~/.nox/cache/oci, and Alpine apk, Debian dpkg (with
