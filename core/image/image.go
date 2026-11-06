@@ -5,9 +5,10 @@
 // checked against its digest and cached by it, and the layers are applied in
 // order with whiteouts. Only the files that list installed software are kept:
 // os-release, Alpine's apk database, Debian's dpkg status (and distroless
-// status.d), and the Go toolchain's VERSION. Nothing in the image is executed,
-// nothing is written outside the cache, and the answer for a digest never
-// changes, so a scan that reads it stays deterministic.
+// status.d), the Go toolchain's VERSION, and Go executables' build info.
+// Nothing in the image is executed, nothing is written outside the cache, and
+// the answer for a digest never changes, so a scan that reads it stays
+// deterministic.
 package image
 
 import (
@@ -219,7 +220,7 @@ func (c *Client) applyLayer(ctx context.Context, ref Ref, l descriptor, files ma
 		return fmt.Errorf("layer %s: %s compression is not read", l.Digest, l.MediaType)
 	}
 
-	var deleted, opaque []string
+	var deleted, opaque, replaced []string
 	added := map[string][]byte{}
 	unpacked.r = r
 	tr := tar.NewReader(unpacked)
@@ -247,6 +248,16 @@ func (c *Client) applyLayer(ctx context.Context, ref Ref, l descriptor, files ma
 				return fmt.Errorf("layer %s: %w", l.Digest, err)
 			}
 			added[name] = b
+		case hdr.Typeflag == tar.TypeReg && hdr.Mode&0o111 != 0 && hdr.Size >= minGoBinarySize:
+			if info, ok := readGoBuildInfo(tr); ok {
+				added[name] = info
+			} else {
+				replaced = append(replaced, name)
+			}
+		default:
+			// Anything else at a path replaces what a lower layer put there:
+			// a Go binary overwritten by a shell script is not in the image.
+			replaced = append(replaced, name)
 		}
 	}
 	for p := range files {
@@ -260,6 +271,9 @@ func (c *Client) applyLayer(ctx context.Context, ref Ref, l descriptor, files ma
 				delete(files, p)
 			}
 		}
+	}
+	for _, p := range replaced {
+		delete(files, p)
 	}
 	for p, b := range added {
 		files[p] = b
@@ -514,6 +528,7 @@ func readContents(files map[string][]byte) Contents {
 			out.Packages = append(out.Packages, dpkgPackages(files[p], p, out.Distro)...)
 		}
 	}
+	out.Packages = append(out.Packages, goBinaryPackages(files)...)
 	if v, ok := files["usr/local/go/VERSION"]; ok {
 		first, _, _ := strings.Cut(string(v), "\n")
 		if ver := strings.TrimPrefix(strings.TrimSpace(first), "go"); ver != "" && ver != first {
