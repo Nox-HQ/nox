@@ -22,19 +22,37 @@ import (
 
 // CDXReport is the top-level CycloneDX BOM structure.
 type CDXReport struct {
-	BOMFormat       string             `json:"bomFormat"`
-	SpecVersion     string             `json:"specVersion"`
-	SerialNumber    string             `json:"serialNumber"`
-	Version         int                `json:"version"`
-	Metadata        CDXMetadata        `json:"metadata"`
-	Components      []CDXComponent     `json:"components"`
+	BOMFormat    string         `json:"bomFormat"`
+	SpecVersion  string         `json:"specVersion"`
+	SerialNumber string         `json:"serialNumber"`
+	Version      int            `json:"version"`
+	Metadata     CDXMetadata    `json:"metadata"`
+	Components   []CDXComponent `json:"components"`
+	// Dependencies is set for an artifact's BOM: the artifact depends on each
+	// component it contains.
+	Dependencies    []CDXDependency    `json:"dependencies,omitempty"`
 	Vulnerabilities []CDXVulnerability `json:"vulnerabilities,omitempty"`
+}
+
+// CDXDependency says one component depends on others, by bom-ref.
+type CDXDependency struct {
+	Ref       string   `json:"ref"`
+	DependsOn []string `json:"dependsOn"`
+}
+
+// CDXHash is a component's digest.
+type CDXHash struct {
+	Alg     string `json:"alg"`
+	Content string `json:"content"`
 }
 
 // CDXMetadata holds tool and timestamp information.
 type CDXMetadata struct {
 	Timestamp string    `json:"timestamp"`
 	Tools     []CDXTool `json:"tools"`
+	// Component is what the BOM describes, for an artifact's BOM: the
+	// artifact, named, with its digest.
+	Component *CDXComponent `json:"component,omitempty"`
 }
 
 // CDXTool identifies the tool that generated the BOM.
@@ -66,6 +84,7 @@ type CDXComponent struct {
 	// PURL is omitted when the component has no package-URL type, as a model
 	// served by an API provider has none.
 	PURL     string              `json:"purl,omitempty"`
+	Hashes   []CDXHash           `json:"hashes,omitempty"`
 	Licenses []CDXLicenseWrapper `json:"licenses,omitempty"`
 }
 
@@ -106,6 +125,19 @@ type CycloneDXReporter struct {
 	// verdicts are the not-impacting decisions from the scan's findings,
 	// written as each vulnerability's analysis. Nil writes none.
 	verdicts map[verdictKey]*CDXAnalysis
+	// subject is the artifact the BOM describes. Zero for a scan's BOM.
+	subject spdxSubject
+}
+
+// cdxSubjectRef is the subject's bom-ref.
+const cdxSubjectRef = "subject"
+
+// WithSubject makes the BOM describe one artifact, such as a release archive:
+// metadata.component names it with its SHA-256, it depends on each component,
+// and the serial number derives from its digest.
+func (r *CycloneDXReporter) WithSubject(name, sha256Hex string) *CycloneDXReporter {
+	r.subject = spdxSubject{name: name, sha256: sha256Hex}
+	return r
 }
 
 // NewCycloneDXReporter returns a reporter configured with the given tool version.
@@ -255,10 +287,29 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 		}
 	}
 
+	serial := deterministicSerialURN(components)
+	var subject *CDXComponent
+	var dependencies []CDXDependency
+	if r.subject.name != "" {
+		subject = &CDXComponent{
+			Type:    "file",
+			BOMRef:  cdxSubjectRef,
+			Name:    r.subject.name,
+			Version: "",
+			Hashes:  []CDXHash{{Alg: "SHA-256", Content: r.subject.sha256}},
+		}
+		refs := make([]string, 0, len(components))
+		for i := range components {
+			refs = append(refs, components[i].BOMRef)
+		}
+		dependencies = []CDXDependency{{Ref: cdxSubjectRef, DependsOn: refs}}
+		serial = serialFromDigest(r.subject.sha256)
+	}
+
 	doc := CDXReport{
 		BOMFormat:    "CycloneDX",
 		SpecVersion:  "1.5",
-		SerialNumber: deterministicSerialURN(components),
+		SerialNumber: serial,
 		Version:      1,
 		Metadata: CDXMetadata{
 			Timestamp: report.GeneratedAt(),
@@ -271,8 +322,10 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 			},
 		},
 		Components:      components,
+		Dependencies:    dependencies,
 		Vulnerabilities: cdxVulns,
 	}
+	doc.Metadata.Component = subject
 
 	return json.MarshalIndent(doc, "", "  ")
 }
@@ -564,7 +617,17 @@ func deterministicSerialURN(components []CDXComponent) string {
 	for i := range components {
 		_, _ = fmt.Fprintf(h, "%s\x00%s\x00%s\n", components[i].Name, components[i].Version, components[i].PURL)
 	}
-	sum := h.Sum(nil)
+	return uuidURNFrom(h.Sum(nil))
+}
+
+// serialFromDigest is an artifact BOM's serial: the artifact's own digest as a
+// UUID, so one file always gets the same serial and two files never share one.
+func serialFromDigest(sha256Hex string) string {
+	h := sha256.Sum256([]byte("nox-artifact-bom\x00" + sha256Hex))
+	return uuidURNFrom(h[:])
+}
+
+func uuidURNFrom(sum []byte) string {
 	// Format 16 bytes as a UUID, stamping the version (4) and variant (RFC 4122)
 	// nibbles so the result is a syntactically valid UUID.
 	var u [16]byte

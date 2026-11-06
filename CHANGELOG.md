@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `nox sbom -format cyclonedx` writes an artifact's SBOM as CycloneDX 1.5,
+  with the artifact as `metadata.component` (named, with its SHA-256)
+  depending on every component, and a serial number derived from the
+  artifact's digest. Validated against the CycloneDX 1.5 schema. SPDX stays
+  the default.
+
 ### Fixed
 
 - Fix advice for an npm package the project does not list reads yarn v1 and

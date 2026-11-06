@@ -20,9 +20,10 @@ func sbomCmd(args []string, out, errw io.Writer) int {
 	fs := flag.NewFlagSet("sbom", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	output := fs.String("output", "", "write the SBOM to this file (default: stdout)")
+	format := fs.String("format", nox.SBOMFormatSPDX, "spdx (SPDX 2.3) or cyclonedx (CycloneDX 1.5)")
 	fs.Usage = func() {
-		_, _ = fmt.Fprintln(errw, "Usage: nox sbom <artifact> [-output file]")
-		_, _ = fmt.Fprintln(errw, "  SPDX 2.3 SBOM of a release archive (.tar.gz, .tgz, .tar, .zip) or a single file.")
+		_, _ = fmt.Fprintln(errw, "Usage: nox sbom <artifact> [-format spdx|cyclonedx] [-output file]")
+		_, _ = fmt.Fprintln(errw, "  SBOM of a release archive (.tar.gz, .tgz, .tar, .zip) or a single file, with the artifact as its subject.")
 		_, _ = fmt.Fprintln(errw, "  Offline and deterministic; Go executables are read from their embedded build info.")
 		fs.PrintDefaults()
 	}
@@ -36,11 +37,11 @@ func sbomCmd(args []string, out, errw io.Writer) int {
 			positional, args = append(positional, args[0]), args[1:]
 		}
 	}
-	if len(positional) != 1 {
+	if len(positional) != 1 || (*format != nox.SBOMFormatSPDX && *format != nox.SBOMFormatCycloneDX) {
 		fs.Usage()
 		return 2
 	}
-	data, err := nox.ArtifactSBOM(context.Background(), positional[0], version)
+	data, err := nox.ArtifactSBOMAs(context.Background(), positional[0], version, *format)
 	if err != nil {
 		_, _ = fmt.Fprintf(errw, "nox sbom: %v\n", err)
 		return 1
