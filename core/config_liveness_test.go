@@ -40,6 +40,13 @@ import (
 // reads: cfg.Scan.Include undefined (type ScanSettings has no field or method Include)
 var undefinedField = regexp.MustCompile(`has no field or method (\w+)`)
 
+// namesField reports whether compiler output blames the rename of field: a
+// selector on it, or a struct literal that sets it.
+func namesField(out, field string) bool {
+	return strings.Contains(out, "has no field or method "+field) ||
+		strings.Contains(out, "unknown field "+field)
+}
+
 // probeSuffix is appended to every config field name in the overlay. It must not
 // collide with a real identifier.
 const probeSuffix = "_noxLivenessProbe"
@@ -93,7 +100,16 @@ func TestConfigFieldLivenessAgainstTheCompiler(t *testing.T) {
 		}
 	}
 
-	dead := probeFieldsInParallel(t, string(src), suspects)
+	dead, unexplained := probeFieldsInParallel(t, string(src), suspects)
+	// A build that failed without naming the renamed field failed for another
+	// reason (a vanished build-cache file did exactly this, and every entry
+	// in inertConfigKeys was then condemned as read). That says nothing about
+	// the field, so the guard stops rather than conclude.
+	if len(unexplained) > 0 {
+		t.Fatalf("building with these fields renamed failed without naming them, so the guard cannot "+
+			"tell whether they are read: %s. First failure:\n%s",
+			strings.Join(unexplained, ", "), truncateForTest(firstFailure))
+	}
 	isDead := make(map[string]bool, len(dead))
 	for _, f := range dead {
 		isDead[f] = true
@@ -150,10 +166,18 @@ func compilerNamedFields(t *testing.T, src string, leaves []string) []string {
 
 // probeFieldsInParallel renames each suspect on its own and returns those whose
 // rename leaves the module compiling — the ones nothing reads.
-func probeFieldsInParallel(t *testing.T, src string, suspects []string) []string {
+// firstFailure is the compiler output of the first probe whose failure did
+// not name its field, for the error that reports it.
+var firstFailure string
+
+// probeFieldsInParallel renames each suspect alone and builds. It returns the
+// fields whose rename still builds (dead), and those whose build failed
+// without the compiler naming them (unexplained: the failure was about
+// something else, and says nothing about the field).
+func probeFieldsInParallel(t *testing.T, src string, suspects []string) (dead, unexplained []string) {
 	t.Helper()
 	if len(suspects) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	workers := runtime.NumCPU()
@@ -162,18 +186,24 @@ func probeFieldsInParallel(t *testing.T, src string, suspects []string) []string
 	}
 	jobs := make(chan string)
 	var mu sync.Mutex
-	var dead []string
 	var wg sync.WaitGroup
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for field := range jobs {
-				if _, err := buildWithOverlay(t, renameFields(t, src, []string{field})); err == nil {
-					mu.Lock()
+				out, err := buildWithOverlay(t, renameFields(t, src, []string{field}))
+				mu.Lock()
+				switch {
+				case err == nil:
 					dead = append(dead, field)
-					mu.Unlock()
+				case !namesField(out, field):
+					unexplained = append(unexplained, field)
+					if firstFailure == "" {
+						firstFailure = out
+					}
 				}
+				mu.Unlock()
 			}
 		}()
 	}
@@ -183,7 +213,8 @@ func probeFieldsInParallel(t *testing.T, src string, suspects []string) []string
 	close(jobs)
 	wg.Wait()
 	sort.Strings(dead)
-	return dead
+	sort.Strings(unexplained)
+	return dead, unexplained
 }
 
 // buildWithOverlay builds the module with config.go replaced by src, without

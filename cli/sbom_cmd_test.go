@@ -102,3 +102,58 @@ func TestSBOMCommandDescribesAReleaseArchive(t *testing.T) {
 		}
 	}
 }
+
+// -format cyclonedx writes the same artifact's BOM as CycloneDX, with the
+// archive as its subject; the default stays SPDX, which the release uses.
+func TestSBOMCommandWritesCycloneDX(t *testing.T) {
+	dir := t.TempDir()
+	archive := filepath.Join(dir, "app_1.0.0_linux_amd64.tar.gz")
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	lock := []byte(`{"lockfileVersion":3,"packages":{"":{"dependencies":{"lodash":"4.17.21"}},"node_modules/lodash":{"version":"4.17.21"}}}`)
+	_ = tw.WriteHeader(&tar.Header{Name: "package-lock.json", Mode: 0o644, Size: int64(len(lock)), Typeflag: tar.TypeReg})
+	_, _ = tw.Write(lock)
+	_ = tw.Close()
+	_ = gz.Close()
+	if err := os.WriteFile(archive, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(buf.Bytes())
+
+	var out, errw bytes.Buffer
+	if code := sbomCmd([]string{archive, "-format", "cyclonedx"}, &out, &errw); code != 0 {
+		t.Fatalf("exit %d: %s", code, errw.String())
+	}
+	var doc struct {
+		BOMFormat string `json:"bomFormat"`
+		Metadata  struct {
+			Component struct {
+				Name   string `json:"name"`
+				Hashes []struct {
+					Content string `json:"content"`
+				} `json:"hashes"`
+			} `json:"component"`
+		} `json:"metadata"`
+		Components []struct {
+			Name, Version string
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, out.String())
+	}
+	if doc.BOMFormat != "CycloneDX" || doc.Metadata.Component.Name != filepath.Base(archive) {
+		t.Errorf("format %q subject %q", doc.BOMFormat, doc.Metadata.Component.Name)
+	}
+	if h := doc.Metadata.Component.Hashes; len(h) != 1 || h[0].Content != hex.EncodeToString(sum[:]) {
+		t.Errorf("subject hashes %+v", h)
+	}
+	if len(doc.Components) != 1 || doc.Components[0].Name != "lodash" {
+		t.Errorf("components %+v", doc.Components)
+	}
+
+	out.Reset()
+	if code := sbomCmd([]string{archive, "-format", "pdf"}, &out, &errw); code != 2 {
+		t.Errorf("an unknown format: exit %d, want 2", code)
+	}
+}
