@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.61.0] - 2026-11-06
+
 ### Changed
 
 - A Debian advisory carries Debian's own rating for the release
