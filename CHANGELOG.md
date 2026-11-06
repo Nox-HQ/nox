@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- With `scan.images.enabled`, Ubuntu images are checked: the support stream
+  comes from the image's os-release (Ubuntu:24.04:LTS, or the release alone
+  when not LTS; Pro and FIPS streams are never assumed), versions are
+  compared in dpkg order (nox-core v0.16.0), and an advisory Ubuntu rates
+  negligible is recorded at info, as Debian's unimportant is. On
+  ubuntu:24.04, nox's advisories equal OSV's for all 66 packages.
+
 ### Changed
 
 - A Debian advisory carries Debian's own rating for the release
