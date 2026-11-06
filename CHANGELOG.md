@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `scan.images.enabled` (opt-in) reads what a digest-pinned base image has
+  installed, without running it: layers are fetched by digest, verified,
+  cached under ~/.nox/cache/oci, and Alpine apk, Debian dpkg (with
+  distroless status.d) and Go toolchain packages are inventoried at the FROM
+  line and checked. Their advisories are not judged by the tree's code. A
+  tag-only FROM is reported as not checked; an image that cannot be read is
+  named with the reason (#1013).
 - `nox sbom -format cyclonedx` writes an artifact's SBOM as CycloneDX 1.5,
   with the artifact as `metadata.component` (named, with its SHA-256)
   depending on every component, and a serial number derived from the

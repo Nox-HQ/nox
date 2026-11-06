@@ -206,6 +206,7 @@ type ScanSettings struct {
 	ConditionalSeverity  []ConditionalSeverity   `yaml:"conditional_severity"`
 	OSV                  OSVConfig               `yaml:"osv"`
 	Intelligence         IntelligenceConfig      `yaml:"intelligence"`
+	Images               ImagesConfig            `yaml:"images"`
 	Slop                 SlopConfig              `yaml:"slop"`
 	MCPFeed              MCPFeedConfig           `yaml:"mcp_feed"`
 	Entropy              EntropyConfig           `yaml:"entropy"`
@@ -470,6 +471,21 @@ type EntropyConfig struct {
 	// keyword appears on the same line. Default is true (set in rule metadata);
 	// setting this to false disables that check.
 	RequireContext *bool `yaml:"require_context"`
+}
+
+// ImagesConfig controls reading the software inside digest-pinned base images
+// named in Dockerfiles (core/image, nox-hq/nox#1013). Off until measured on
+// real Dockerfiles: it downloads image layers.
+type ImagesConfig struct {
+	// Enabled reads FROM name@sha256:… images: their layers are fetched by
+	// digest (anonymous pulls only), verified, cached, and their installed
+	// packages inventoried and checked. A tag-only reference is reported as
+	// not checked. An offline scan reads the cache only.
+	Enabled bool `yaml:"enabled"`
+
+	// CacheDir overrides where image blobs are cached by digest. Empty
+	// defaults to $HOME/.nox/cache/oci.
+	CacheDir string `yaml:"cache_dir"`
 }
 
 // OSVConfig controls OSV.dev vulnerability enrichment for dependency scanning.
