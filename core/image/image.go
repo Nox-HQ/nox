@@ -504,9 +504,19 @@ func readContents(files map[string][]byte) Contents {
 				out.Distro = "alpine:v" + parts[0] + "." + parts[1]
 			}
 		}
-	case "debian", "ubuntu":
+	case "debian":
 		if v := osr["VERSION_ID"]; v != "" {
-			out.Distro = id + ":" + v
+			out.Distro = "debian:" + v
+		}
+	case "ubuntu":
+		// Ubuntu publishes advisories per support stream, and os-release
+		// says which applies: "24.04.3 LTS (Noble Numbat)" is the LTS
+		// stream, any other release stands alone.
+		if v := osr["VERSION_ID"]; v != "" {
+			out.Distro = "ubuntu:" + v
+			if strings.Contains(osr["VERSION"], "LTS") {
+				out.Distro += ":LTS"
+			}
 		}
 	}
 	if osr["ID"] != "" && out.Distro == "" {

@@ -1211,8 +1211,11 @@ image runs. A tag-only reference is reported as not checked: a tag names no
 fixed content, so nox does not resolve it. An offline scan reads the cache
 only.
 
-Alpine and Debian packages are checked against OSV's `Alpine:` and `Debian:`
-advisories, compared in apk's and dpkg's own version order. Ubuntu, RPM distributions, and runtimes bundled outside
+Alpine, Debian and Ubuntu packages are checked against OSV's advisories for
+that release, compared in apk's and dpkg's own version order; for Ubuntu the
+standard-archive stream (`24.04:LTS`) comes from the image's os-release.
+An advisory the distribution rates unimportant (Debian) or negligible
+(Ubuntu) is recorded at info. RPM distributions, and runtimes bundled outside
 a package manager (Node's own OpenSSL, for one) are not read yet. See
 [docs/design/container-image-advisories.md](design/container-image-advisories.md).
 
