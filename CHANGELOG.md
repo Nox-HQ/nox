@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   negligible is recorded at info, as Debian's unimportant is. On
   ubuntu:24.04, nox's advisories equal OSV's for all 66 packages.
 
+## [1.61.0] - 2026-11-06
+
 ### Changed
 
 - A Debian advisory carries Debian's own rating for the release
