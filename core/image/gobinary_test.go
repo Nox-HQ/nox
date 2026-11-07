@@ -10,13 +10,16 @@ import (
 	"testing"
 )
 
-// goExecutable builds testdata/gobin, a Go executable that links a module,
-// and returns it with the build info buildinfo.ReadFile reads from it: the
-// oracle the streaming reader is held to.
+// goExecutable builds testdata/gobin for Linux, a Go executable that links a
+// module, and returns it with the build info buildinfo.ReadFile reads from
+// it: the oracle the streaming reader is held to.
 func goExecutable(t *testing.T) (body string, want *buildinfo.BuildInfo) {
 	t.Helper()
 	exe := filepath.Join(t.TempDir(), "gobin")
 	cmd := exec.Command("go", "build", "-o", exe, "./testdata/gobin")
+	// What an image holds is a Linux executable; on Windows a native build
+	// is PE, which the reader rightly does not probe.
+	cmd.Env = append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("building the fixture: %v\n%s", err, out)
 	}

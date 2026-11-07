@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nox's own 1.60.1 image: stdlib 1.27.3 and nox-core v0.14.0 from
   /usr/local/bin/nox.
 
+## [1.61.0] - 2026-11-06
+
 ### Changed
 
 - A Debian advisory carries Debian's own rating for the release
