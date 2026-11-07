@@ -1202,16 +1202,20 @@ For each `FROM name@sha256:…` nox fetches the manifest and layers by digest
 (anonymous pulls only; a registry that wants credentials is reported as not
 read), checks every blob against its digest, applies the layers' whiteouts,
 and reads only the files that list installed software: `os-release`, Alpine's
-apk database, Debian's dpkg status (and distroless `status.d`), and the Go
-toolchain's `VERSION`. Nothing in the image is executed. The packages are
+apk database, Debian's dpkg status (and distroless `status.d`), the Go
+toolchain's `VERSION`, and the build info of Go executables (Go 1.18 and
+later), which names the Go release and every module linked. Nothing in the image is executed. The packages are
 inventoried at the `FROM` line and reported with the image they came from;
 their advisories are not judged by this tree's code, which is not what the
 image runs. A tag-only reference is reported as not checked: a tag names no
 fixed content, so nox does not resolve it. An offline scan reads the cache
 only.
 
-Alpine and Debian packages are checked against OSV's `Alpine:` and `Debian:`
-advisories, compared in apk's and dpkg's own version order. Ubuntu, RPM distributions, and runtimes bundled outside
+Alpine, Debian and Ubuntu packages are checked against OSV's advisories for
+that release, compared in apk's and dpkg's own version order; for Ubuntu the
+standard-archive stream (`24.04:LTS`) comes from the image's os-release.
+An advisory the distribution rates unimportant (Debian) or negligible
+(Ubuntu) is recorded at info. RPM distributions, and runtimes bundled outside
 a package manager (Node's own OpenSSL, for one) are not read yet. See
 [docs/design/container-image-advisories.md](design/container-image-advisories.md).
 

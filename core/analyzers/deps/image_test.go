@@ -216,3 +216,34 @@ func TestDebianUrgencyTravelsAndUnimportantDoesNotGate(t *testing.T) {
 		t.Errorf("low: severity %s, urgency %q; the rating should travel and the severity stay", gl.Severity, gl.Metadata["distro_urgency"])
 	}
 }
+
+// Ubuntu rates with a severity entry; "negligible" is its "unimportant".
+func TestUbuntuNegligibleDoesNotGate(t *testing.T) {
+	const digest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+	imgs := &fakeImages{contents: map[string]image.Contents{
+		"ubuntu:24.04@" + digest: {Distro: "ubuntu:24.04:LTS", Packages: []image.Package{
+			{Name: "openssl", Version: "3.0.13-0ubuntu3.1", Ecosystem: "ubuntu:24.04:LTS"},
+		}},
+	}}
+	src := &stubSource{name: "stub", records: map[string][]vulnsource.Record{"openssl": {{
+		ID: "UBUNTU-CVE-2099-1", Summary: "x",
+		Severity: []vulnsource.Severity{{Type: "CVSS_V3", Score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}, {Type: "Ubuntu", Score: "negligible"}},
+		Affected: []vulnsource.Affected{{
+			Package: vulnsource.Package{Name: "openssl", Ecosystem: "Ubuntu:24.04:LTS"},
+			Ranges:  []vulnsource.Range{{Type: "ECOSYSTEM", Events: []vulnsource.Event{{Introduced: "0"}, {Fixed: "3.0.13-0ubuntu3.2"}}}},
+		}},
+	}}}}
+	_, fs, err := NewAnalyzer(WithSource(src), WithImages(imgs)).ScanArtifacts(context.Background(), dockerfileTree(t, "ubuntu:24.04@"+digest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range fs.Findings() {
+		if f.RuleID == "VULN-001" && f.Metadata["package"] == "openssl" {
+			if f.Severity != findings.SeverityInfo || f.Metadata["distro_urgency"] != "negligible" || f.Metadata["fixed_in"] != "3.0.13-0ubuntu3.2" {
+				t.Errorf("severity %s urgency %q fixed_in %q", f.Severity, f.Metadata["distro_urgency"], f.Metadata["fixed_in"])
+			}
+			return
+		}
+	}
+	t.Fatal("no finding for the image's openssl")
+}

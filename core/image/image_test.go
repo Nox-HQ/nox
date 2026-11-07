@@ -21,6 +21,7 @@ type file struct {
 	name, body string
 	whiteout   bool // write the name as a .wh. entry
 	opaque     bool // write an opaque-directory marker for name
+	exec       bool // mode 0755
 }
 
 func layer(t *testing.T, files ...file) []byte {
@@ -37,7 +38,11 @@ func layer(t *testing.T, files ...file) []byte {
 		case f.opaque:
 			name = strings.TrimSuffix(name, "/") + "/.wh..wh..opq"
 		}
-		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(f.body)), Typeflag: tar.TypeReg}); err != nil {
+		mode := int64(0o644)
+		if f.exec {
+			mode = 0o755
+		}
+		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: mode, Size: int64(len(f.body)), Typeflag: tar.TypeReg}); err != nil {
 			t.Fatal(err)
 		}
 		_, _ = tw.Write([]byte(f.body))
@@ -354,6 +359,27 @@ func TestParseRef(t *testing.T) {
 	} {
 		if got := ParseRef(in); got != want {
 			t.Errorf("ParseRef(%q) = %+v, want %+v", in, got, want)
+		}
+	}
+}
+
+// Ubuntu's advisories are published per support stream; an image's
+// os-release says which: an LTS release is "24.04:LTS", any other the
+// release alone.
+func TestUbuntuStreamComesFromOSRelease(t *testing.T) {
+	for want, release := range map[string]string{
+		"ubuntu:24.04:LTS": "NAME=\"Ubuntu\"\nVERSION=\"24.04.3 LTS (Noble Numbat)\"\nID=ubuntu\nVERSION_ID=\"24.04\"\n",
+		"ubuntu:25.10":     "NAME=\"Ubuntu\"\nVERSION=\"25.10 (Questing Quokka)\"\nID=ubuntu\nVERSION_ID=\"25.10\"\n",
+	} {
+		reg := newRegistry(t)
+		digest := reg.image(t, layer(t, file{name: "etc/os-release", body: release},
+			file{name: "var/lib/dpkg/status", body: "Package: libssl3t64\nStatus: install ok installed\nSource: openssl\nVersion: 3.0.13-0ubuntu3.1\n"}))
+		got, err := reg.client(t).Contents(context.Background(), "golang", digest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Distro != want || strings.Join(pkgs(got), "|") != want+" openssl 3.0.13-0ubuntu3.1" {
+			t.Errorf("distro %q packages %v; want %s", got.Distro, pkgs(got), want)
 		}
 	}
 }
