@@ -13,6 +13,7 @@ import (
 
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/deps"
+	"github.com/nox-hq/nox/core/image"
 	"github.com/nox-hq/nox/core/report"
 )
 
@@ -566,29 +567,92 @@ func (r *SPDXReporter) WriteToFile(inventory *deps.PackageInventory, path string
 
 // purlEcosystems maps internal ecosystem names to PURL type prefixes.
 var purlEcosystems = map[string]string{
-	"go":       "golang",
-	"npm":      "npm",
-	"pypi":     "pypi",
-	"rubygems": "gem",
-	"cargo":    "cargo",
-	"maven":    "maven",
-	"gradle":   "maven",
-	"nuget":    "nuget",
+	"go":        "golang",
+	"npm":       "npm",
+	"pypi":      "pypi",
+	"rubygems":  "gem",
+	"cargo":     "cargo",
+	"maven":     "maven",
+	"gradle":    "maven",
+	"nuget":     "nuget",
+	"composer":  "composer",
+	"packagist": "composer",
+	"pub":       "pub",
+	"hex":       "hex",
+	"swift":     "swift",
+	"cocoapods": "cocoapods",
+	"conan":     "conan",
 }
 
 // buildPURL constructs a Package URL (purl) for the given package.
 // See https://github.com/package-url/purl-spec for the format.
 func buildPURL(p deps.Package) string {
+	if purl, ok := distroPURL(p); ok {
+		return purl
+	}
+	if p.Ecosystem == "docker" {
+		return dockerPURL(p)
+	}
 	purlType, ok := purlEcosystems[p.Ecosystem]
 	if !ok {
 		return ""
 	}
+	version := purlVersion(p.Version)
 	// Maven PURLs use namespace/name format for groupId:artifactId.
 	if (p.Ecosystem == "maven" || p.Ecosystem == "gradle") && strings.Contains(p.Name, ":") {
 		parts := strings.SplitN(p.Name, ":", 2)
-		return fmt.Sprintf("pkg:%s/%s/%s@%s", purlType, parts[0], parts[1], p.Version)
+		return fmt.Sprintf("pkg:%s/%s/%s@%s", purlType, parts[0], parts[1], version)
 	}
-	return fmt.Sprintf("pkg:%s/%s@%s", purlType, p.Name, p.Version)
+	return fmt.Sprintf("pkg:%s/%s@%s", purlType, p.Name, version)
+}
+
+// distroPURL is the purl of a distribution package read from an image
+// ("alpine:v3.22", "debian:12", "ubuntu:24.04:LTS"). nox records the source
+// package, which advisories name, so arch is "source"; distro names the
+// release.
+func distroPURL(p deps.Package) (string, bool) {
+	name, release, ok := strings.Cut(p.Ecosystem, ":")
+	if !ok {
+		return "", false
+	}
+	release, _, _ = strings.Cut(release, ":") // "24.04:LTS" -> "24.04"
+	var purlType string
+	switch name {
+	case "alpine":
+		purlType, release = "apk", strings.TrimPrefix(release, "v")
+	case "debian", "ubuntu":
+		purlType = "deb"
+	default:
+		return "", false
+	}
+	return fmt.Sprintf("pkg:%s/%s/%s@%s?arch=source&distro=%s-%s", purlType, name, p.Name, purlVersion(p.Version), name, release), true
+}
+
+// dockerPURL is the purl of a base image: Docker Hub's official images live
+// under library/, and another registry is named by repository_url.
+func dockerPURL(p deps.Package) string {
+	ref := image.ParseRef(p.Name)
+	purl := fmt.Sprintf("pkg:docker/%s@%s", ref.Repository, purlVersion(p.Version))
+	if ref.Registry != "registry-1.docker.io" {
+		purl += "?repository_url=" + ref.Registry
+	}
+	return purl
+}
+
+// purlVersion percent-encodes a version as the purl spec requires: "+" in
+// 2.36-9+deb12u14 is %2B, while ":" (a dpkg epoch, a digest's algorithm)
+// stays.
+func purlVersion(v string) string {
+	var b strings.Builder
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.IndexByte(".-_~:", c) >= 0 {
+			b.WriteByte(c)
+			continue
+		}
+		fmt.Fprintf(&b, "%%%02X", c)
+	}
+	return b.String()
 }
 
 // spdxNamespace derives a document namespace from the package set. SPDX 2.3

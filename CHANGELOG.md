@@ -22,6 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nox's own 1.60.1 image: stdlib 1.27.3 and nox-core v0.14.0 from
   /usr/local/bin/nox.
 
+### Fixed
+
+- SBOMs give every inventoried component a package URL: distribution
+  packages read from images (`pkg:apk/alpine/...`,
+  `pkg:deb/debian|ubuntu/...` with `arch=source` and `distro`), base images
+  (`pkg:docker/...`, with `repository_url` off Docker Hub), and Composer,
+  Pub, Hex, Swift, CocoaPods and Conan packages had none. Versions are
+  percent-encoded as the spec requires (`+` is `%2B`). A three-image scan:
+  143 of 143 components carry a purl that packageurl-python parses and
+  round-trips.
+
 ## [1.61.0] - 2026-11-06
 
 ### Changed
