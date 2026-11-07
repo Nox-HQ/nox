@@ -1202,8 +1202,9 @@ For each `FROM name@sha256:…` nox fetches the manifest and layers by digest
 (anonymous pulls only; a registry that wants credentials is reported as not
 read), checks every blob against its digest, applies the layers' whiteouts,
 and reads only the files that list installed software: `os-release`, Alpine's
-apk database, Debian's dpkg status (and distroless `status.d`), and the Go
-toolchain's `VERSION`. Nothing in the image is executed. The packages are
+apk database, Debian's dpkg status (and distroless `status.d`), the Go
+toolchain's `VERSION`, and the build info of Go executables (Go 1.18 and
+later), which names the Go release and every module linked. Nothing in the image is executed. The packages are
 inventoried at the `FROM` line and reported with the image they came from;
 their advisories are not judged by this tree's code, which is not what the
 image runs. A tag-only reference is reported as not checked: a tag names no

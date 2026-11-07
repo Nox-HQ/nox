@@ -125,5 +125,10 @@ their CVSS severity), 1 `low`. 62 findings gate where 98 did. The advisory
 cache key carries a record-schema version, so entries cached before the
 field existed are fetched again rather than served without it.
 
-Before on by default: Ubuntu and RPM distributions, Go executables inside
-image layers, and a measurement across more images than three.
+Go executables inside image layers are read too: the build-info record is
+found by its magic while the layer streams, and Go 1.18+ store the version
+and module list inline after it, so nothing is written to disk. nox's own
+1.60.1 image reads as stdlib 1.27.3 and nox-core v0.14.0.
+
+Before on by default: Ubuntu and RPM distributions, and a measurement across
+more images than four.

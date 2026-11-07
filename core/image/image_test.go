@@ -21,6 +21,7 @@ type file struct {
 	name, body string
 	whiteout   bool // write the name as a .wh. entry
 	opaque     bool // write an opaque-directory marker for name
+	exec       bool // mode 0755
 }
 
 func layer(t *testing.T, files ...file) []byte {
@@ -37,7 +38,11 @@ func layer(t *testing.T, files ...file) []byte {
 		case f.opaque:
 			name = strings.TrimSuffix(name, "/") + "/.wh..wh..opq"
 		}
-		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(f.body)), Typeflag: tar.TypeReg}); err != nil {
+		mode := int64(0o644)
+		if f.exec {
+			mode = 0o755
+		}
+		if err := tw.WriteHeader(&tar.Header{Name: name, Mode: mode, Size: int64(len(f.body)), Typeflag: tar.TypeReg}); err != nil {
 			t.Fatal(err)
 		}
 		_, _ = tw.Write([]byte(f.body))

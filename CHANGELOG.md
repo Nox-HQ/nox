@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- With `scan.images.enabled`, Go executables inside a base image are read
+  for their build info while the layer streams past, nothing written to
+  disk: the Go release (stdlib at an exact version) and every module linked.
+  A binary a later layer deletes or overwrites is not reported. Read from
+  nox's own 1.60.1 image: stdlib 1.27.3 and nox-core v0.14.0 from
+  /usr/local/bin/nox.
+
 ## [1.61.0] - 2026-11-06
 
 ### Changed
