@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- With `scan.images.enabled`, AlmaLinux and Rocky Linux images (EL9 and
+  later) are checked: rpm's sqlite database is read without a SQLite library
+  or running rpm, packages are compared in rpm's own version order (nox-core
+  v0.17.0), and SBOMs name them `pkg:rpm/...` with the epoch as a qualifier.
+  Read lists equal `rpm -qa` in almalinux:9 (158 packages) and rockylinux:9
+  (141); advisories equal OSV's for every package, directly and through NOX
+  Intelligence. Red Hat/UBI images (advisories are per product repository,
+  which rpm does not record), rpm's Berkeley DB (EL8 and earlier) and a
+  database with an uncheckpointed write-ahead log are reported as not
+  checked, with the reason.
+
+### Added
+
 - With `scan.images.enabled`, Ubuntu images are checked: the support stream
   comes from the image's os-release (Ubuntu:24.04:LTS, or the release alone
   when not LTS; Pro and FIPS streams are never assumed), versions are

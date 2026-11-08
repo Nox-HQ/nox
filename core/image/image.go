@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -101,6 +102,9 @@ type Client struct {
 const (
 	defaultMaxBytes = 2 << 30
 	maxListingBytes = 16 << 20 // one package database file
+	// maxRPMDBBytes bounds rpm's sqlite database, which carries every
+	// package's file list and runs to tens of megabytes on a full EL image.
+	maxRPMDBBytes = 256 << 20
 )
 
 // Contents fetches the image name pins by digest and reads what it has
@@ -196,7 +200,15 @@ func (c *Client) choosePlatform(ms []descriptor) string {
 	return ""
 }
 
-var layerWanted = regexp.MustCompile(`^(etc/os-release|usr/lib/os-release|lib/apk/db/installed|var/lib/dpkg/status|var/lib/dpkg/status\.d/[^/]+|usr/local/go/VERSION)$`)
+var layerWanted = regexp.MustCompile(`^(etc/os-release|usr/lib/os-release|lib/apk/db/installed|var/lib/dpkg/status|var/lib/dpkg/status\.d/[^/]+|usr/local/go/VERSION|var/lib/rpm/rpmdb\.sqlite)$`)
+
+// rpmMarkers are kept for their presence and size only: rpm's Berkeley DB
+// (EL8 and earlier), which nox does not read, and a write-ahead log, whose
+// frames would be rows the main database file does not yet hold.
+var rpmMarkers = map[string]bool{"var/lib/rpm/Packages": true, "var/lib/rpm/rpmdb.sqlite-wal": true}
+
+// markerTag starts the value kept for a marker file: its size, not its bytes.
+const markerTag = "\x00marker\x00"
 
 // applyLayer applies one layer's whiteouts to files, then its additions, keeping
 // only the paths that list installed software.
@@ -239,11 +251,17 @@ func (c *Client) applyLayer(ctx context.Context, ref Ref, l descriptor, files ma
 			opaque = append(opaque, strings.TrimSuffix(dir, "/"))
 		case strings.HasPrefix(base, ".wh."):
 			deleted = append(deleted, dir+strings.TrimPrefix(base, ".wh."))
+		case hdr.Typeflag == tar.TypeReg && rpmMarkers[name]:
+			added[name] = []byte(markerTag + strconv.FormatInt(hdr.Size, 10))
 		case hdr.Typeflag == tar.TypeReg && layerWanted.MatchString(name):
-			if hdr.Size > maxListingBytes {
-				return fmt.Errorf("layer %s: %s is %d bytes, over the %d-byte limit", l.Digest, name, hdr.Size, maxListingBytes)
+			limit := int64(maxListingBytes)
+			if name == "var/lib/rpm/rpmdb.sqlite" {
+				limit = maxRPMDBBytes
 			}
-			b, err := io.ReadAll(io.LimitReader(tr, maxListingBytes))
+			if hdr.Size > limit {
+				return fmt.Errorf("layer %s: %s is %d bytes, over the %d-byte limit", l.Digest, name, hdr.Size, limit)
+			}
+			b, err := io.ReadAll(io.LimitReader(tr, limit))
 			if err != nil {
 				return fmt.Errorf("layer %s: %w", l.Digest, err)
 			}
@@ -508,6 +526,12 @@ func readContents(files map[string][]byte) Contents {
 		if v := osr["VERSION_ID"]; v != "" {
 			out.Distro = "debian:" + v
 		}
+	case "almalinux", "rocky":
+		// OSV publishes these per major release ("AlmaLinux:9").
+		if v := osr["VERSION_ID"]; v != "" {
+			major, _, _ := strings.Cut(v, ".")
+			out.Distro = id + ":" + major
+		}
 	case "ubuntu":
 		// Ubuntu publishes advisories per support stream, and os-release
 		// says which applies: "24.04.3 LTS (Noble Numbat)" is the LTS
@@ -523,6 +547,9 @@ func readContents(files map[string][]byte) Contents {
 		out.Notes = append(out.Notes, fmt.Sprintf("%s has no release version in os-release, so its packages cannot be matched to advisories", osr["ID"]))
 	}
 
+	pkgs, notes := rpmContents(files, osr["ID"], out.Distro)
+	out.Packages = append(out.Packages, pkgs...)
+	out.Notes = append(out.Notes, notes...)
 	if db, ok := files["lib/apk/db/installed"]; ok && out.Distro != "" {
 		out.Packages = append(out.Packages, apkPackages(db, out.Distro)...)
 	}

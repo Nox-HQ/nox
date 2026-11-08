@@ -20,6 +20,11 @@ func TestBuildPURLCoversInventoriedEcosystems(t *testing.T) {
 			"pkg:deb/debian/glibc@2.36-9%2Bdeb12u14?arch=source&distro=debian-12"},
 		{deps.Package{Name: "attr", Version: "1:2.5.2-1ubuntu0.1", Ecosystem: "ubuntu:24.04:LTS"},
 			"pkg:deb/ubuntu/attr@1:2.5.2-1ubuntu0.1?arch=source&distro=ubuntu-24.04"},
+		// rpm: binary package, epoch as a qualifier, not in the version.
+		{deps.Package{Name: "openssl-libs", Version: "1:3.0.1-41.el9_0", Ecosystem: "almalinux:9"},
+			"pkg:rpm/almalinux/openssl-libs@3.0.1-41.el9_0?distro=almalinux-9&epoch=1"},
+		{deps.Package{Name: "glibc", Version: "2.34-100.el9_4.2", Ecosystem: "rocky:9"},
+			"pkg:rpm/rocky/glibc@2.34-100.el9_4.2?distro=rocky-9"},
 		{deps.Package{Name: "golang", Version: "sha256:df23b876380eb556f22bbba2fa57493e8684fc4fcabf06399fbfb65359978d28", Ecosystem: "docker"},
 			"pkg:docker/library/golang@sha256:df23b876380eb556f22bbba2fa57493e8684fc4fcabf06399fbfb65359978d28"},
 		{deps.Package{Name: "ghcr.io/nox-hq/nox", Version: "1.61.0", Ecosystem: "docker"},

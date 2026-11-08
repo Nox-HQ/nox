@@ -130,5 +130,13 @@ found by its magic while the layer streams, and Go 1.18+ store the version
 and module list inline after it, so nothing is written to disk. nox's own
 1.60.1 image reads as stdlib 1.27.3 and nox-core v0.14.0.
 
-Before on by default: Ubuntu and RPM distributions, and a measurement across
-more images than four.
+Ubuntu (by the stream os-release names) and AlmaLinux and Rocky Linux
+(EL9's sqlite rpmdb, read without a SQLite library, in rpm's version order)
+are read too. Checked against the systems' own tools: the rpm read equals
+`rpm -qa` in almalinux:9 (158) and rockylinux:9 (141); compareRPM agrees with
+rpm 4.16's rpm.vercmp on 3000 generated pairs; for ubuntu:24.04 (66),
+almalinux:9 (158) and rockylinux:9 (141) the advisory set equals OSV's for
+every package in both directions.
+
+Not read, and reported as such: Red Hat and UBI (per-repository advisories),
+rpm's Berkeley DB (EL8 and earlier), SUSE.
