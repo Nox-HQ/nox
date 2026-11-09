@@ -140,3 +140,42 @@ every package in both directions.
 
 Not read, and reported as such: Red Hat and UBI (per-repository advisories),
 rpm's Berkeley DB (EL8 and earlier), SUSE.
+
+### Measurement, 2026-11-09: sixteen pinned images
+
+Sixteen widely used images, pinned by digest, read by nox with OSV asked
+directly; then OSV queried for every package nox inventoried. "Missed" counts
+advisories OSV lists that nox does not report, after resolving aliases (nox
+reports one ID per advisory; OSV lists GO-2025-3553 and GHSA-mh63-6h87-95cp
+separately for the same issue). Times are a full `nox scan` on a Dockerfile
+holding only the FROM line: cold with an empty image cache, warm from it.
+
+| Image | Components | Advisories | Info (distro-rated) | Missed vs OSV | Extra vs OSV | Cold | Warm |
+|---|---|---|---|---|---|---|---|
+| `python:3.13-slim` | 61 | 86 | 25 | 0 | 0 | 4.8 s | 1.1 s |
+| `python:3.13-alpine` | 20 | 1 | 0 | 0 | 0 | 2.7 s | 0.6 s |
+| `node:22-alpine` | 11 | 1 | 0 | 0 | 0 | 4.8 s | 1.0 s |
+| `nginx:1.27` | 116 | 467 | 86 | 0 | 0 | 15.6 s | 1.4 s |
+| `nginx:1.27-alpine` | 58 | 129 | 0 | 0 | 0 | 7.0 s | 0.8 s |
+| `redis:7` | 64 | 99 | 37 | 0 | 0 | 4.4 s | 1.1 s |
+| `postgres:17` | 99 | 193 | 48 | 0 | 0 | 14.5 s | 2.5 s |
+| `postgres:17-alpine` | 39 | 62 | 0 | 0 | 0 | 7.6 s | 2.2 s |
+| `ubuntu:22.04` | 70 | 60 | 4 | 0 | 0 | 5.1 s | 0.9 s |
+| `debian:12-slim` | 63 | 98 | 36 | 0 | 0 | 3.1 s | 1.0 s |
+| `eclipse-temurin:21-jre` | 101 | 91 | 0 | 0 | 0 | 8.2 s | 1.8 s |
+| `golang:1.26` | 120 | 628 | 196 | 0 | 0 | 33.0 s | 6.1 s |
+| `traefik:v3.2` | 331 | 207 | 0 | 0 | 0 | 9.8 s | 3.1 s |
+| `almalinux:9-minimal` | 101 | 4 | 0 | 0 | 0 | 3.1 s | 0.9 s |
+| `rockylinux:9-minimal` | 118 | 81 | 0 | 0 | 0 | 4.0 s | 1.1 s |
+| `httpd:2.4` | 82 | 167 | 49 | 0 | 0 | 4.4 s | 1.2 s |
+
+No image was misread, and none produced a not-checked notice. Before alias
+resolution traefik showed 54 "missed" and each postgres image 1; all were the
+same advisories under their other IDs.
+
+What this does not settle, and is a product decision rather than a
+correctness one: an image's advisories are numerous (golang:1.26 628,
+nginx:1.27 467), most have no fix in the image's own release, and the first
+scan of a large image downloads its layers (golang:1.26 is the slowest at
+33 s cold). Turning image reading on by default changes what every online
+scan of a Dockerfile reports and fetches.
