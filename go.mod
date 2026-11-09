@@ -13,7 +13,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/openai/openai-go/v3 v3.91.1
+	github.com/openai/openai-go/v3 v3.97.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	golang.org/x/sync v0.24.0
 	golang.org/x/term v0.47.0
@@ -47,7 +47,7 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/nox-hq/nox-core v0.17.0
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/tidwall/gjson v1.19.0 // indirect
+	github.com/tidwall/gjson v1.20.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
