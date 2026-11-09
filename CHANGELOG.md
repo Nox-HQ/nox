@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.63.0] - 2026-11-09
+
 ### Changed
 
 - Base images are read by default (`scan.images.enabled: false` turns it
