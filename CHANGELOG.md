@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   database with an uncheckpointed write-ahead log are reported as not
   checked, with the reason.
 
+## [1.62.0] - 2026-11-08
+
 ### Added
 
 - With `scan.images.enabled`, Ubuntu images are checked: the support stream
