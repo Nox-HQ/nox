@@ -11,9 +11,11 @@ import (
 )
 
 // imageReader returns the base-image reader a scan uses, or nil when image
-// reading is off or the scan does not check dependencies.
-func imageReader(cfg ImagesConfig, opts ScanOptions) deps.ImageReader {
-	if !cfg.Enabled || !opts.Scopes.Has(ScopeDeps) {
+// reading is off or the scan does not check dependencies. A scan that makes
+// no lookups reads images from the cache only: turning image reading on by
+// default must not add a download the user turned lookups off to avoid.
+func imageReader(cfg ImagesConfig, opts ScanOptions, lookups bool) deps.ImageReader {
+	if !cfg.On() || !opts.Scopes.Has(ScopeDeps) {
 		return nil
 	}
 	dir := cfg.CacheDir
@@ -29,6 +31,6 @@ func imageReader(cfg ImagesConfig, opts ScanOptions) deps.ImageReader {
 	return &image.Client{
 		HTTP:     &http.Client{Timeout: 10 * time.Minute},
 		CacheDir: dir,
-		Offline:  opts.Offline,
+		Offline:  opts.Offline || !lookups,
 	}
 }

@@ -67,8 +67,11 @@ func TestPinnedImageIsInventoriedAndNotJudgedByTheTree(t *testing.T) {
 	rec := vulnsource.Record{
 		ID: "GO-2099-0002", Summary: "smuggling",
 		Severity: []vulnsource.Severity{{Type: "CVSS_V3", Score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}},
+		// A fixed release exists, so the severity reflects only whether the
+		// tree was (wrongly) allowed to judge the image.
 		Affected: []vulnsource.Affected{{
 			Package:           vulnsource.Package{Name: "stdlib", Ecosystem: "Go"},
+			Ranges:            []vulnsource.Range{{Type: "SEMVER", Events: []vulnsource.Event{{Introduced: "0"}, {Fixed: "1.26.1"}}}},
 			EcosystemSpecific: vulnsource.EcosystemSpecific{Imports: []vulnsource.Import{{Path: "net/http"}}},
 		}},
 	}
@@ -183,8 +186,9 @@ func TestDebianUrgencyTravelsAndUnimportantDoesNotGate(t *testing.T) {
 	high := []vulnsource.Severity{{Type: "CVSS_V3", Score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}}
 	rec := func(id, pkg, urgency string) vulnsource.Record {
 		return vulnsource.Record{ID: id, Summary: id, Severity: high, Affected: []vulnsource.Affected{{
-			Package:           vulnsource.Package{Name: pkg, Ecosystem: "Debian:12"},
-			Ranges:            []vulnsource.Range{{Type: "ECOSYSTEM", Events: []vulnsource.Event{{Introduced: "0"}}}},
+			Package: vulnsource.Package{Name: pkg, Ecosystem: "Debian:12"},
+			// Fixed releases exist, so only Debian's rating moves the severity.
+			Ranges:            []vulnsource.Range{{Type: "ECOSYSTEM", Events: []vulnsource.Event{{Introduced: "0"}, {Fixed: "99.0-1"}}}},
 			EcosystemSpecific: vulnsource.EcosystemSpecific{Urgency: urgency},
 		}}}
 	}
@@ -246,4 +250,47 @@ func TestUbuntuNegligibleDoesNotGate(t *testing.T) {
 		}
 	}
 	t.Fatal("no finding for the image's openssl")
+}
+
+// Only an advisory with a fix gates. One the image's own release has not
+// fixed is recorded at info with its real severity kept: failing a build on
+// what nobody can install yet teaches people to turn the check off. A
+// package from the tree, with or without a fix, is untouched.
+func TestUnfixedImageAdvisoryDoesNotGate(t *testing.T) {
+	const digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+	imgs := &fakeImages{contents: map[string]image.Contents{
+		"debian:12@" + digest: {Distro: "debian:12", Packages: []image.Package{
+			{Name: "glibc", Version: "2.36-9+deb12u14", Ecosystem: "debian:12"},
+			{Name: "openssl", Version: "3.0.15-1~deb12u1", Ecosystem: "debian:12"},
+		}},
+	}}
+	high := []vulnsource.Severity{{Type: "CVSS_V3", Score: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}}
+	deb := func(id, pkg string, events ...vulnsource.Event) vulnsource.Record {
+		return vulnsource.Record{ID: id, Summary: id, Severity: high, Affected: []vulnsource.Affected{{
+			Package: vulnsource.Package{Name: pkg, Ecosystem: "Debian:12"},
+			Ranges:  []vulnsource.Range{{Type: "ECOSYSTEM", Events: events}},
+		}}}
+	}
+	src := &stubSource{name: "stub", records: map[string][]vulnsource.Record{
+		"glibc":   {deb("DEBIAN-CVE-2099-1", "glibc", vulnsource.Event{Introduced: "0"})},
+		"openssl": {deb("DEBIAN-CVE-2099-2", "openssl", vulnsource.Event{Introduced: "0"}, vulnsource.Event{Fixed: "3.0.15-1~deb12u2"})},
+	}}
+	_, fs, err := NewAnalyzer(WithSource(src), WithImages(imgs)).ScanArtifacts(context.Background(), dockerfileTree(t, "debian:12@"+digest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]findings.Finding{}
+	for _, f := range fs.Findings() {
+		if f.RuleID == "VULN-001" {
+			got[f.Metadata["package"]] = f
+		}
+	}
+	unfixed, fixed := got["glibc"], got["openssl"]
+	if unfixed.Severity != findings.SeverityInfo || unfixed.Metadata["original_severity"] != string(findings.SeverityCritical) ||
+		!strings.Contains(unfixed.Message, "no fix") {
+		t.Errorf("unfixed: severity %s, original %q, message %q", unfixed.Severity, unfixed.Metadata["original_severity"], unfixed.Message)
+	}
+	if fixed.Severity != findings.SeverityCritical || fixed.Metadata["fixed_in"] != "3.0.15-1~deb12u2" {
+		t.Errorf("fixed: severity %s fixed_in %q; a fixable advisory must gate", fixed.Severity, fixed.Metadata["fixed_in"])
+	}
 }

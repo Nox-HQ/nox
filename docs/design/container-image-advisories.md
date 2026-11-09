@@ -179,3 +179,13 @@ nginx:1.27 467), most have no fix in the image's own release, and the first
 scan of a large image downloads its layers (golang:1.26 is the slowest at
 33 s cold). Turning image reading on by default changes what every online
 scan of a Dockerfile reports and fetches.
+
+### Decision, 2026-11-09: on by default, gating only what can be fixed
+
+Image reading is on by default. An image advisory with a fix released keeps
+its severity and gates; one with no fix yet is recorded at info with
+`original_severity`, because nothing can be installed and a gate on it would
+be turned off rather than obeyed. A scan that makes no lookups reads images
+from the cache only, so the default never adds a download the user turned
+lookups off to avoid.
+

@@ -480,13 +480,17 @@ type ImagesConfig struct {
 	// Enabled reads FROM name@sha256:… images: their layers are fetched by
 	// digest (anonymous pulls only), verified, cached, and their installed
 	// packages inventoried and checked. A tag-only reference is reported as
-	// not checked. An offline scan reads the cache only.
-	Enabled bool `yaml:"enabled"`
+	// not checked. On unless set to false. A scan that makes no lookups
+	// (--offline, scan.osv.disabled) reads the cache only.
+	Enabled *bool `yaml:"enabled"`
 
 	// CacheDir overrides where image blobs are cached by digest. Empty
 	// defaults to $HOME/.nox/cache/oci.
 	CacheDir string `yaml:"cache_dir"`
 }
+
+// On reports whether image reading is on: unset is on.
+func (c ImagesConfig) On() bool { return c.Enabled == nil || *c.Enabled }
 
 // OSVConfig controls OSV.dev vulnerability enrichment for dependency scanning.
 type OSVConfig struct {
