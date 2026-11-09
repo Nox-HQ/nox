@@ -30,7 +30,26 @@ func applyDistroUrgency(meta map[string]string, ov *osvVuln, pkg Package, sev fi
 	meta["distro_urgency"] = urgency
 	if distro, ok := notWorthFixing[urgency]; ok {
 		meta["severity_source"] = "distribution"
+		if sev != findings.SeverityInfo {
+			meta["original_severity"] = string(sev)
+		}
 		return findings.SeverityInfo, message + " [" + distro + " rates this " + urgency + " for " + wire + "]"
 	}
 	return sev, message
+}
+
+// gateOnlyFixable records an image advisory with no fix released at info,
+// keeping its severity in original_severity. Software inside a base image is
+// fixed by its distribution or upstream, not by this repository; an advisory
+// nobody can install a fix for yet is worth knowing and not worth failing a
+// build on, and gating on it teaches people to turn image checking off. An
+// advisory with a fix keeps its severity and gates. Packages from the tree
+// are untouched.
+func gateOnlyFixable(meta map[string]string, pkg Package, sev findings.Severity, message string) (newSev findings.Severity, newMessage string) {
+	if pkg.Origin != OriginImage || meta["fixed_in"] != "" || sev == findings.SeverityInfo {
+		return sev, message
+	}
+	meta["original_severity"] = string(sev)
+	meta["severity_source"] = "no_fix_available"
+	return findings.SeverityInfo, message + " [no fix released yet for the image's package: recorded at info, not gating]"
 }

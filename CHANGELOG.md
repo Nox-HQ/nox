@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Base images are read by default (`scan.images.enabled: false` turns it
+  off). Only an image advisory with a fix released gates a build; one with
+  no fix yet is recorded at info with its real severity in
+  `original_severity`, as distribution-rated unimportant/negligible ones now
+  also carry it. A scan that makes no lookups reads images from the cache
+  only. Measured first on sixteen pinned images: every advisory OSV lists
+  for every package read is reported, and none it does not list
+  (docs/design/container-image-advisories.md).
+
 ## [1.62.0] - 2026-11-08
 
 ### Added

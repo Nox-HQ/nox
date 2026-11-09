@@ -622,7 +622,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	if !vulnLookupEnabled {
 		depsOpts = append(depsOpts, deps.WithOSVDisabled())
 	}
-	if r := imageReader(cfg.Scan.Images, opts); r != nil {
+	if r := imageReader(cfg.Scan.Images, opts, vulnLookupEnabled); r != nil {
 		depsOpts = append(depsOpts, deps.WithImages(r))
 	}
 

@@ -132,3 +132,13 @@ and module list inline after it, so nothing is written to disk. nox's own
 
 Before on by default: Ubuntu and RPM distributions, and a measurement across
 more images than four.
+
+### Decision, 2026-11-09: on by default, gating only what can be fixed
+
+Image reading is on by default. An image advisory with a fix released keeps
+its severity and gates; one with no fix yet is recorded at info with
+`original_severity`, because nothing can be installed and a gate on it would
+be turned off rather than obeyed. A scan that makes no lookups reads images
+from the cache only, so the default never adds a download the user turned
+lookups off to avoid.
+

@@ -1185,18 +1185,27 @@ For estate-wide blast radius (a paid capability), `nox intel components` and
 candidate. They print what they would send and upload only with `--upload`.
 See [Blast radius across the estate](intelligence.md#blast-radius-across-the-estate).
 
-### Base images (opt-in)
+### Base images
 
-A Dockerfile's `FROM` line names software nox does not otherwise see. With
-image reading on, nox reads what a **digest-pinned** base image has installed
-and checks it like any other dependency:
+A Dockerfile's `FROM` line names software nox does not otherwise see. nox
+reads what a **digest-pinned** base image has installed and checks it like any
+other dependency:
 
 ```yaml
 scan:
   images:
-    enabled: true   # default false: it downloads image layers
+    enabled: false  # on by default; false turns image reading off
     cache_dir: ""   # default ~/.nox/cache/oci, blobs by digest
 ```
+
+Only an image advisory with a fix released gates a build. One the image's
+distribution or upstream has not fixed yet is recorded at `info`, with its
+real severity in `original_severity` and the reason in the message: there is
+nothing to install, and failing CI on it would only teach people to turn the
+check off. An advisory the distribution rates unimportant (Debian) or
+negligible (Ubuntu) is recorded at `info` the same way. A scan that makes no
+lookups (`--offline`, `scan.osv.disabled`) reads images from the cache only
+and downloads nothing.
 
 For each `FROM name@sha256:…` nox fetches the manifest and layers by digest
 (anonymous pulls only; a registry that wants credentials is reported as not
