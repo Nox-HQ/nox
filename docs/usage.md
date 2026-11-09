@@ -1224,7 +1224,11 @@ Alpine, Debian and Ubuntu packages are checked against OSV's advisories for
 that release, compared in apk's and dpkg's own version order; for Ubuntu the
 standard-archive stream (`24.04:LTS`) comes from the image's os-release.
 An advisory the distribution rates unimportant (Debian) or negligible
-(Ubuntu) is recorded at info. RPM distributions, and runtimes bundled outside
+(Ubuntu) is recorded at info. AlmaLinux and Rocky Linux (EL9 and later) are
+read from rpm's sqlite database and compared in rpm's version order. Red Hat
+and UBI images are not checked: Red Hat publishes advisories per product
+repository, and rpm does not record which one a package came from. Nor are
+rpm's Berkeley DB (EL8 and earlier), SUSE, and runtimes bundled outside
 a package manager (Node's own OpenSSL, for one) are not read yet. See
 [docs/design/container-image-advisories.md](design/container-image-advisories.md).
 
