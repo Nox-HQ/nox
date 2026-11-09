@@ -622,6 +622,14 @@ func distroPURL(p deps.Package) (string, bool) {
 		purlType, release = "apk", strings.TrimPrefix(release, "v")
 	case "debian", "ubuntu":
 		purlType = "deb"
+	case "almalinux", "rocky":
+		// rpm advisories name binary packages, which nox records; the
+		// epoch is a qualifier in an rpm purl, not part of the version.
+		version, epoch := p.Version, ""
+		if e, rest, ok := strings.Cut(version, ":"); ok {
+			version, epoch = rest, "&epoch="+e
+		}
+		return fmt.Sprintf("pkg:rpm/%s/%s@%s?distro=%s-%s%s", name, p.Name, purlVersion(version), name, release, epoch), true
 	default:
 		return "", false
 	}
