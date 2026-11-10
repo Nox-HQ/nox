@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- nox is built with Go 1.27.3 (was 1.26.5): release binaries from the next
+  release on, and building from source, which needs 1.27.3 or later. The
+  Docker image already used Go 1.27. CI follows go.mod everywhere, so
+  fuzzing no longer fails on golang/go#75804, a false "context deadline
+  exceeded" that 3 of the last 25 pushes to main hit, and gofmt in CI
+  matches local tooling. golangci-lint moves to v2.15.0: v2.12.2 was built
+  with Go 1.26 and cannot lint a 1.27 module.
 ### Fixed
 
 - The Action's `pr-comment` counted zero findings at every severity and
