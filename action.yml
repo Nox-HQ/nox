@@ -31,15 +31,15 @@ inputs:
     required: false
     default: 'true'
   pr-comment:
-    description: 'Post inline PR review comments with finding details'
+    description: 'Also post a summary comment counting findings by severity, and bound the inline comments by max-comments and min-severity'
     required: false
     default: 'false'
   max-comments:
-    description: 'Maximum number of inline PR comments to post'
+    description: 'With pr-comment, the most inline PR comments to post (most severe first)'
     required: false
     default: '25'
   min-severity:
-    description: 'Minimum severity for PR comments (critical, high, medium, low, info)'
+    description: 'With pr-comment, the lowest severity posted inline (critical, high, medium, low, info)'
     required: false
     default: 'low'
   severity-threshold:
