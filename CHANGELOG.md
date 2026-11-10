@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.64.0] - 2026-11-10
+
 ### Added
 
 - OpenSSL linked statically into a binary in a base image (Node.js bundles
