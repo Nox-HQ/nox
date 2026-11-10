@@ -368,8 +368,12 @@ run_scan() {
 
 # --- Annotate PR ---
 
+# annotate_pr posts the findings to the pull request through nox itself, which
+# reads findings.json with the same loader as every other command. Any further
+# arguments go to `nox annotate` (the pr-comment summary and its bounds).
 annotate_pr() {
   local output_dir="$1"
+  shift
   local install_dir="${GITHUB_ACTION_PATH:-.}"
 
   # Only annotate in PR context.
@@ -383,7 +387,8 @@ annotate_pr() {
   fi
 
   echo "Annotating PR with findings..."
-  "${install_dir}/nox" annotate --input "${findings_file}" || true
+  # ${@+"$@"}: an empty argument list under set -u, even in bash 3.2.
+  "${install_dir}/nox" annotate --input "${findings_file}" ${@+"$@"} || true
 }
 
 # --- Main ---
@@ -400,18 +405,16 @@ main() {
   local scan_exit=0
   run_scan "${INPUT_PATH}" "${INPUT_FORMAT}" "${INPUT_OUTPUT}" "${INPUT_FAIL_ON_FINDINGS}" || scan_exit=$?
 
-  if [[ "${INPUT_ANNOTATE:-true}" == "true" ]]; then
-    annotate_pr "${INPUT_OUTPUT}"
-  fi
-
+  # annotate posts the findings inline; pr-comment adds the severity summary
+  # and bounds the inline comments. One nox call does both: the two used to be
+  # separate implementations, and with both on the inline comments were
+  # posted twice.
   if [[ "${INPUT_PR_COMMENT:-false}" == "true" ]]; then
-    local findings_file="${INPUT_OUTPUT}/findings.json"
-    if [[ -f "${findings_file}" ]]; then
-      bash "${GITHUB_ACTION_PATH:-.}/action-pr-comment.sh" \
-        "${findings_file}" \
-        "${INPUT_MAX_COMMENTS:-25}" \
-        "${INPUT_MIN_SEVERITY:-low}" || true
-    fi
+    annotate_pr "${INPUT_OUTPUT}" --summary \
+      --max-comments "${INPUT_MAX_COMMENTS:-25}" \
+      --min-severity "${INPUT_MIN_SEVERITY:-low}"
+  elif [[ "${INPUT_ANNOTATE:-true}" == "true" ]]; then
+    annotate_pr "${INPUT_OUTPUT}"
   fi
 
   exit "${scan_exit}"

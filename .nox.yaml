@@ -105,7 +105,6 @@ scan:
     - "core/analyzers/ai/rules.go"
     - "registry/trust/signature.go"
     - "cli/plugin_cmd.go"
-    - "action-pr-comment.sh"
     - "action.sh"
     # Deliberately-unsafe example configs. mcp.json carries a literal
     # GitHub-token-shaped string whose own value tells the reader not to do

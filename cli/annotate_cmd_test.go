@@ -1,13 +1,18 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/nox-hq/nox/core/annotate"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/report"
 )
 
 func TestRunAnnotate_NoInput(t *testing.T) {
@@ -214,39 +219,117 @@ func TestGetChangedFilesSet_NonGitRepo(t *testing.T) {
 	}
 }
 
-func TestRunAnnotate_WithFindings(t *testing.T) {
-	dir := t.TempDir()
+// fakeGH puts a gh on PATH that records each call's arguments and request
+// body under dir, and answers as the real one does on success.
+func fakeGH(t *testing.T) (logDir string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake gh is a shell script")
+	}
+	bin, logDir := t.TempDir(), t.TempDir()
+	script := "#!/bin/sh\nn=$(ls \"$GH_LOG\" | grep -c 'args$')\necho \"$@\" > \"$GH_LOG/$n.args\"\ncat > \"$GH_LOG/$n.body\"\necho '{}'\n"
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("GH_LOG", logDir)
+	return logDir
+}
 
-	// Create findings file with actual findings.
-	findingsPath := filepath.Join(dir, "findings.json")
-	findingsContent := `{
-		"version":"1.0",
-		"findings":[
-			{
-				"ID":"f1",
-				"RuleID":"SEC-001",
-				"Severity":"high",
-				"Message":"test finding",
-				"Location":{"FilePath":"config.env","StartLine":1}
-			}
-		],
-		"timestamp":"2025-01-01T00:00:00Z"
-	}`
-	if err := os.WriteFile(findingsPath, []byte(findingsContent), 0o644); err != nil {
-		t.Fatalf("writing findings file: %v", err)
+func ghCall(t *testing.T, dir string, n int) (args string, body map[string]any) {
+	t.Helper()
+	a, err := os.ReadFile(filepath.Join(dir, fmt.Sprintf("%d.args", n)))
+	if err != nil {
+		t.Fatalf("gh call %d was not made: %v", n, err)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, fmt.Sprintf("%d.body", n)))
+	if err := json.Unmarshal(b, &body); err != nil {
+		t.Fatalf("gh call %d body is not JSON: %v", n, err)
+	}
+	return strings.TrimSpace(string(a)), body
+}
+
+// The report nox itself writes (indented, one field per line) is read as
+// findings, and the summary counts them by severity. #1016: the Action's
+// sed parser counted "Total 2" over five zero severities and posted no inline
+// comment, for exactly this report.
+func TestRunAnnotate_SummaryFromTheReportNoxWrites(t *testing.T) {
+	logDir := fakeGH(t)
+	dir := t.TempDir()
+	t.Chdir(dir) // not a git repository: no changed-files filter
+
+	fs := findings.NewFindingSet()
+	fs.Add(findings.NewFinding("IAC-306", findings.SeverityMedium, findings.ConfidenceHigh,
+		findings.Location{FilePath: ".github/workflows/nox.yml", StartLine: 11}, "unpinned action"))
+	fs.Add(findings.NewFinding("IAC-309", findings.SeverityLow, findings.ConfidenceHigh,
+		findings.Location{FilePath: ".github/workflows/ci.yml", StartLine: 14}, "broad permissions"))
+	path := filepath.Join(dir, "findings.json")
+	if err := report.NewJSONReporter("test").WriteToFile(fs, path); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(path); !strings.Contains(string(raw), "\n      \"Severity\"") && !strings.Contains(string(raw), "\n    \"Severity\"") {
+		t.Fatalf("the report is no longer indented; this test no longer reproduces #1016:\n%s", raw)
+	}
+	t.Setenv("GITHUB_REF", "refs/pull/1/merge")
+	t.Setenv("GITHUB_REPOSITORY", "felixgeelhaar/ghostline")
+
+	if code := runAnnotate([]string{"--input", path, "--summary", "--max-comments", "25", "--min-severity", "low"}); code != 0 {
+		t.Fatalf("exit %d", code)
 	}
 
-	// Set required env vars.
-	t.Setenv("GITHUB_REF", "refs/pull/42/merge")
-	t.Setenv("GITHUB_REPOSITORY", "owner/repo")
+	args, review := ghCall(t, logDir, 0)
+	if args != "api repos/felixgeelhaar/ghostline/pulls/1/reviews --method POST --input -" {
+		t.Errorf("review call: %s", args)
+	}
+	comments, _ := review["comments"].([]any)
+	if len(comments) != 2 {
+		t.Fatalf("review has %d inline comments, want 2: %v", len(comments), review)
+	}
+	first, _ := comments[0].(map[string]any)
+	if first["path"] != ".github/workflows/nox.yml" || first["line"] != float64(11) {
+		t.Errorf("first comment %v", first)
+	}
 
-	// This will fail at the gh CLI call since it's not available in test,
-	// but exercises the finding parsing and comment building code.
-	code := runAnnotate([]string{"--input", findingsPath})
-	// Expected to fail at postReviewComments since gh CLI is not available.
-	// In CI without gh CLI, this returns 2. If gh is available it would succeed.
-	// Either way, we exercise the code paths.
-	_ = code
+	args, summary := ghCall(t, logDir, 1)
+	if args != "api repos/felixgeelhaar/ghostline/issues/1/comments --method POST --input -" {
+		t.Errorf("summary call: %s", args)
+	}
+	text, _ := summary["body"].(string)
+	for _, want := range []string{"Medium | 1 |", "Low | 1 |", "Critical | 0 |", "**Total** | **2**", "2 inline comment(s) posted (max: 25, min severity: low)"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("summary lacks %q:\n%s", want, text)
+		}
+	}
+}
+
+// Without --summary nothing but the review is posted, and the bounds apply.
+func TestRunAnnotate_BoundsWithoutSummary(t *testing.T) {
+	logDir := fakeGH(t)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	fs := findings.NewFindingSet()
+	fs.Add(findings.NewFinding("A", findings.SeverityLow, findings.ConfidenceHigh, findings.Location{FilePath: "a", StartLine: 1}, "a"))
+	fs.Add(findings.NewFinding("B", findings.SeverityHigh, findings.ConfidenceHigh, findings.Location{FilePath: "b", StartLine: 2}, "b"))
+	path := filepath.Join(dir, "findings.json")
+	if err := report.NewJSONReporter("test").WriteToFile(fs, path); err != nil {
+		t.Fatal(err)
+	}
+	if code := runAnnotate([]string{"--input", path, "--pr", "7", "--repo", "o/r", "--min-severity", "medium"}); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	_, review := ghCall(t, logDir, 0)
+	if comments, _ := review["comments"].([]any); len(comments) != 1 {
+		t.Errorf("review has %d comments, want only the high one", len(comments))
+	}
+	if _, err := os.Stat(filepath.Join(logDir, "1.args")); err == nil {
+		t.Error("a summary was posted without --summary")
+	}
+}
+
+func TestRunAnnotate_RejectsAnUnknownSeverity(t *testing.T) {
+	if code := runAnnotate([]string{"--pr", "1", "--repo", "o/r", "--min-severity", "severe"}); code != 2 {
+		t.Errorf("exit %d, want 2", code)
+	}
 }
 
 func TestGetChangedFilesSet_InGitRepo(t *testing.T) {
