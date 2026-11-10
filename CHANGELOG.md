@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The Action's `pr-comment` counted zero findings at every severity and
+  posted no inline comment for the report nox writes (#1016): a shell script
+  read the indented `findings.json` with `sed`, one line at a time, needed
+  bash 4 (`declare -A`, absent from macOS's bash 3.2) and fell back to a
+  one-line summary without `python3`. `nox annotate` now does it:
+  `--summary` posts the per-severity count of every finding,
+  `--max-comments` and `--min-severity` bound the inline comments, and
+  findings are read with the loader every other command uses. With
+  `annotate` and `pr-comment` both on, inline comments are posted once, not
+  twice. The script is removed.
+
 ## [1.64.0] - 2026-11-10
 
 ### Added

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -17,14 +18,28 @@ import (
 func runAnnotate(args []string) int {
 	fs := flag.NewFlagSet("annotate", flag.ContinueOnError)
 	var (
-		inputPath string
-		prNumber  string
-		repo      string
+		inputPath   string
+		prNumber    string
+		repo        string
+		summary     bool
+		maxComments int
+		minSeverity string
 	)
 	fs.StringVar(&inputPath, "input", "findings.json", "path to findings.json")
 	fs.StringVar(&prNumber, "pr", "", "PR number (auto-detected from GITHUB_REF)")
 	fs.StringVar(&repo, "repo", "", "repository owner/name (auto-detected from GITHUB_REPOSITORY)")
+	fs.BoolVar(&summary, "summary", false, "also post a comment counting every finding by severity")
+	fs.IntVar(&maxComments, "max-comments", 0, "post at most this many inline comments, most severe first (0: no limit)")
+	fs.StringVar(&minSeverity, "min-severity", "", "post inline comments only at or above this severity")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if minSeverity != "" && !findings.Severity(minSeverity).IsValid() {
+		fmt.Fprintf(os.Stderr, "error: --min-severity %q is not a severity (critical, high, medium, low, info)\n", minSeverity)
+		return 2
+	}
+	if maxComments < 0 {
+		fmt.Fprintln(os.Stderr, "error: --max-comments cannot be negative")
 		return 2
 	}
 
@@ -53,49 +68,55 @@ func runAnnotate(args []string) int {
 		return 2
 	}
 
-	// Read findings via the one shared loader.
-	ff, err := report.LoadFindingsFile(inputPath)
+	// Read findings via the one shared loader, which reads the report nox
+	// writes whatever its layout. (The Action's PR comment once parsed it
+	// with sed, one line at a time, and counted zero of every severity in
+	// the indented report nox emits: #1016.)
+	all, err := report.LoadFindingsFile(inputPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: reading %s: %v\n", inputPath, err)
 		return 2
 	}
-	if len(ff) == 0 {
-		fmt.Println("annotate: no findings to annotate")
-		return 0
-	}
+	opts := annotate.Options{MaxComments: maxComments, MinSeverity: findings.Severity(minSeverity)}
 
-	// Filter to changed files if possible.
-	changedSet := getChangedFilesSet()
-	if changedSet != nil {
-		var filtered []findings.Finding
-		for i := range ff {
-			if _, ok := changedSet[ff[i].Location.FilePath]; ok {
-				filtered = append(filtered, ff[i])
+	// Inline comments: findings in changed files, if those can be told.
+	inline := all
+	if changedSet := getChangedFilesSet(); changedSet != nil {
+		inline = nil
+		for i := range all {
+			if _, ok := changedSet[all[i].Location.FilePath]; ok {
+				inline = append(inline, all[i])
 			}
 		}
-		ff = filtered
 	}
+	inline = annotate.Select(inline, opts)
 
-	if len(ff) == 0 {
-		fmt.Println("annotate: no findings in changed files")
-		return 0
-	}
-
-	// Build payload using core/annotate.
-	payload := annotate.BuildReviewPayload(ff)
-	if payload == nil {
+	status, posted := 0, 0
+	switch payload := annotate.BuildReviewPayload(inline); {
+	case len(all) == 0:
 		fmt.Println("annotate: no findings to annotate")
-		return 0
+	case payload == nil:
+		fmt.Println("annotate: no findings in changed files")
+	default:
+		if err := ghAPI(fmt.Sprintf("repos/%s/pulls/%s/reviews", repo, prNumber), payload); err != nil {
+			fmt.Fprintf(os.Stderr, "error: posting annotations: %v\n", err)
+			status = 2
+		} else {
+			posted = len(inline)
+			fmt.Printf("annotate: posted %d finding(s) to %s#%s\n", posted, repo, prNumber)
+		}
 	}
 
-	// Post review comments via gh CLI.
-	if err := postReviewComments(repo, prNumber, payload); err != nil {
-		fmt.Fprintf(os.Stderr, "error: posting annotations: %v\n", err)
-		return 2
+	if summary {
+		body := map[string]string{"body": annotate.Summary(all, posted, opts)}
+		if err := ghAPI(fmt.Sprintf("repos/%s/issues/%s/comments", repo, prNumber), body); err != nil {
+			fmt.Fprintf(os.Stderr, "error: posting summary: %v\n", err)
+			status = 2
+		} else {
+			fmt.Printf("annotate: posted summary of %d finding(s) to %s#%s\n", len(all), repo, prNumber)
+		}
 	}
-
-	fmt.Printf("annotate: posted %d finding(s) to %s#%s\n", len(ff), repo, prNumber)
-	return 0
+	return status
 }
 
 func getChangedFilesSet() map[string]struct{} {
@@ -125,20 +146,19 @@ func getChangedFilesSet() map[string]struct{} {
 	return set
 }
 
-func postReviewComments(repo, prNumber string, payload *annotate.ReviewPayload) error {
-	payloadData, err := json.Marshal(payload)
+// ghAPI POSTs body as JSON to a GitHub API endpoint through the gh CLI,
+// which authenticates from GH_TOKEN or GITHUB_TOKEN.
+func ghAPI(endpoint string, body any) error {
+	data, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("marshalling payload: %w", err)
 	}
-
-	endpoint := fmt.Sprintf("repos/%s/pulls/%s/reviews", repo, prNumber)
 	cmd := exec.Command("gh", "api", endpoint, "--method", "POST", "--input", "-")
-	cmd.Stdin = strings.NewReader(string(payloadData))
+	cmd.Stdin = strings.NewReader(string(data))
+	cmd.Stdout = io.Discard
 	cmd.Stderr = os.Stderr
-
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("gh api: %w", err)
 	}
-
 	return nil
 }

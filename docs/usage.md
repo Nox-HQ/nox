@@ -529,6 +529,9 @@ nox annotate [flags]
 | `--input` | `findings.json` | Path to findings.json |
 | `--pr` | (auto) | PR number (auto-detected from `GITHUB_REF`) |
 | `--repo` | (auto) | Repository owner/name (auto-detected from `GITHUB_REPOSITORY`) |
+| `--summary` | `false` | Also post a comment counting every finding in the report by severity |
+| `--max-comments` | `0` | Post at most this many inline comments, most severe first (`0`: no limit) |
+| `--min-severity` | — | Post inline comments only at or above this severity |
 
 **Examples:**
 
@@ -538,6 +541,11 @@ nox annotate --input nox-results/findings.json
 
 # Explicit PR and repo
 nox annotate --input findings.json --pr 42 --repo myorg/myrepo
+
+# Also post a comment counting every finding by severity, and post at most
+# 25 inline comments at low or above, most severe first (the Action's
+# pr-comment input)
+nox annotate --input findings.json --summary --max-comments 25 --min-severity low
 ```
 
 Requires the `gh` CLI to be installed and authenticated. Each finding is posted as an inline comment with severity badge, rule ID, and message.
@@ -2229,9 +2237,9 @@ jobs:
 | `vex` | — | Path to an OpenVEX waiver document |
 | `changed-since` | — | Scan only files changed since this git ref (e.g. `origin/main`) |
 | `offline` | `false` | Guarantee zero network: no API, no token, no telemetry |
-| `pr-comment` | `false` | Post inline PR review comments with finding details |
-| `max-comments` | `25` | Maximum number of inline PR comments to post |
-| `min-severity` | `low` | Minimum severity for PR comments |
+| `pr-comment` | `false` | Also post a summary comment counting every finding by severity, and bound the inline comments |
+| `max-comments` | `25` | With `pr-comment`, the most inline comments to post, most severe first |
+| `min-severity` | `low` | With `pr-comment`, the lowest severity posted inline |
 
 `fail-on-degraded` is worth setting on a gate you actually rely on. Without it,
 an OSV outage, a required plugin that failed to install, or a lockfile nox
