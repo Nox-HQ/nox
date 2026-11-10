@@ -33,6 +33,8 @@ func TestBuildPURLCoversInventoriedEcosystems(t *testing.T) {
 		{deps.Package{Name: "http", Version: "1.2.0", Ecosystem: "pub"}, "pkg:pub/http@1.2.0"},
 		{deps.Package{Name: "phoenix", Version: "1.7.10", Ecosystem: "hex"}, "pkg:hex/phoenix@1.7.10"},
 		{deps.Package{Name: "github.com/vapor/vapor", Version: "4.89.0", Ecosystem: "swift"}, "pkg:swift/github.com/vapor/vapor@4.89.0"},
+		// OpenSSL linked statically into an image's binary.
+		{deps.Package{Name: "openssl", Version: "3.5.9", Ecosystem: "openssl"}, "pkg:generic/openssl@3.5.9"},
 		// Unchanged forms.
 		{deps.Package{Name: "golang.org/x/net", Version: "v0.30.0", Ecosystem: "go"}, "pkg:golang/golang.org/x/net@v0.30.0"},
 		{deps.Package{Name: "org.apache:commons", Version: "1.0", Ecosystem: "maven"}, "pkg:maven/org.apache/commons@1.0"},

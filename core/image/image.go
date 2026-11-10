@@ -266,9 +266,9 @@ func (c *Client) applyLayer(ctx context.Context, ref Ref, l descriptor, files ma
 				return fmt.Errorf("layer %s: %w", l.Digest, err)
 			}
 			added[name] = b
-		case hdr.Typeflag == tar.TypeReg && hdr.Mode&0o111 != 0 && hdr.Size >= minGoBinarySize:
-			if info, ok := readGoBuildInfo(tr); ok {
-				added[name] = info
+		case hdr.Typeflag == tar.TypeReg && hdr.Size >= minExecutableSize && (hdr.Mode&0o111 != 0 || sharedObject.MatchString(base)):
+			if info := probeExecutable(tr, name); !info.empty() {
+				added[name] = encodeExecutable(info)
 			} else {
 				replaced = append(replaced, name)
 			}
@@ -565,7 +565,9 @@ func readContents(files map[string][]byte) Contents {
 			out.Packages = append(out.Packages, dpkgPackages(files[p], p, out.Distro)...)
 		}
 	}
-	out.Packages = append(out.Packages, goBinaryPackages(files)...)
+	exe, exeNotes := executablePackages(files)
+	out.Packages = append(out.Packages, exe...)
+	out.Notes = append(out.Notes, exeNotes...)
 	if v, ok := files["usr/local/go/VERSION"]; ok {
 		first, _, _ := strings.Cut(string(v), "\n")
 		if ver := strings.TrimPrefix(strings.TrimSpace(first), "go"); ver != "" && ver != first {
