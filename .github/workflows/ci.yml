@@ -60,7 +60,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.12.2
+          version: v2.15.0
           only-new-issues: true
 
   # Decide which operating systems the test matrix covers.
@@ -480,13 +480,7 @@ jobs:
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          # Go before 1.27 can fail a clean -fuzztime run with "context
-          # deadline exceeded" when the deadline lands mid-minimization
-          # (golang/go#75804): three of the last 25 main pushes failed this
-          # job that way, on three different targets, with no crasher. 1.27
-          # carries the fix. Only fuzzing uses it; the build and the shipped
-          # binary stay on go.mod's version.
-          go-version: '1.27.3'
+          go-version-file: go.mod
 
       # `-run '^$'` runs the fuzz target alone. Without it `go test -fuzz`
       # first runs every ordinary test in the package under the same
