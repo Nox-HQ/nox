@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- OpenSSL linked statically into a binary in a base image (Node.js bundles
+  its own) is read and checked against OSV's OpenSSL advisories, with the
+  fixed release derived from the series (#1013). A binary counts only when
+  its dynamic section names neither libcrypto nor libssl: nginx, mod_ssl and
+  the openssl tool carry the same version text but run the distribution's
+  libcrypto. Measured on `node:22.11.0-alpine`: 32 advisories for its
+  quictls 3.0.15, equal to OSV's; on the sixteen measured images, bundled
+  OpenSSL only in `node:22-alpine`.
+
 ## [1.63.0] - 2026-11-09
 
 ### Changed

@@ -567,6 +567,10 @@ func (r *SPDXReporter) WriteToFile(inventory *deps.PackageInventory, path string
 
 // purlEcosystems maps internal ecosystem names to PURL type prefixes.
 var purlEcosystems = map[string]string{
+	// OpenSSL linked statically into a binary in an image: no package
+	// manager installed it, and purl's generic type is the spec's own
+	// example for exactly this ("pkg:generic/openssl@1.1.10g").
+	"openssl":   "generic",
 	"go":        "golang",
 	"npm":       "npm",
 	"pypi":      "pypi",

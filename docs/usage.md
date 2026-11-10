@@ -1228,8 +1228,18 @@ An advisory the distribution rates unimportant (Debian) or negligible
 read from rpm's sqlite database and compared in rpm's version order. Red Hat
 and UBI images are not checked: Red Hat publishes advisories per product
 repository, and rpm does not record which one a package came from. Nor are
-rpm's Berkeley DB (EL8 and earlier), SUSE, and runtimes bundled outside
-a package manager (Node's own OpenSSL, for one) are not read yet. See
+rpm's Berkeley DB (EL8 and earlier) or SUSE.
+
+OpenSSL linked statically into a binary (Node.js bundles its own) is read
+from the version text OpenSSL compiles in, and checked against OSV's OpenSSL
+advisories with the fixed release derived from the series. The text alone is
+not enough: a program built against the system libcrypto carries it too, and
+runs whatever the distribution installed. So a binary counts as bundling
+OpenSSL only when its dynamic section names neither libcrypto nor libssl; a
+libcrypto in the system library directories is the distribution's own,
+already checked from its package database. A binary whose libraries cannot
+be established, a development build, or an OpenSSL before 3 is reported as
+not checked. See
 [docs/design/container-image-advisories.md](design/container-image-advisories.md).
 
 ### Predictive Slopsquat Feed (SLOP-002)
