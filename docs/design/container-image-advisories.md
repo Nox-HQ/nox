@@ -189,3 +189,47 @@ be turned off rather than obeyed. A scan that makes no lookups reads images
 from the cache only, so the default never adds a download the user turned
 lookups off to avoid.
 
+### Bundled OpenSSL, 2026-11-10
+
+Node.js links its own OpenSSL, which no package database lists (#1013, from
+Ghostline's `node:22-alpine`). OpenSSL compiles its version text into
+libcrypto ("OpenSSL 3.5.9 29 Sep 2026"), so it can be found while a layer
+streams. Across the sixteen images above, the text was in 26 files: every
+distribution libcrypto, and nginx, mod_ssl, libssh and the openssl tool,
+which print the version they were built against and load the system
+libcrypto at runtime. nginx carried 3.0.15 while Debian's libcrypto beside it
+was 3.0.16. Only node linked OpenSSL statically.
+
+So the rule is structural, not textual: the text, and a dynamic section that
+names neither libcrypto nor libssl (a libcrypto outside the system library
+directories is vendored and counts). The dynamic section comes after the
+text in the file (node: names end at 10 MB, the section starts at 113 MB), so
+every NUL-terminated `*.so` string is recorded with its offset as the file
+streams and DT_NEEDED is resolved at the end: one pass, nothing written to
+disk. Checked against `debug/elf` on nginx, mod_ssl, libssh, openssl and node
+copied out of the images: the same libraries for every one, and only node
+bundling.
+
+OSV knows OpenSSL by repository, not as a package: a GIT range on
+github.com/openssl/openssl and the affected release tags. nox-core asks for
+the repository at the `openssl-<version>` tag and derives the fixed release
+as the one after the last affected tag in the installed 3.x series. Checked
+against OpenSSL's own CVE records (the cvelistV5 entries OSV generated these
+from): 99 CVEs, 295 series, 0 disagreements. quictls (`3.0.15+quic`, what
+Node 22.11 bundles) is read as its OpenSSL release.
+
+Measured with the built binary:
+
+- `node:22.11.0-alpine` (quictls 3.0.15): 32 OpenSSL advisories, through
+  NOX Intelligence and directly from OSV alike, equal to OSV's answer for
+  `openssl-3.0.15` in both directions; every one has a fixed release, so
+  every one gates.
+- `node:22-alpine` (3.5.9): bundled OpenSSL found; OSV lists no advisory
+  for 3.5.9.
+- The sixteen images: bundled OpenSSL in `node:22-alpine` only, and no
+  not-checked notes.
+
+Not read: OpenSSL before 3 (1.1.1's letter releases, and its later fixes
+are not public), development builds, BoringSSL and LibreSSL (their text is
+not OpenSSL's), and an executable smaller than 256 KiB.
+

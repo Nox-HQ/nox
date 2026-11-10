@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"io"
 	"runtime/debug"
-	"sort"
 	"strings"
 )
 
@@ -17,11 +16,6 @@ import (
 // nothing is written to disk. Go 1.18 and later store the two strings inline
 // after a 32-byte header; an older binary stores pointers, which a stream
 // cannot follow, and is skipped.
-
-// minGoBinarySize is the smallest file probed: a stripped Go hello world is
-// over a megabyte, and the probe stays off the many small executables (shell
-// scripts, tiny C tools) every image has.
-const minGoBinarySize = 256 << 10
 
 // maxBuildInfoString bounds the version and module strings: a real module
 // list is kilobytes.
@@ -43,33 +37,6 @@ var (
 const goBuildInfoTag = "\x00go-buildinfo\x00"
 
 const buildInfoHeaderSize = 32
-
-// readGoBuildInfo scans r for a Go build-info record and returns it encoded
-// for the file map. ok is false for anything that is not a Go 1.18+
-// executable.
-func readGoBuildInfo(r io.Reader) (encoded []byte, ok bool) {
-	br := bufio.NewReaderSize(r, 64<<10)
-	head, err := br.Peek(4)
-	if err != nil || !isExecutable(head) {
-		return nil, false
-	}
-	keep := len(buildInfoMagic) - 1
-	window := make([]byte, 0, 128<<10)
-	buf := make([]byte, 64<<10)
-	for {
-		n, err := br.Read(buf)
-		window = append(window, buf[:n]...)
-		if i := bytes.Index(window, buildInfoMagic); i >= 0 {
-			return parseBuildInfo(io.MultiReader(bytes.NewReader(window[i:]), br))
-		}
-		if err != nil {
-			return nil, false
-		}
-		if len(window) > keep {
-			window = append(window[:0], window[len(window)-keep:]...)
-		}
-	}
-}
 
 func isExecutable(head []byte) bool {
 	for _, m := range executableMagic {
@@ -121,18 +88,12 @@ func readVarString(br *bufio.Reader) (string, bool) {
 	return string(b), true
 }
 
-// goBinaryPackages lists what the Go binaries kept in files linked.
-func goBinaryPackages(files map[string][]byte) []Package {
-	var paths []string
-	for p, b := range files {
-		if bytes.HasPrefix(b, []byte(goBuildInfoTag)) {
-			paths = append(paths, p)
-		}
-	}
-	sort.Strings(paths)
+// goBuildPackages lists what one Go binary at p linked, from its build info
+// (version + "\x00" + module text).
+func goBuildPackages(p, info string) []Package {
 	var out []Package
-	for _, p := range paths {
-		version, mod, _ := strings.Cut(strings.TrimPrefix(string(files[p]), goBuildInfoTag), "\x00")
+	{
+		version, mod, _ := strings.Cut(info, "\x00")
 		add := func(name, v string) {
 			out = append(out, Package{Name: name, Version: v, Ecosystem: "go", Path: p})
 		}
@@ -141,7 +102,7 @@ func goBinaryPackages(files map[string][]byte) []Package {
 		}
 		bi, err := debug.ParseBuildInfo(mod)
 		if err != nil {
-			continue
+			return out
 		}
 		if m := bi.Main; m.Path != "" && m.Version != "" && m.Version != "(devel)" {
 			add(m.Path, m.Version)
