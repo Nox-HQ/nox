@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/nox-hq/nox/core/catalog"
 	"github.com/nox-hq/nox/core/findings"
@@ -37,6 +39,27 @@ func toolError(msg string) mcp.StructuredResult {
 	return mcp.StructuredResult{
 		Content: []mcp.Content{mcp.NewTextContent("Error: " + msg)},
 		IsError: true,
+	}
+}
+
+// errorPrefix is how a text handler spells a refusal.
+const errorPrefix = "Error: "
+
+// textTool registers a handler that answers in prose. Such a handler reports a
+// refusal as the string "Error: ...", and the library sends a bare string as a
+// successful text result, so a client branching on isError read every refusal
+// as success. textTool keeps the text and sets isError on it; anything else is
+// passed through as plain text content.
+func textTool[I any](h func(context.Context, I) (string, error)) func(context.Context, I) (mcp.StructuredResult, error) {
+	return func(ctx context.Context, in I) (mcp.StructuredResult, error) {
+		out, err := h(ctx, in)
+		if err != nil {
+			return mcp.StructuredResult{}, err
+		}
+		if msg, ok := strings.CutPrefix(out, errorPrefix); ok {
+			return toolError(msg), nil
+		}
+		return mcp.StructuredResult{Content: []mcp.Content{mcp.NewTextContent(out)}}, nil
 	}
 }
 

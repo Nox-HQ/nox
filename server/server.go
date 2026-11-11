@@ -246,13 +246,13 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("Get security findings from the last scan").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handleGetFindings)
+		Handler(textTool(s.handleGetFindings))
 
 	srv.Tool("get_sbom").
 		Description("Get software bill of materials from the last scan").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handleGetSBOM)
+		Handler(textTool(s.handleGetSBOM))
 
 	srv.Tool("get_finding_detail").
 		Description("Get detailed information about a finding including source context and remediation").
@@ -314,12 +314,12 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	srv.Tool("baseline_add").
 		Description("Add a finding to the baseline by fingerprint").
 		Annotations(additiveLocalWrite).
-		Handler(s.handleBaselineAdd)
+		Handler(textTool(s.handleBaselineAdd))
 
 	srv.Tool("baseline_add_many").
 		Description("Batch-suppress multiple findings by fingerprint in a single call. Saves the baseline once and updates the cached scan results so list_findings/badge reflect the new state without a re-scan.").
 		Annotations(additiveLocalWrite).
-		Handler(s.handleBaselineAddMany)
+		Handler(textTool(s.handleBaselineAddMany))
 
 	srv.Tool("diff").
 		Description("Scan only changed files between two git refs and return findings").
@@ -332,7 +332,7 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("Generate a security grade SVG badge from the last scan").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handleBadge)
+		Handler(textTool(s.handleBadge))
 
 	srv.Tool("version").
 		Description("Return nox version, commit, and build date").
@@ -352,13 +352,13 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("Check whether the nox pre-commit hook is installed in a git repository").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handleProtectStatus)
+		Handler(textTool(s.handleProtectStatus))
 
 	srv.Tool("annotate").
 		Description("Build a GitHub PR review payload from findings for posting via the GitHub API").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handleAnnotate)
+		Handler(textTool(s.handleAnnotate))
 
 	srv.Tool("vex_status").
 		Description("Load a VEX document and show a summary of vulnerability statuses").
@@ -387,12 +387,12 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("Render the detected agent capability lattice as Mermaid (default) or Graphviz dot. Drop into a markdown file or render with dot to audit which tools each agent can call.").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handleAgentGraph)
+		Handler(textTool(s.handleAgentGraph))
 
 	srv.Tool("plugin_install").
 		Description("Install a nox plugin by name (e.g. nox/ai-eval). Resolves the plugin against configured registries, fetches the platform binary, verifies the digest, and registers it in local state. Network call; not read-only. REQUIRES `confirmed: true` — the MCP host MUST collect operator consent before forwarding this call. A plugin install runs new code on the operator's machine.").
 		Annotations(pluginInstallHints).
-		Handler(s.handlePluginInstall)
+		Handler(textTool(s.handlePluginInstall))
 
 	srv.Tool("data_sensitivity_report").
 		Description("Summarize PII and sensitive data findings from the scan (DATA-* rules)").
@@ -405,7 +405,7 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("Generate an interactive HTML security dashboard from scan results").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handleDashboard)
+		Handler(textTool(s.handleDashboard))
 
 	s.registerPluginTools(srv)
 }
@@ -419,13 +419,13 @@ func (s *Server) registerPluginTools(srv *mcp.Server) {
 		Description("List registered plugins and their capabilities").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handlePluginList)
+		Handler(textTool(s.handlePluginList))
 
 	srv.Tool("plugin.call_tool").
 		Description("Invoke a tool provided by a registered plugin").
 		ReadOnly().
 		OpenWorld().
-		Handler(s.handlePluginCallTool)
+		Handler(textTool(s.handlePluginCallTool))
 
 	// plugin.read_resource is deliberately NOT registered. Plugins declare their
 	// resources in their manifest, but PluginService has no resource-read RPC
