@@ -13,6 +13,7 @@ import (
 
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 // ---------------------------------------------------------------------------
@@ -102,7 +103,7 @@ func TestRunScan_DetectsSecrets(t *testing.T) {
 
 	// Create a file with a known AWS Access Key pattern (SEC-001).
 	testFile := filepath.Join(tmpDir, "config.go")
-	awsKey := "AKIAIOSFODNN7EXAMPLE"
+	awsKey := testkey.AWSAccessKeyID()
 	content := `package main
 
 const apiKey = "` + awsKey + `"
@@ -154,7 +155,7 @@ func TestRunScan_SASTOffSkipsLanguage(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmpDir, ".nox.yaml"), []byte(configContent), 0o644); err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
-	awsKey := "AKIAIOSFODNN7EXAMPLE"
+	awsKey := testkey.AWSAccessKeyID()
 	goFile := "package main\n\nconst apiKey = \"" + awsKey + "\"\n"
 	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(goFile), 0o644); err != nil {
 		t.Fatalf("failed to write go file: %v", err)
@@ -244,13 +245,13 @@ func TestRunScan_ConfigExcludePatterns(t *testing.T) {
 		t.Fatalf("failed to create vendor dir: %v", err)
 	}
 	vendorFile := filepath.Join(vendorDir, "dep.go")
-	if err := os.WriteFile(vendorFile, []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+	if err := os.WriteFile(vendorFile, []byte(`const key = "`+testkey.AWSAccessKeyID()+`"`), 0o644); err != nil {
 		t.Fatalf("failed to write vendor file: %v", err)
 	}
 
 	// Create a normal file with a secret.
 	normalFile := filepath.Join(tmpDir, "main.go")
-	if err := os.WriteFile(normalFile, []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+	if err := os.WriteFile(normalFile, []byte(`const key = "`+testkey.AWSAccessKeyID()+`"`), 0o644); err != nil {
 		t.Fatalf("failed to write normal file: %v", err)
 	}
 
@@ -285,7 +286,7 @@ func TestRunScan_ConfigDisableRule(t *testing.T) {
 
 	// Create a file with an AWS key.
 	testFile := filepath.Join(tmpDir, "config.go")
-	if err := os.WriteFile(testFile, []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+	if err := os.WriteFile(testFile, []byte(`const key = "`+testkey.AWSAccessKeyID()+`"`), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
@@ -380,14 +381,14 @@ func TestRunScan_ConfigSkipAnalyzer(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	// A secret under generated/ (skipped) and one under src/ (kept).
-	if err := os.WriteFile(filepath.Join(genDir, "g.go"), []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(genDir, "g.go"), []byte(`const key = "`+testkey.AWSAccessKeyID()+`"`), 0o644); err != nil {
 		t.Fatalf("write generated file: %v", err)
 	}
 	srcDir := filepath.Join(tmpDir, "src")
 	if err := os.MkdirAll(srcDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, "s.go"), []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, "s.go"), []byte(`const key = "`+testkey.AWSAccessKeyID()+`"`), 0o644); err != nil {
 		t.Fatalf("write src file: %v", err)
 	}
 
@@ -434,7 +435,7 @@ func TestRunScan_ConfigSeverityOverride(t *testing.T) {
 
 	// Create a file with an AWS key.
 	testFile := filepath.Join(tmpDir, "config.go")
-	if err := os.WriteFile(testFile, []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+	if err := os.WriteFile(testFile, []byte(`const key = "`+testkey.AWSAccessKeyID()+`"`), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
@@ -810,7 +811,7 @@ func TestRunStagedScanWithOptions_DetectsSecret(t *testing.T) {
 
 	// Write a new file with a secret and stage it (but don't commit).
 	secretFile := filepath.Join(dir, "secret.go")
-	if err := os.WriteFile(secretFile, []byte("package main\nconst key = \"AKIAIOSFODNN7EXAMPLE\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(secretFile, []byte("package main\nconst key = \""+testkey.AWSAccessKeyID()+"\"\n"), 0o644); err != nil {
 		t.Fatalf("writing secret file: %v", err)
 	}
 	cmd := exec.Command("git", "add", "secret.go")
@@ -858,7 +859,7 @@ func TestRunStagedScanWithOptions_CopiesNoxYaml(t *testing.T) {
 	if err := os.MkdirAll(vendorDir, 0o755); err != nil {
 		t.Fatalf("creating vendor dir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(vendorDir, "dep.go"), []byte("const key = \"AKIAIOSFODNN7EXAMPLE\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(vendorDir, "dep.go"), []byte("const key = \""+testkey.AWSAccessKeyID()+"\"\n"), 0o644); err != nil {
 		t.Fatalf("writing vendor file: %v", err)
 	}
 	cmd := exec.Command("git", "add", "-A")
@@ -1213,7 +1214,7 @@ func TestRunScan_InlineSuppression(t *testing.T) {
 	content := `package main
 
 // nox:ignore SEC-001 -- false positive
-const apiKey = "AKIAIOSFODNN7EXAMPLE"
+const apiKey = "` + testkey.AWSAccessKeyID() + `"
 `
 	if err := os.WriteFile(testFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
@@ -1246,7 +1247,7 @@ func TestRunScan_InlineSuppressionMultipleRules(t *testing.T) {
 	content := `package main
 
 // nox:ignore SEC-001 -- false positive
-const apiKey = "AKIAIOSFODNN7EXAMPLE"
+const apiKey = "` + testkey.AWSAccessKeyID() + `"
 `
 	if err := os.WriteFile(testFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
@@ -1256,7 +1257,7 @@ const apiKey = "AKIAIOSFODNN7EXAMPLE"
 	content2 := `package main
 
 // nox:ignore SEC-002 -- false positive
-const secretKey = "aws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+const secretKey = "aws_secret_access_key=` + testkey.AWSSecretAccessKey() + `"
 `
 	if err := os.WriteFile(testFile2, []byte(content2), 0o644); err != nil {
 		t.Fatalf("failed to write test file 2: %v", err)
@@ -1308,7 +1309,7 @@ func TestRunScan_InlineSuppressionExpired(t *testing.T) {
 	content := `package main
 
 // nox:ignore SEC-001 -- temporary fix expires:2025-12-31
-const apiKey = "AKIAIOSFODNN7EXAMPLE"
+const apiKey = "` + testkey.AWSAccessKeyID() + `"
 `
 	if err := os.WriteFile(testFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
@@ -1343,7 +1344,7 @@ func TestRunScan_BaselineMatching(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "config.go")
 	content := `package main
 
-const apiKey = "AKIAIOSFODNN7EXAMPLE"
+const apiKey = "` + testkey.AWSAccessKeyID() + `"
 `
 	if err := os.WriteFile(testFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
@@ -1412,7 +1413,7 @@ func TestRunScan_BaselineCustomPath(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "config.go")
 	content := `package main
 
-const apiKey = "AKIAIOSFODNN7EXAMPLE"
+const apiKey = "` + testkey.AWSAccessKeyID() + `"
 `
 	if err := os.WriteFile(testFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
@@ -1495,7 +1496,7 @@ func TestRunScan_PolicyFailOn(t *testing.T) {
 
 	// Create a file with a high-severity secret.
 	testFile := filepath.Join(tmpDir, "config.go")
-	if err := os.WriteFile(testFile, []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+	if err := os.WriteFile(testFile, []byte(`const key = "`+testkey.AWSAccessKeyID()+`"`), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
@@ -1519,7 +1520,7 @@ func TestRunScan_Deduplication(t *testing.T) {
 	testFile2 := filepath.Join(tmpDir, "file2.go")
 	content := `package main
 
-const apiKey = "AKIAIOSFODNN7EXAMPLE"
+const apiKey = "` + testkey.AWSAccessKeyID() + `"
 `
 	if err := os.WriteFile(testFile1, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write test file 1: %v", err)
@@ -1556,7 +1557,7 @@ func TestRunScan_DeterministicSorting(t *testing.T) {
 	files := []string{"z.go", "a.go", "m.go"}
 	for _, name := range files {
 		testFile := filepath.Join(tmpDir, name)
-		if err := os.WriteFile(testFile, []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+		if err := os.WriteFile(testFile, []byte(`const key = "`+testkey.AWSAccessKeyID()+`"`), 0o644); err != nil {
 			t.Fatalf("failed to write test file %s: %v", name, err)
 		}
 	}
@@ -1663,7 +1664,7 @@ func TestRunScanWithOptions_CustomRulesFileReadError(t *testing.T) {
 
 	// Create a file with a secret.
 	testFile := filepath.Join(tmpDir, "config.go")
-	if err := os.WriteFile(testFile, []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+	if err := os.WriteFile(testFile, []byte(`const key = "`+testkey.AWSAccessKeyID()+`"`), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
@@ -1730,7 +1731,7 @@ func TestRunScanWithOptions_SecretsReadError(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	secretFile := filepath.Join(tmpDir, "secret.go")
-	if err := os.WriteFile(secretFile, []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+	if err := os.WriteFile(secretFile, []byte(`const key = "`+testkey.AWSAccessKeyID()+`"`), 0o644); err != nil {
 		t.Fatalf("failed to write secret file: %v", err)
 	}
 
@@ -1759,7 +1760,7 @@ func TestRunScan_SuppressionOnPreviousLine(t *testing.T) {
 	content := `package main
 
 // nox:ignore SEC-001 -- intentional for testing
-const apiKey = "AKIAIOSFODNN7EXAMPLE"
+const apiKey = "` + testkey.AWSAccessKeyID() + `"
 `
 	if err := os.WriteFile(testFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
@@ -1789,7 +1790,7 @@ func TestRunScan_BaselineNotFound(t *testing.T) {
 
 	// Create a file with a secret.
 	testFile := filepath.Join(tmpDir, "config.go")
-	if err := os.WriteFile(testFile, []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+	if err := os.WriteFile(testFile, []byte(`const key = "`+testkey.AWSAccessKeyID()+`"`), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
@@ -1815,8 +1816,8 @@ func TestRunScan_MultipleSecrets(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "multi.go")
 	content := `package main
 
-const awsKey = "AKIAIOSFODNN7EXAMPLE"
-const awsSecret = "aws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+const awsKey = "` + testkey.AWSAccessKeyID() + `"
+const awsSecret = "aws_secret_access_key=` + testkey.AWSSecretAccessKey() + `"
 `
 	if err := os.WriteFile(testFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
@@ -1845,7 +1846,7 @@ func TestRunScan_EmptySuppressionFile(t *testing.T) {
 
 	// Create a file with a secret but no suppression.
 	testFile := filepath.Join(tmpDir, "config.go")
-	if err := os.WriteFile(testFile, []byte(`const key = "AKIAIOSFODNN7EXAMPLE"`), 0o644); err != nil {
+	if err := os.WriteFile(testFile, []byte(`const key = "`+testkey.AWSAccessKeyID()+`"`), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
@@ -1872,7 +1873,7 @@ func TestRunScan_BaselineSuppressedDoesNotApplyBaseline(t *testing.T) {
 	content := `package main
 
 // nox:ignore SEC-001 -- suppressed
-const apiKey = "AKIAIOSFODNN7EXAMPLE"
+const apiKey = "` + testkey.AWSAccessKeyID() + `"
 `
 	if err := os.WriteFile(testFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
@@ -1943,7 +1944,7 @@ const apiKey = "AKIAIOSFODNN7EXAMPLE"
 func TestRunScanWithOptions_TrackedOnly(t *testing.T) {
 	t.Parallel()
 
-	const secret = "package main\nconst key = \"AKIAIOSFODNN7EXAMPLE\"\n"
+	secret := "package main\nconst key = \"" + testkey.AWSAccessKeyID() + "\"\n"
 	dir := initGitRepo(t, map[string]string{"tracked.go": secret})
 
 	// An untracked working-tree file with its own secret.
@@ -1992,11 +1993,11 @@ func TestRunScan_SingleFileTarget(t *testing.T) {
 
 	dir := t.TempDir()
 	file := filepath.Join(dir, "app.py")
-	if err := os.WriteFile(file, []byte("import os\neval(response)\nkey = \"AKIAIOSFODNN7EXAMPLE\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(file, []byte("import os\neval(response)\nkey = \""+testkey.AWSAccessKeyID()+"\"\n"), 0o644); err != nil {
 		t.Fatalf("writing file: %v", err)
 	}
 	// A sibling file that must NOT be scanned when a single file is targeted.
-	if err := os.WriteFile(filepath.Join(dir, "other.py"), []byte("key = \"AKIAIOSFODNN7EXAMPLE\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "other.py"), []byte("key = \""+testkey.AWSAccessKeyID()+"\"\n"), 0o644); err != nil {
 		t.Fatalf("writing sibling: %v", err)
 	}
 
@@ -2107,7 +2108,7 @@ func TestRunHistoryScan_DetectsSecretInHistory(t *testing.T) {
 	dir := initGitRepo(t, map[string]string{
 		"config.go": `package main
 
-const apiKey = "AKIAIOSFODNN7EXAMPLE"
+const apiKey = "` + testkey.AWSAccessKeyID() + `"
 `,
 	})
 
@@ -2182,7 +2183,7 @@ func TestRunHistoryScan_MaxDepth(t *testing.T) {
 
 	// Create repo with 3 commits, each introducing a secret.
 	dir := initGitRepo(t, map[string]string{
-		"file1.go": `const k1 = "AKIAIOSFODNN7EXAMPLE"`,
+		"file1.go": `const k1 = "` + testkey.AWSAccessKeyID() + `"`,
 	})
 
 	addCommit(t, dir, "second commit", map[string]string{
@@ -2235,7 +2236,7 @@ func TestRunHistoryScan_MultipleCommitsAccumulate(t *testing.T) {
 	t.Parallel()
 
 	dir := initGitRepo(t, map[string]string{
-		"file1.go": `const k1 = "AKIAIOSFODNN7EXAMPLE"`,
+		"file1.go": `const k1 = "` + testkey.AWSAccessKeyID() + `"`,
 	})
 
 	addCommit(t, dir, "add second secret", map[string]string{

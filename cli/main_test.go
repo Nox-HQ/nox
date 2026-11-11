@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 func TestRun_VersionFlag(t *testing.T) {
@@ -72,7 +74,7 @@ func TestRun_ScanDirWithFindings(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create a file with a secret.
-	content := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	content := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(content), 0o644); err != nil {
 		t.Fatalf("writing temp file: %v", err)
 	}
@@ -195,7 +197,7 @@ func TestExtractInterspersedArgs(t *testing.T) {
 func TestRun_ScanInterspersedFlags(t *testing.T) {
 	dir := t.TempDir()
 
-	content := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	content := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(content), 0o644); err != nil {
 		t.Fatalf("writing temp file: %v", err)
 	}
@@ -284,7 +286,7 @@ func TestRun_ScanStagedFlag(t *testing.T) {
 	git("config", "user.name", "Test User")
 
 	// Create a file with a finding.
-	content := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	content := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(content), 0o644); err != nil {
 		t.Fatalf("writing temp file: %v", err)
 	}
@@ -322,7 +324,7 @@ func TestRun_ScanSeverityThreshold(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create a file with a high-severity finding (AWS key is "high", not "critical").
-	content := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	content := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(content), 0o644); err != nil {
 		t.Fatalf("writing temp file: %v", err)
 	}
@@ -414,7 +416,7 @@ func TestRun_ScanSPDXFormat(t *testing.T) {
 func TestRun_ScanQuietFlag(t *testing.T) {
 	dir := t.TempDir()
 
-	content := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	content := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(content), 0o644); err != nil {
 		t.Fatalf("writing temp file: %v", err)
 	}
@@ -511,7 +513,7 @@ func TestRun_ScanWithNoxYAML(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create file with a finding.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -575,7 +577,7 @@ func TestRun_ScanWithPolicy(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create file with finding.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}

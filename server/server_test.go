@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/nox-hq/nox/core/dashboard"
+	"github.com/nox-hq/nox/internal/testkey"
 
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/analyzers/ai"
@@ -152,7 +153,7 @@ func TestHandleScan_CleanDirectory(t *testing.T) {
 
 func TestHandleScan_WithFindings(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 
 	s := New("0.1.0", nil)
 	result, err := s.handleScan(context.Background(), scanInput{Path: dir})
@@ -688,7 +689,7 @@ func TestHandleGetFindingDetail_FindingNotFound(t *testing.T) {
 
 func TestHandleGetFindingDetail_Success(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 
 	s := New("0.1.0", nil)
 	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
@@ -742,7 +743,7 @@ func TestHandleListFindings_BeforeScan(t *testing.T) {
 
 func TestHandleListFindings_NoFilters(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 
 	s := New("0.1.0", nil)
 	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
@@ -764,7 +765,7 @@ func TestHandleListFindings_NoFilters(t *testing.T) {
 
 func TestHandleListFindings_WithSeverityFilter(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 
 	s := New("0.1.0", nil)
 	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
@@ -788,7 +789,7 @@ func TestHandleListFindings_WithSeverityFilter(t *testing.T) {
 
 func TestHandleListFindings_WithRuleFilter(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 
 	s := New("0.1.0", nil)
 	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
@@ -812,7 +813,7 @@ func TestHandleListFindings_WithRuleFilter(t *testing.T) {
 
 func TestHandleListFindings_WithFileFilter(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 
 	s := New("0.1.0", nil)
 	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
@@ -836,7 +837,7 @@ func TestHandleListFindings_WithFileFilter(t *testing.T) {
 
 func TestHandleListFindings_WithLimit(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 
 	s := New("0.1.0", nil)
 	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
@@ -860,7 +861,7 @@ func TestHandleListFindings_WithLimit(t *testing.T) {
 
 func TestHandleListFindings_SuppressedFilter(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 
 	s := New("0.1.0", nil)
 	_, err := s.handleScan(context.Background(), scanInput{Path: dir})
@@ -1067,7 +1068,7 @@ func TestHandleBaselineAdd_FingerprintNotFound(t *testing.T) {
 
 func TestHandleBaselineAdd_Success(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 
 	s := New("0.1.0", nil)
 	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
@@ -1115,7 +1116,7 @@ func TestHandleBaselineAdd_Success(t *testing.T) {
 // don't return the now-baselined finding.
 func TestHandleBaselineAdd_InvalidatesCachedStatus(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 
 	s := New("0.1.0", nil)
 	if _, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil {
@@ -1153,7 +1154,7 @@ func TestHandleBaselineAdd_InvalidatesCachedStatus(t *testing.T) {
 // cache so list_findings reflects the change without a re-scan.
 func TestHandleBaselineAddMany_BatchSuppress(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "a.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "a.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 	writeFile(t, dir, "b.env", "AWS_KEY=AKIAIOSFODNN7EXAMPL2\n")
 
 	s := New("0.1.0", nil)
@@ -1329,7 +1330,7 @@ func TestHandleAnnotate_NoFindings(t *testing.T) {
 
 func TestHandleAnnotate_WithFindings(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 
 	s := New("0.1.0", nil)
 	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})
@@ -1989,7 +1990,7 @@ func TestHandleListFindings_Pagination(t *testing.T) {
 	// AWS keys are AKIA + 16 chars from [A-Z2-7]; use two valid, distinct ones
 	// plus a private-key header.
 	writeFile(t, dir, "secrets.env",
-		"A=AKIAIOSFODNN7EXAMPLE\nB=AKIAWXYZ234567ABCDEF\n")
+		"A="+testkey.AWSAccessKeyID()+"\nB=AKIAWXYZ234567ABCDEF\n")
 	writeFile(t, dir, "id_rsa",
 		"-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA"+strings.Repeat("Qk9VTkRBUlk", 5)+"\n-----END RSA PRIVATE KEY-----\n")
 
@@ -2057,7 +2058,7 @@ func TestHandleSummary(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	writeFile(t, dir, "secrets.env", "A=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "secrets.env", "A="+testkey.AWSAccessKeyID()+"\n")
 	writeFile(t, dir, "id_rsa", "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA"+strings.Repeat("Qk9VTkRBUlk", 5)+"\n-----END RSA PRIVATE KEY-----\n")
 	if r, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil || strings.HasPrefix(r, "Error:") {
 		t.Fatalf("scan failed: %v / %s", err, r)
@@ -2100,7 +2101,7 @@ func TestHandleFindingByFingerprint(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 	if r, err := s.handleScan(context.Background(), scanInput{Path: dir}); err != nil || strings.HasPrefix(r, "Error:") {
 		t.Fatalf("scan failed: %v / %s", err, r)
 	}
