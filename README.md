@@ -111,8 +111,10 @@ PyCharm Professional, WebStorm, …; LSP4IJ for the Community editions).
 ```bash
 nox lsp    # spoken by the editor extension; not run by hand
 ```
+This starts an MCP server on stdio. Every tool is read-only except three, and
+those refuse without explicit confirmation. See [MCP Server](#mcp-server) for
+the tools and resources.
 
-This starts an MCP server on stdio with 10 read-only tools and 5 resources. See [MCP Server](#mcp-server) for details.
 
 ## Installation
 
@@ -912,4 +914,18 @@ For reporting security vulnerabilities, please see [SECURITY.md](SECURITY.md).
 
 ## License
 
+| `nox://rules` | application/json | Every rule, with its metadata |
+| `nox://dashboard` | text/html | HTML dashboard of the last scan |
+| `nox://project/{project}/findings` | application/json | Findings of one project |
+| `nox://project/{project}/sarif` | application/json | SARIF 2.1.0 report of one project |
+| `nox://project/{project}/sbom/cdx` | application/json | CycloneDX SBOM of one project |
+| `nox://project/{project}/sbom/spdx` | application/json | SPDX SBOM of one project |
+| `nox://project/{project}/ai-inventory` | application/json | AI component inventory of one project |
+| `nox://project/{project}/dashboard` | text/html | HTML dashboard of one project |
+
+In the per-project URIs, `{project}` is the URL-encoded absolute path of a
+directory the server has scanned.
+
+Both tables are checked against the running server by
+`server/docs_surface_test.go`, so they cannot fall behind it.
 Nox is licensed under the [Apache License 2.0](LICENSE).
