@@ -129,8 +129,8 @@ func TestNeedsDoesNotRotateAPublishedExample(t *testing.T) {
 			t.Errorf("%s on a published example does not say there is nothing to rotate: %q", id, n)
 		}
 		// The same rule on any other value still asks for the rotation.
-		if real := needsFor(&assess.Issue{RuleID: id}, rs); !strings.Contains(real, "compromised") {
-			t.Errorf("%s on a real value no longer says it is compromised: %q", id, real)
+		if other := needsFor(&assess.Issue{RuleID: id}, rs); !strings.Contains(other, "compromised") {
+			t.Errorf("%s on a real value no longer says it is compromised: %q", id, other)
 		}
 	}
 }

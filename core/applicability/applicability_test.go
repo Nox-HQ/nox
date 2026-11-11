@@ -92,8 +92,9 @@ func TestDescribeUsesNoRungIdentifier(t *testing.T) {
 	rungs := applicability.Ladder()
 	var verdicts []applicability.Verdict
 	for i, reached := range rungs {
-		verdicts = append(verdicts, applicability.Verdict{Reached: reached, Outcome: applicability.Undetermined})
-		verdicts = append(verdicts, applicability.Established(reached, []string{"main", "f"}))
+		verdicts = append(verdicts,
+			applicability.Verdict{Reached: reached, Outcome: applicability.Undetermined},
+			applicability.Established(reached, []string{"main", "f"}))
 		for _, stopped := range rungs[i+1:] {
 			verdicts = append(verdicts,
 				applicability.Undeterminable(reached, stopped, capability.Unsupported),
