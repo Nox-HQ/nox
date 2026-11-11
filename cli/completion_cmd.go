@@ -44,7 +44,7 @@ _nox_completions() {
             return 0
             ;;
         --format)
-            COMPREPLY=( $(compgen -W "json sarif cdx spdx all" -- "${cur}") )
+            COMPREPLY=( $(compgen -W "json sarif cdx spdx html all" -- "${cur}") )
             return 0
             ;;
         baseline)
@@ -96,7 +96,7 @@ _nox() {
     )
 
     _arguments -C \
-        '--format[Output format]:format:(json sarif cdx spdx all)' \
+        '--format[Output format]:format:(json sarif cdx spdx html all)' \
         '--output[Output directory]:directory:_files -/' \
         '(-q --quiet)'{-q,--quiet}'[Suppress output]' \
         '(-v --verbose)'{-v,--verbose}'[Verbose output]' \
@@ -150,7 +150,7 @@ complete -c nox -n '__fish_use_subcommand' -a 'watch' -d 'Watch for changes and 
 complete -c nox -n '__fish_use_subcommand' -a 'completion' -d 'Generate shell completions'
 complete -c nox -n '__fish_use_subcommand' -a 'protect' -d 'Manage git pre-commit hook'
 complete -c nox -n '__fish_use_subcommand' -a 'annotate' -d 'Annotate a PR with findings'
-complete -c nox -l format -d 'Output format' -a 'json sarif cdx spdx all'
+complete -c nox -l format -d 'Output format' -a 'json sarif cdx spdx html all'
 complete -c nox -l output -d 'Output directory' -rF
 complete -c nox -s q -l quiet -d 'Suppress output'
 complete -c nox -s v -l verbose -d 'Verbose output'

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	nox "github.com/nox-hq/nox/core"
@@ -434,7 +435,7 @@ func absAgainst(root, p string) string {
 // them: -q and --quiet must keep binding one variable, and that guard reads
 // the source.
 const (
-	usageFormat  = "output formats: json,sarif,cdx,spdx,all (comma-separated) (default \"json\")"
+	usageFormat  = "output formats: json,sarif,cdx,spdx,html,all (comma-separated) (default \"json\")"
 	usageOutput  = "output directory for report files (default \".\")"
 	usageRules   = "path to custom rules YAML file or directory"
 	usageQuiet   = "suppress all output except errors"
@@ -625,7 +626,11 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	formatFlag = resolveOutputFormat(formatFlag, cfg.Output.Format)
 	outputDir = resolveOutputDir(outputDir, cfg.Output.Directory)
 
-	formats := parseFormats(formatFlag)
+	formats, err := parseFormats(formatFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
+	}
 
 	if !quiet {
 		switch {
@@ -1039,24 +1044,36 @@ func serveAllowedPaths(flagValue string) ([]string, error) {
 	return []string{cwd}, nil
 }
 
+// reportFormats are the formats `nox scan --format` writes, in the order "all"
+// expands to. The switch that writes reports has a case for each; a name that
+// is not here has no case there, so it must be refused, not skipped.
+var reportFormats = []string{"json", "sarif", "cdx", "spdx", "html"}
+
 // parseFormats splits the comma-separated format flag into individual format
 // strings. "all" expands to all supported formats.
-func parseFormats(fmtFlag string) []string {
+//
+// An unknown name is an error. It used to pass through to a switch with no
+// default branch, so `--format sarfi` scanned, wrote no report and exited 0.
+func parseFormats(fmtFlag string) ([]string, error) {
 	if fmtFlag == "all" {
-		return []string{"json", "sarif", "cdx", "spdx", "html"}
+		return append([]string(nil), reportFormats...), nil
 	}
 
 	var formats []string
 	for _, f := range strings.Split(fmtFlag, ",") {
 		f = strings.TrimSpace(f)
-		if f != "" {
-			formats = append(formats, f)
+		if f == "" {
+			continue
 		}
+		if !slices.Contains(reportFormats, f) {
+			return nil, fmt.Errorf("unknown output format %q: use %s, or all on its own", f, strings.Join(reportFormats, ", "))
+		}
+		formats = append(formats, f)
 	}
 	if len(formats) == 0 {
-		return []string{"json"}
+		return []string{"json"}, nil
 	}
-	return formats
+	return formats, nil
 }
 
 // emitHypotheses writes the active-testing questions a scan raises.

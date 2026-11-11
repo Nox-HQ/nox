@@ -241,13 +241,17 @@ func TestParseFormats(t *testing.T) {
 		{"json", []string{"json"}},
 		{"sarif", []string{"sarif"}},
 		{"json,sarif", []string{"json", "sarif"}},
+		{"json, html", []string{"json", "html"}},
 		{"all", []string{"json", "sarif", "cdx", "spdx", "html"}},
 		{"", []string{"json"}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result := parseFormats(tt.input)
+			result, err := parseFormats(tt.input)
+			if err != nil {
+				t.Fatalf("parseFormats(%q): %v", tt.input, err)
+			}
 			if len(result) != len(tt.expected) {
 				t.Fatalf("expected %d formats, got %d: %v", len(tt.expected), len(result), result)
 			}
@@ -257,6 +261,49 @@ func TestParseFormats(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A format nox does not write used to be accepted: `--format sarfi` ran the
+// whole scan, wrote no report, printed no error and exited 0. A CI job with
+// that typo uploads nothing and stays green, which is a gate that reports
+// success without having produced the thing it gates on.
+func TestParseFormats_RejectsUnknown(t *testing.T) {
+	for _, in := range []string{"sarfi", "json,sarfi", "all,json", "JSON", "yaml"} {
+		got, err := parseFormats(in)
+		if err == nil {
+			t.Errorf("parseFormats(%q) = %v, want an error", in, got)
+			continue
+		}
+		for _, want := range []string{"json", "sarif", "cdx", "spdx", "html", "all"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("parseFormats(%q) error %q does not name the valid format %q", in, err, want)
+			}
+		}
+	}
+}
+
+// The same typo through the real entry point: exit 2, and nothing scanned or
+// written, whether it came from the flag or from .nox.yaml.
+func TestScan_UnknownFormatIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "out")
+	if code := run([]string{"scan", dir, "--offline", "--format", "sarfi", "--output", out}); code != 2 {
+		t.Fatalf("--format sarfi: exit %d, want 2", code)
+	}
+	if _, err := os.Stat(out); err == nil {
+		t.Error("--format sarfi still created the output directory: the scan ran before the format was checked")
+	}
+
+	cfgDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfgDir, ".nox.yaml"), []byte("output:\n  format: sarfi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := run([]string{"scan", cfgDir, "--offline", "--output", filepath.Join(cfgDir, "out")}); code != 2 {
+		t.Fatalf("output.format: sarfi in .nox.yaml: exit %d, want 2", code)
 	}
 }
 
