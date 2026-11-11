@@ -7,8 +7,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // hookRun is what executing an installed hook did.
@@ -287,5 +290,73 @@ func TestInstallHook_MissingBinarySkipsLoudly(t *testing.T) {
 	}
 	if len(got.args) != 0 {
 		t.Errorf("hook ran a nox it was not pointed at: %q", got.args)
+	}
+}
+
+// preCommitFrameworkEntry reads the command the pre-commit framework runs for
+// the nox hook from the manifest this repository publishes.
+func preCommitFrameworkEntry(t *testing.T) string {
+	t.Helper()
+	raw, err := os.ReadFile("../.pre-commit-hooks.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hooks []struct {
+		ID    string `yaml:"id"`
+		Entry string `yaml:"entry"`
+	}
+	if err := yaml.Unmarshal(raw, &hooks); err != nil {
+		t.Fatalf(".pre-commit-hooks.yaml: %v", err)
+	}
+	for _, h := range hooks {
+		if h.ID == "nox" {
+			return h.Entry
+		}
+	}
+	t.Fatal(".pre-commit-hooks.yaml has no hook with id nox")
+	return ""
+}
+
+// The manifest for the pre-commit framework ran `nox scan --staged ... .` with
+// no --output, so every commit left findings.json and ai.inventory.json in the
+// repository: the defect the installed hooks were fixed for, in the third place
+// a hook is defined. The framework splits `entry` the way a shell does and
+// executes it, which is what this does.
+func TestPreCommitFrameworkEntry(t *testing.T) {
+	skipWithoutSh(t)
+	entry := preCommitFrameworkEntry(t)
+	for _, scanExit := range []int{0, 1, 2} {
+		t.Run("scan exit "+strconv.Itoa(scanExit), func(t *testing.T) {
+			bin, argsFile := stubNox(t, strconv.Itoa(scanExit))
+			repo := setupProtectRepo(t)
+			script := filepath.Join(t.TempDir(), "entry.sh")
+			if err := os.WriteFile(script, []byte(entry+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			got := runHook(t, repo, script, bin, argsFile)
+			if got.exit != scanExit {
+				t.Errorf("entry exit %d, want the scan's %d (stderr %q)", got.exit, scanExit, got.stderr)
+			}
+			out := argAfter(got.args, "--output")
+			if out == "" {
+				t.Fatalf("the entry passes no --output, so reports land in the repository: %q", got.args)
+			}
+			if rel, err := filepath.Rel(repo, out); err == nil && !strings.HasPrefix(rel, "..") {
+				t.Errorf("the entry writes reports inside the repository: %s", out)
+			}
+			if !got.reportDirGone {
+				t.Errorf("the report directory %s outlived the entry", out)
+			}
+			if _, err := os.Stat(filepath.Join(repo, "findings.json")); err == nil {
+				t.Error("the entry left findings.json in the repository")
+			}
+			staged := false
+			for _, a := range got.args {
+				staged = staged || a == "--staged"
+			}
+			if !staged {
+				t.Errorf("the entry does not scan the index: %q", got.args)
+			}
+		})
 	}
 }
