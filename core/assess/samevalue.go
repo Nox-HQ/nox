@@ -35,6 +35,9 @@ func valueOwners(ff []findings.Finding, used []bool) []int {
 				if !startsBeforeEndOf(&ff[j], &ff[i]) {
 					break // sorted by start: nothing later overlaps i either
 				}
+				if ff[i].Metadata[findings.MetaValueClass] != ff[j].Metadata[findings.MetaValueClass] {
+					continue // the analyzer told the two values apart
+				}
 				if stronger(ff, j, owner[i]) {
 					owner[i] = j
 				}
@@ -54,12 +57,20 @@ func valueOwners(ff []findings.Finding, used []bool) []int {
 	return owner
 }
 
-// reportsCredential is true for a finding that claims a secret value: a rule in
-// the secrets family above info severity. The info rules there report resource
+// reportsCredential is true for a finding a credential rule made: a rule in the
+// secrets family above info severity. The info rules there report resource
 // identifiers and public keys, which share a line with a credential without
-// being one.
+// being one. A finding the analyzer reclassified by value is still a credential
+// rule's, whatever severity it now carries, and two rules on one such value are
+// one issue like any other.
 func reportsCredential(f *findings.Finding) bool {
-	return f.Severity != findings.SeverityInfo && f.Severity != "" && catalog.Family(f.RuleID).Key == "secrets"
+	if catalog.Family(f.RuleID).Key != "secrets" {
+		return false
+	}
+	if f.Metadata[findings.MetaValueClass] != "" {
+		return true
+	}
+	return f.Severity != findings.SeverityInfo && f.Severity != ""
 }
 
 // stronger orders two findings by rating, then by rule ID, then by scan order,

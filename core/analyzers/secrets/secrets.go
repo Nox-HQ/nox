@@ -397,6 +397,9 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) ([]findings.Finding
 				"an assignment-shaped rule matched entirely within a comment region, so there is no assignment for it to have found")
 			continue
 		}
+		// Everything above decides whether the finding is reported. This
+		// decides what a reported finding claims, from the value itself.
+		classifyValue(content, &results[i])
 		a.corroborate(candidate, content, &results[i])
 		out = append(out, results[i])
 	}

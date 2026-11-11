@@ -130,6 +130,10 @@ type Issue struct {
 	FixedIn string
 	// VulnClass is the taint class a code issue shares, "" otherwise.
 	VulnClass string
+	// ValueClass is what the secrets analyzer established about the values a
+	// code issue reports (findings.ValueClass...), "" when it reclassified
+	// nothing.
+	ValueClass string
 	// Ecosystem, Package and Version name the dependency of a KindNoFix issue,
 	// so the plan can say why nox could not move it.
 	Ecosystem, Package, Version string
@@ -470,9 +474,13 @@ func noFixIssues(unplanned []int, ff []findings.Finding, used []bool) []Issue {
 // codeIssues groups every remaining finding by its rule (and, for taint, by
 // vulnerability class), since one rule is one kind of change. A credential two
 // rules both report is grouped under the stronger of them: see valueOwners.
+//
+// A rule's findings the analyzer reclassified by value are a group of their
+// own: a vendor's published example and a live key are not one kind of change,
+// though one rule matched both.
 func codeIssues(in Input, used []bool) []Issue {
 	ff := in.Findings
-	type key struct{ rule, class string }
+	type key struct{ rule, class, value string }
 	groups := map[key][]int{}
 	var order []key
 	owner := valueOwners(ff, used)
@@ -481,7 +489,7 @@ func codeIssues(in Input, used []bool) []Issue {
 			continue
 		}
 		o := &ff[owner[i]]
-		k := key{o.RuleID, o.Metadata["vuln_class"]}
+		k := key{o.RuleID, o.Metadata["vuln_class"], o.Metadata[findings.MetaValueClass]}
 		if _, ok := groups[k]; !ok {
 			order = append(order, k)
 		}
@@ -500,10 +508,16 @@ func codeIssues(in Input, used []bool) []Issue {
 			}
 		}
 		title := issueTitle(in.Rules, group, k.class, alsoRules(all, k.rule))
+		if k.value != "" {
+			// The rule's description says what the rule looks for. These
+			// findings say what the value turned out to be.
+			title = truncate(sharedMessage(group), maxTitle) + ruleLabel(k.rule, alsoRules(all, k.rule))
+		}
 		s := fmt.Sprintf("%s %s (%s severity, %s confidence).",
 			title, where(ff, idx), severityOrUnrated(sev), confidenceOrUnknown(conf))
 		out = append(out, Issue{Kind: KindCode, Summary: s, Severity: sev, Confidence: conf, Findings: len(idx),
-			Fingerprints: fingerprints(ff, idx), RuleID: k.rule, VulnClass: k.class, rank: rank(sev, conf),
+			Fingerprints: fingerprints(ff, idx), RuleID: k.rule, VulnClass: k.class, ValueClass: k.value,
+			rank:      rank(sev, conf),
 			Attention: anyAttention(ff, idx)})
 	}
 	return out
@@ -537,10 +551,7 @@ const maxTitle = 90
 // looks one of them up in findings.json finds it accounted for here.
 func issueTitle(rs *rules.RuleSet, group []findings.Finding, class string, also []string) string {
 	f := group[0]
-	label := " [" + f.RuleID + "]"
-	if len(also) > 0 {
-		label = " [" + f.RuleID + ", also " + strings.Join(also, ", ") + "]"
-	}
+	label := ruleLabel(f.RuleID, also)
 	if class != "" {
 		if p, ok := classPhrases[class]; ok {
 			return p
@@ -553,6 +564,14 @@ func issueTitle(rs *rules.RuleSet, group []findings.Finding, class string, also 
 		}
 	}
 	return truncate(sharedMessage(group), maxTitle) + label
+}
+
+// ruleLabel is the bracketed rule reference that ends a title.
+func ruleLabel(rule string, also []string) string {
+	if len(also) > 0 {
+		return " [" + rule + ", also " + strings.Join(also, ", ") + "]"
+	}
+	return " [" + rule + "]"
 }
 
 // sharedMessage is what every message in the group says. One finding's message

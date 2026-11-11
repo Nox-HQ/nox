@@ -974,8 +974,10 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		return result.PolicyResult.ExitCode
 	}
 
-	// Without a policy every active finding fails the scan, except a
-	// dependency vulnerability nox decided is not impacting (#1012).
+	// Without a policy every active finding fails the scan, except the two
+	// nox itself established are not a problem here: a dependency
+	// vulnerability that is not impacting (#1012), and a vendor's published
+	// example value, which is documentation and not a credential.
 	for i := range activeFindings {
 		if activeFindings[i].GatesByDefault() {
 			return 1

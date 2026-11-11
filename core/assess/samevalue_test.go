@@ -157,3 +157,56 @@ func TestMergedIssueKeepsTheStrongestRating(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+// published marks a finding the way the secrets analyzer does for a value its
+// vendor prints in documentation: info, saying so, with the rule's rating kept.
+func published(f findings.Finding, message string) findings.Finding {
+	f.Metadata = map[string]string{
+		findings.MetaValueClass:   findings.ValueClassPublishedExample,
+		findings.MetaRuleSeverity: string(f.Severity),
+	}
+	f.Severity, f.Message = findings.SeverityInfo, message
+	return f
+}
+
+// A published example is titled by what it is, never by the rule's "detected"
+// sentence, does not need attention, and is still one issue when two rules
+// report it. It is never folded into a real credential of the same rule, or
+// into one that shares its line.
+func TestPublishedExampleIsItsOwnIssue(t *testing.T) {
+	const example = "AWS's published example access key ID: public documentation, not a credential"
+	got := codeIssuesOf(
+		published(secretAt("SEC-001", "high", "high", "README.md", span{6, 6, 23, 43}), example),
+		published(secretAt("SEC-508", "high", "medium", "README.md", span{6, 6, 23, 43}), example),
+		secretAt("SEC-001", "high", "high", "deploy.sh", span{3, 3, 9, 29}),
+		secretAt("SEC-030", "critical", "high", "README.md", span{6, 6, 50, 82}),
+		// A wider match over the example that claims some other value.
+		secretAt("SEC-161", "medium", "medium", "README.md", span{6, 6, 1, 45}),
+	)
+	want := []struct {
+		summary, rule, class string
+		findings             int
+		severity             findings.Severity
+		attention            bool
+	}{
+		{example + " [SEC-001, also SEC-508] at README.md:6 (info severity", "SEC-001",
+			findings.ValueClassPublishedExample, 2, findings.SeverityInfo, false},
+		{"[SEC-001] at deploy.sh:3 (high severity", "SEC-001", "", 1, findings.SeverityHigh, true},
+		{"[SEC-030] at README.md:6 (critical severity", "SEC-030", "", 1, findings.SeverityCritical, true},
+		{"[SEC-161] at README.md:6 (medium severity", "SEC-161", "", 1, findings.SeverityMedium, false},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("%d issues, want %d: %+v", len(got), len(want), summaries(got))
+	}
+	for i, w := range want {
+		is := got[i]
+		if !strings.Contains(is.Summary, w.summary) {
+			t.Errorf("issue %d: %q lacks %q", i, is.Summary, w.summary)
+		}
+		if is.RuleID != w.rule || is.ValueClass != w.class || is.Findings != w.findings ||
+			is.Severity != w.severity || is.Attention != w.attention {
+			t.Errorf("issue %d = rule %s class %q findings %d severity %s attention %v, want %+v",
+				i, is.RuleID, is.ValueClass, is.Findings, is.Severity, is.Attention, w)
+		}
+	}
+}

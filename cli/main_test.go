@@ -86,6 +86,39 @@ func TestRun_ScanDirWithFindings(t *testing.T) {
 	}
 }
 
+// AKIAIOSFODNN7EXAMPLE is the access key ID in AWS's own documentation. A
+// README that quotes it has leaked nothing, so a scan with no policy reports it
+// and exits 0. The same line with a key nobody published still fails.
+func TestRun_ScanPublishedExampleAloneDoesNotFail(t *testing.T) {
+	tests := []struct {
+		name string
+		key  string
+		want int
+	}{
+		{"published example", "AKIAIOSFODNN7EXAMPLE", 0},
+		{"same shape, not published", testkey.AWSAccessKeyID(), 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte("AWS_KEY="+tc.key+"\n"), 0o644); err != nil {
+				t.Fatalf("writing temp file: %v", err)
+			}
+			outDir := filepath.Join(dir, "output")
+			if code := run([]string{"--quiet", "--output", outDir, "scan", dir}); code != tc.want {
+				t.Errorf("exit code = %d, want %d", code, tc.want)
+			}
+			data, err := os.ReadFile(filepath.Join(outDir, "findings.json"))
+			if err != nil {
+				t.Fatalf("reading findings.json: %v", err)
+			}
+			if !strings.Contains(string(data), `"RuleID": "SEC-001"`) && !strings.Contains(string(data), `"RuleID":"SEC-001"`) {
+				t.Errorf("findings.json has no SEC-001 finding; the value must be reported either way")
+			}
+		})
+	}
+}
+
 func TestRun_ScanNonexistentDir(t *testing.T) {
 	code := run([]string{"--quiet", "scan", "/nonexistent/path/abc123"})
 	if code != 2 {

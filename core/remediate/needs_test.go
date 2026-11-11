@@ -112,3 +112,25 @@ func TestNeedsCarryGuidanceNotProvenance(t *testing.T) {
 		}
 	}
 }
+
+// A vendor's published example is public by design. The rule that matched it is
+// a credential rule at high or critical severity, so the plan used to tell the
+// reader to treat documentation as compromised and rotate it.
+func TestNeedsDoesNotRotateAPublishedExample(t *testing.T) {
+	rs := BuiltinRules()
+	for _, id := range []string{"SEC-001", "SEC-002", "SEC-030", "SEC-508"} {
+		n := needsFor(&assess.Issue{RuleID: id, ValueClass: findings.ValueClassPublishedExample}, rs)
+		for _, wrong := range []string{"compromised", "replacement secret", "Rotate", "rotate it"} {
+			if strings.Contains(n, wrong) {
+				t.Errorf("%s on a published example says %q: %q", id, wrong, n)
+			}
+		}
+		if !strings.Contains(n, "nothing to rotate") {
+			t.Errorf("%s on a published example does not say there is nothing to rotate: %q", id, n)
+		}
+		// The same rule on any other value still asks for the rotation.
+		if real := needsFor(&assess.Issue{RuleID: id}, rs); !strings.Contains(real, "compromised") {
+			t.Errorf("%s on a real value no longer says it is compromised: %q", id, real)
+		}
+	}
+}

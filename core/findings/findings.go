@@ -1160,6 +1160,18 @@ func (fs *FindingSet) SetMetadata(i int, key, value string) {
 // the vulnerable code is not linked or not reached by this build. It stays in
 // every report, at info severity and as a VEX `not_affected` in the SBOM; a
 // policy (`policy.fail_on`) decides for itself as before.
+//
+// The other exception is a secrets finding whose value is one its vendor
+// publishes in documentation (ValueClassPublishedExample). That was established
+// by reading the value, it authenticates nothing, and a repository whose README
+// quotes AWS's example key has not failed a security check.
 func (f *Finding) GatesByDefault() bool {
-	return f.RuleID != "VULN-001" || f.Metadata["applicability"] != "not_impacting"
+	if f.RuleID == "VULN-001" {
+		return f.Metadata["applicability"] != "not_impacting"
+	}
+	return !f.isPublishedExample()
+}
+
+func (f *Finding) isPublishedExample() bool {
+	return strings.HasPrefix(f.RuleID, "SEC-") && f.Metadata[MetaValueClass] == ValueClassPublishedExample
 }

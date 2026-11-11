@@ -427,6 +427,9 @@ func classifyPatch(it *Item, is *assess.Issue, in Input, reader *fileReader) {
 // rule's own entry, the taint class, then the rule family's missing piece
 // joined to the rule's remediation guidance.
 func needsFor(is *assess.Issue, rs *rules.RuleSet) string {
+	if is.ValueClass == findings.ValueClassPublishedExample {
+		return needsPublishedExample
+	}
 	if n, ok := needsByRule[is.RuleID]; ok {
 		return n
 	}
@@ -459,6 +462,14 @@ func needsFor(is *assess.Issue, rs *rules.RuleSet) string {
 // which is work that does not exist when nothing secret was exposed.
 const needsNoCredential = "A decision about whether this value belongs in the file. " +
 	"It is not a credential, so nothing was exposed and there is nothing to rotate."
+
+// needsPublishedExample is what nox is missing for a value its vendor prints in
+// documentation. The rule that matched is a credential rule, and its guidance
+// (rotate, treat as compromised) describes a leak that did not happen.
+const needsPublishedExample = "A decision about whether the example stays in the file. " +
+	"The vendor publishes this value in its documentation and it authenticates nothing, " +
+	"so nothing was exposed and there is nothing to rotate. " +
+	"To stop it being reported, replace it with a placeholder such as <your-key>, or add it to the baseline."
 
 // needsByFamily is what nox is missing for a rule that has no entry of its own,
 // by rule family. Each states the information, not the edit.
