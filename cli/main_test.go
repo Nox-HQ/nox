@@ -704,11 +704,13 @@ func TestRun_ScanInvalidSeverityThreshold(t *testing.T) {
 	}
 
 	outDir := filepath.Join(dir, "output")
-	// Invalid severity threshold should still work (just no filtering).
+	// This asserted exit 0 with the comment "just no filtering". On a clean
+	// file it could not tell: an unknown threshold filtered out EVERY finding,
+	// so a scan with findings also exited 0 (TestScan_UnknownThresholdIsAnError).
 	code := run([]string{"--quiet", "--output", outDir, "scan", "--severity-threshold", "invalid", dir})
 
-	if code != 0 {
-		t.Fatalf("expected exit code 0, got %d", code)
+	if code != 2 {
+		t.Fatalf("expected exit code 2 for an unknown severity threshold, got %d", code)
 	}
 }
 

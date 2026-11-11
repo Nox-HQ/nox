@@ -14,6 +14,7 @@ import (
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/hypothesize"
+	"github.com/nox-hq/nox/core/policy"
 	"github.com/nox-hq/nox/core/replay"
 	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/report/sbom"
@@ -636,6 +637,10 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 2
 	}
+	if err := validateThresholds(thresholdFlag, minConfidenceFlag); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
+	}
 
 	if !quiet {
 		switch {
@@ -962,6 +967,13 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		}
 	}
 
+	// A staged scan shows no assessment, and under --quiet (how every hook
+	// calls it) showed nothing at all: a refused commit with no stated reason.
+	gating := gatingFindings(result.PolicyResult, activeFindings)
+	if stagedFlag {
+		printStagedFindings(os.Stderr, gating, verbose)
+	}
+
 	if !quiet {
 		if assessmentShown(quiet, stagedFlag, historyFlag) {
 			scanAssessment{result: result, active: activeFindings, target: target, outDir: outputDir,
@@ -984,14 +996,47 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		return result.PolicyResult.ExitCode
 	}
 
-	// Without a policy every active finding fails the scan, except a
-	// dependency vulnerability nox decided is not impacting (#1012).
-	for i := range activeFindings {
-		if activeFindings[i].GatesByDefault() {
-			return 1
-		}
+	if len(gating) > 0 {
+		return 1
 	}
 	return 0
+}
+
+// validateThresholds rejects a --severity-threshold or --min-confidence that
+// names no level.
+//
+// Neither was checked. An unknown severity threshold is met by no finding, so
+// `--severity-threshold hihg` exited 0 with a secret staged; an unknown
+// confidence threshold is met by every finding, so the filter the operator
+// asked for was silently not applied.
+func validateThresholds(severity, confidence string) error {
+	if severity != "" && !findings.Severity(severity).IsValid() {
+		return fmt.Errorf("unknown --severity-threshold %q: use critical, high, medium or low", severity)
+	}
+	if confidence != "" && !findings.Confidence(confidence).IsValid() {
+		return fmt.Errorf("unknown --min-confidence %q: use high, medium or low", confidence)
+	}
+	return nil
+}
+
+// gatingFindings returns the findings that make a scan exit 1. Without a
+// policy that is every active finding except a dependency vulnerability nox
+// decided is not impacting (#1012). With one, the policy decides the exit code
+// and this returns the active findings it was given when it failed.
+func gatingFindings(result *policy.Result, active []findings.Finding) []findings.Finding {
+	if result != nil {
+		if result.ExitCode == 0 {
+			return nil
+		}
+		return active
+	}
+	var gating []findings.Finding
+	for i := range active {
+		if active[i].GatesByDefault() {
+			gating = append(gating, active[i])
+		}
+	}
+	return gating
 }
 
 func runServe(args []string) int {
