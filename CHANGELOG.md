@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **GitHub Code Scanning now rates each alert at its finding's severity.**
+  GitHub reads an alert's rating only from the rule it points at, so a finding
+  nox had re-rated — a reachability downgrade, a `severity_override`, a VULN-001
+  advisory at its own severity, a published example key — showed on GitHub at
+  its rule's rating. With `--format sarif` that was always the rule's declared
+  severity; from MCP it was whichever of the rule's findings sorted first, so an
+  info finding could strip a real leak of its rating. A finding at its rule's
+  declared severity keeps the rule's id; any other is reported under
+  `<rule>/<severity>`, a sub-rule with the rule's help and the right rating.
+  Those alerts close and reopen once under the new id after upgrading, and
+  their dismissals do not carry over. Fingerprints, baselines, waivers and VEX
+  are unchanged. See `docs/adr/0003-sarif-descriptor-per-rule-and-severity.md`.
+
 ## [1.65.0] - 2026-11-10
 
 ### Changed
