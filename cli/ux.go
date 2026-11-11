@@ -80,16 +80,16 @@ func printStagedFindings(w io.Writer, gating []findings.Finding, verbose bool) {
 	if len(items) == 1 {
 		noun = "finding"
 	}
-	fmt.Fprintf(w, "[staged] %d %s in staged files:\n", len(items), noun)
+	_, _ = fmt.Fprintf(w, "[staged] %d %s in staged files:\n", len(items), noun)
 	shown := items
 	if !verbose && len(shown) > stagedFindingsLimit {
 		shown = shown[:stagedFindingsLimit]
 	}
 	for i := range shown {
 		f := &shown[i]
-		fmt.Fprintf(w, "  %-8s %s  %s:%d  %s\n", f.Severity, f.RuleID, f.Location.FilePath, f.Location.StartLine, f.Message)
+		_, _ = fmt.Fprintf(w, "  %-8s %s  %s:%d  %s\n", f.Severity, f.RuleID, f.Location.FilePath, f.Location.StartLine, f.Message)
 	}
 	if rest := len(items) - len(shown); rest > 0 {
-		fmt.Fprintf(w, "  and %d more: --verbose lists them all\n", rest)
+		_, _ = fmt.Fprintf(w, "  and %d more: --verbose lists them all\n", rest)
 	}
 }

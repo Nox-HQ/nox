@@ -22,6 +22,6 @@ func isHelpArg(a string) bool {
 // reached the subcommand switch and was reported as "unknown baseline
 // subcommand: --help", exit 2: the request for help answered as a mistake.
 func printGroupHelp(usage string) int {
-	fmt.Fprintln(os.Stdout, usage)
+	_, _ = fmt.Fprintln(os.Stdout, usage)
 	return 0
 }
