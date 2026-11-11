@@ -22,21 +22,21 @@ import (
 // sample key written into nox's source is what every secret scanner, GitHub's
 // push protection and nox's own among them, reports as a key being committed,
 // and a digest still matches only the whole value. Which values these are is
-// pinned by TestPublishedValuesAreTheDocumentedOnes.
+// pinned by TestPublishedValuesAreTheDocumentedOnes, which names each one.
 //
 //	AWS    docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html
 //	       docs.aws.amazon.com/sdkref/latest/guide/file-format.html
 //	Stripe docs.stripe.com/api ("A sample test API key is included in all the
 //	       examples here") and docs.stripe.com/keys
 var publishedValues = map[string]string{
-	"1a5d44a2dca19669d72edf4c4f1c27c4c1ca4b4408fbb17f6ce4ad452d78ddb3": "AWS's published example access key ID",           // AKIAIOSFODNN7EXAMPLE
-	"c6ea27c534f993d31f0aef882e3d200e7b87470c379ae79c8f9b19d3bd363dc9": "AWS's published example access key ID",           // AKIAI44QH8DHBEXAMPLE
-	"cb20d34a7adda2f5d2043836051e242fd4c2b233e02c80c91fe9d5af9b100574": "AWS's published example temporary access key ID", // ASIAIOSFODNN7EXAMPLE
-	"7a259e311eb57eb32596c9467e5033dc9184a4a7f1578eeea68ec7834c54651f": "AWS's published example temporary access key ID", // ASIAI44QH8DHBEXAMPLE
-	"78314b11be2e581549ac1c4f616563fad3fdf0c3b71678f6e2299182080e0598": "AWS's published example secret access key",       // wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
-	"e21b597ba6b9cafa59d9ebc4d65c0385f5eb3fa56abab2607fa76589ad849a33": "AWS's published example secret access key",       // je7MtGbClwBF/2Zp9Utk/h3yCo8nvbEXAMPLEKEY
-	"f2d6ca16515033e5dce14eba840b979d27b5cbae24bb3e5bf484339667f86397": "Stripe's published sample test key",              // stripeAPIReferenceKey in the tests
-	"2cafc0970149a84f3b9e62eaf169f36f59907a3b3e31f7b82e68c69cd27f7326": "Stripe's published sample test key",              // stripeQuickstartKey in the tests
+	"1a5d44a2dca19669d72edf4c4f1c27c4c1ca4b4408fbb17f6ce4ad452d78ddb3": "AWS's published example access key ID",
+	"c6ea27c534f993d31f0aef882e3d200e7b87470c379ae79c8f9b19d3bd363dc9": "AWS's published example access key ID",
+	"cb20d34a7adda2f5d2043836051e242fd4c2b233e02c80c91fe9d5af9b100574": "AWS's published example temporary access key ID",
+	"7a259e311eb57eb32596c9467e5033dc9184a4a7f1578eeea68ec7834c54651f": "AWS's published example temporary access key ID",
+	"78314b11be2e581549ac1c4f616563fad3fdf0c3b71678f6e2299182080e0598": "AWS's published example secret access key",
+	"e21b597ba6b9cafa59d9ebc4d65c0385f5eb3fa56abab2607fa76589ad849a33": "AWS's published example secret access key",
+	"f2d6ca16515033e5dce14eba840b979d27b5cbae24bb3e5bf484339667f86397": "Stripe's published sample test key",
+	"2cafc0970149a84f3b9e62eaf169f36f59907a3b3e31f7b82e68c69cd27f7326": "Stripe's published sample test key",
 }
 
 // publishedValueOf says which vendor published value, if one did.
