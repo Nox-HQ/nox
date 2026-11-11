@@ -85,8 +85,60 @@ type baselineStatusInput struct {
 type baselineAddInput struct {
 	Path        string `json:"path"`
 	Fingerprint string `json:"fingerprint"`
-	Reason      string `json:"reason,omitempty"`
+	// Reason, Owner and Confirmed are the baselineConsent arguments. They are
+	// spelled out on each input and not embedded, because the schema generator
+	// does not descend into an embedded struct: embedded, they were absent from
+	// the published schema, which also sets additionalProperties to false, so a
+	// client that validates its calls could never have supplied them.
+	Reason    string `json:"reason"`
+	Owner     string `json:"owner,omitempty"`
+	Confirmed bool   `json:"confirmed"`
 }
+
+func (in baselineAddInput) consent() baselineConsent {
+	return baselineConsent{Reason: in.Reason, Owner: in.Owner, Confirmed: in.Confirmed}
+}
+
+// baselineConsent is what both baseline tools need before they suppress
+// anything. Adding a finding to the baseline stops nox reporting it, so the
+// entry has to say why, and the call has to carry the operator's consent.
+type baselineConsent struct {
+	// Reason is why the finding is accepted. Required: it is stored on the
+	// entry, where a reviewer reads it.
+	Reason string
+	// Owner is the person or team answerable for the decision. Optional.
+	Owner string
+	// Confirmed must be true. As with plugin_install, the MCP host collects the
+	// operator's consent before forwarding the call, and a boolean cannot be
+	// talked into existence the way a free-text approval can.
+	Confirmed bool
+}
+
+// refusal returns why the call may not suppress anything, or "" when it may.
+func (c baselineConsent) refusal(tool string) string {
+	if strings.TrimSpace(c.Reason) == "" {
+		return "Error: " + tool + " requires a reason: say why the finding is accepted. It is stored on the baseline entry, where a reviewer reads it."
+	}
+	if !c.Confirmed {
+		return "Error: " + tool + " requires `confirmed: true`. The MCP host must collect operator consent before forwarding this call. Adding a finding to the baseline stops nox reporting it; an agent that could do that unasked could hide what it was told to hide."
+	}
+	return ""
+}
+
+// entry is the baseline entry for a finding this call accepts.
+func (c baselineConsent) entry(f *findings.Finding, now time.Time) *baseline.Entry {
+	return &baseline.Entry{
+		Fingerprint: f.Fingerprint,
+		RuleID:      f.RuleID,
+		FilePath:    f.Location.FilePath,
+		Severity:    f.Severity,
+		Reason:      strings.TrimSpace(c.Reason),
+		Owner:       strings.TrimSpace(c.Owner),
+		Source:      baseline.SourceMCP,
+		CreatedAt:   now,
+	}
+}
+
 type diffInput struct {
 	Path string `json:"path"`
 	Base string `json:"base,omitempty"`
@@ -310,14 +362,15 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	// (nothing is deleted or overwritten) and adding the same fingerprint again
 	// changes nothing, so they are not destructive and are idempotent; they are
 	// still not read-only, and suppressing a finding is a decision a person
-	// should be asked about.
+	// should be asked about. The annotation is advice to the client; the
+	// `reason` and `confirmed` arguments are what the server itself enforces.
 	srv.Tool("baseline_add").
-		Description("Add a finding to the baseline by fingerprint").
+		Description("Add a finding to the baseline by fingerprint, which stops nox reporting it. REQUIRES a `reason` (stored on the entry) and `confirmed: true` — the MCP host MUST collect operator consent before forwarding this call. `owner` optionally names who is answerable for the decision.").
 		Annotations(additiveLocalWrite).
 		Handler(textTool(s.handleBaselineAdd))
 
 	srv.Tool("baseline_add_many").
-		Description("Batch-suppress multiple findings by fingerprint in a single call. Saves the baseline once and updates the cached scan results so list_findings/badge reflect the new state without a re-scan.").
+		Description("Batch-suppress multiple findings by fingerprint in a single call. REQUIRES a `reason` (stored on every entry) and `confirmed: true` — the MCP host MUST collect operator consent before forwarding this call. `owner` optionally names who is answerable. Saves the baseline once and updates the cached scan results so list_findings/badge reflect the new state without a re-scan.").
 		Annotations(additiveLocalWrite).
 		Handler(textTool(s.handleBaselineAddMany))
 
@@ -1014,6 +1067,10 @@ func (s *Server) handleBaselineAdd(_ context.Context, input baselineAddInput) (s
 	if input.Fingerprint == "" {
 		return "Error: missing required argument: fingerprint", nil
 	}
+	consent := input.consent()
+	if refusal := consent.refusal("baseline_add"); refusal != "" {
+		return refusal, nil
+	}
 
 	// Find the finding in cached scan results.
 	pc := s.getCache("")
@@ -1041,14 +1098,7 @@ func (s *Server) handleBaselineAdd(_ context.Context, input baselineAddInput) (s
 		return "Error: loading baseline: " + err.Error(), nil
 	}
 
-	bl.Add(&baseline.Entry{
-		Fingerprint: matched.Fingerprint,
-		RuleID:      matched.RuleID,
-		FilePath:    matched.Location.FilePath,
-		Severity:    matched.Severity,
-		Reason:      input.Reason,
-		CreatedAt:   time.Now().UTC(),
-	})
+	bl.Add(consent.entry(matched, time.Now().UTC()))
 
 	if err := bl.Save(blPath); err != nil {
 		return "Error: saving baseline: " + err.Error(), nil
@@ -1068,6 +1118,12 @@ type baselineAddManyInput struct {
 	Path         string   `json:"path"`
 	Fingerprints []string `json:"fingerprints"`
 	Reason       string   `json:"reason"`
+	Owner        string   `json:"owner,omitempty"`
+	Confirmed    bool     `json:"confirmed"`
+}
+
+func (in baselineAddManyInput) consent() baselineConsent {
+	return baselineConsent{Reason: in.Reason, Owner: in.Owner, Confirmed: in.Confirmed}
 }
 
 type baselineAddManyResponse struct {
@@ -1086,6 +1142,10 @@ func (s *Server) handleBaselineAddMany(_ context.Context, input baselineAddManyI
 	}
 	if len(input.Fingerprints) == 0 {
 		return "Error: missing required argument: fingerprints", nil
+	}
+	consent := input.consent()
+	if refusal := consent.refusal("baseline_add_many"); refusal != "" {
+		return refusal, nil
 	}
 
 	pc := s.getCache("")
@@ -1113,14 +1173,7 @@ func (s *Server) handleBaselineAddMany(_ context.Context, input baselineAddManyI
 			continue
 		}
 		f := &items[idx]
-		bl.Add(&baseline.Entry{
-			Fingerprint: f.Fingerprint,
-			RuleID:      f.RuleID,
-			FilePath:    f.Location.FilePath,
-			Severity:    f.Severity,
-			Reason:      input.Reason,
-			CreatedAt:   now,
-		})
+		bl.Add(consent.entry(f, now))
 		pc.result.Findings.SetStatus(idx, findings.StatusBaselined)
 		resp.Added++
 	}

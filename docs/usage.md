@@ -2416,7 +2416,8 @@ nox serve --allowed-paths /path/to/project
 | `get_finding_detail` | Get enriched detail for a finding | `finding_id` (required), `context_lines` (default: 5) |
 | `list_findings` | List findings with filters | `severity`, `rule`, `file`, `limit` (default: 50) |
 | `baseline_status` | Show baseline statistics | `path` (absolute path to project root) |
-| `baseline_add` | Add a finding to the baseline | `path`, `fingerprint` (required), `reason` |
+| `baseline_add` | Add a finding to the baseline, which stops nox reporting it | `path`, `fingerprint`, `reason`, `confirmed: true` (all required); `owner` |
+| `baseline_add_many` | Add several findings to the baseline in one call | `path`, `fingerprints`, `reason`, `confirmed: true` (all required); `owner` |
 | `advisories` | Decide what to do about the dependency advisories in the last scan, as `nox advisories` does (new vs. a previous run, relevance, what the policy permits). Never opens a pull request or merges | `previous` (findings.json of the last run), `policy` (`report`, `prepare`, `remediate`) |
 | `plugin.list` | List registered plugins | (none) |
 | `plugin.call_tool` | Invoke a plugin tool | `tool`, `input` (object), `workspace_root` |
@@ -2428,8 +2429,18 @@ about without calling it. Almost all are **read-only** and closed-world;
 look up advisories on the network). The exceptions: `baseline_add` and
 `baseline_add_many` write the baseline file (additive, idempotent, not
 destructive), and `plugin_install` fetches and registers code that runs on your
-machine (open-world, destructive, requires `confirmed: true`). Output is
-truncated at **1 MB**.
+machine (open-world, destructive). Output is truncated at **1 MB**.
+
+The annotations are advice to the client. What the server itself enforces:
+
+- `plugin_install`, `baseline_add` and `baseline_add_many` refuse without
+  `confirmed: true`. The MCP host is expected to collect that from a person
+  before forwarding the call.
+- The two baseline tools also refuse without a `reason`. The entry they write
+  records it, the optional `owner`, and `"source": "mcp"`, so a reviewer reading
+  `.nox/baseline.json` can tell a suppression an agent asked for from one typed
+  at a terminal.
+- A tool that fails or refuses returns its message with `isError` set.
 
 Requests are rate-limited in two tiers, so a runaway or steered agent cannot
 turn the host into a scanning farm. Every request shares a ceiling of 20 per

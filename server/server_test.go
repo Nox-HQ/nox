@@ -1028,6 +1028,8 @@ func TestHandleBaselineAdd_NoScanResults(t *testing.T) {
 	result, err := s.handleBaselineAdd(context.Background(), baselineAddInput{
 		Path:        dir,
 		Fingerprint: "abc123",
+		Reason:      "test",
+		Confirmed:   true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1053,6 +1055,8 @@ func TestHandleBaselineAdd_FingerprintNotFound(t *testing.T) {
 	result, err := s.handleBaselineAdd(context.Background(), baselineAddInput{
 		Path:        dir,
 		Fingerprint: "nonexistent",
+		Reason:      "test",
+		Confirmed:   true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1089,6 +1093,7 @@ func TestHandleBaselineAdd_Success(t *testing.T) {
 		Path:        dir,
 		Fingerprint: fingerprint,
 		Reason:      "test baseline",
+		Confirmed:   true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1133,6 +1138,7 @@ func TestHandleBaselineAdd_InvalidatesCachedStatus(t *testing.T) {
 		Path:        dir,
 		Fingerprint: fp,
 		Reason:      "test",
+		Confirmed:   true,
 	}); err != nil {
 		t.Fatalf("baseline_add failed: %v", err)
 	}
@@ -1172,6 +1178,7 @@ func TestHandleBaselineAddMany_BatchSuppress(t *testing.T) {
 		Path:         dir,
 		Fingerprints: fps,
 		Reason:       "test batch",
+		Confirmed:    true,
 	})
 	if err != nil {
 		t.Fatalf("baseline_add_many failed: %v", err)

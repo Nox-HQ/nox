@@ -860,7 +860,7 @@ nox serve --allowed-paths /path/to/project   # or name the roots
 | `get_finding_detail` | `finding_id`, `context_lines` | Get enriched finding with source context |
 | `list_findings` | `severity`, `rule`, `file`, `limit` | List findings with filtering |
 | `baseline_status` | `path` | Get baseline statistics |
-| `baseline_add` | `path`, `fingerprint`, `reason` | Add finding to baseline |
+| `baseline_add` | `path`, `fingerprint`, `reason`, `confirmed` (all required), `owner` | Add a finding to the baseline, which stops nox reporting it |
 | `advisories` | `previous`, `policy` | Decide what to do about dependency advisories in the last scan (new, relevance, policy). Read-only: never opens a pull request or merges |
 | `attack_plan` | `path` | Build exploit hypotheses from the last scan. Offline: contacts no target, executes nothing |
 | `plugin.list` | -- | List registered plugins |
@@ -881,8 +881,10 @@ Output is truncated at 1 MB. Workspace paths are allowlisted.
 Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
 `idempotentHint`, `openWorldHint`). Most tools are read-only. The exceptions are explicit: `baseline_add` /
 `baseline_add_many` write the baseline file, and `plugin_install` runs new code
-on the operator's machine and requires `confirmed: true`, which the MCP host must
-collect from a human.
+on the operator's machine. All three refuse without `confirmed: true`, which the
+MCP host must collect from a human; the baseline tools also refuse without a
+`reason`, and record it on the entry together with `"source": "mcp"`. A refusal
+is returned with `isError` set, as every tool failure is.
 
 **No ACTIVE capability is exposed over MCP.** `nox attack run` / `replay` /
 `regress` and `nox confirm` send attack payloads at a network target, and they
