@@ -25,6 +25,7 @@ import (
 	"github.com/nox-hq/nox-core/degrade"
 	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
 	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/applicability"
 	"github.com/nox-hq/nox/core/attack"
 	"github.com/nox-hq/nox/core/catalog"
 	"github.com/nox-hq/nox/core/findings"
@@ -317,14 +318,42 @@ func worst(ff []findings.Finding, idx []int, used []bool) (findings.Severity, fi
 	var conf findings.Confidence
 	for _, i := range idx {
 		used[i] = true
-		if severityWeight(ff[i].Severity) > severityWeight(sev) {
-			sev = ff[i].Severity
+		// Info weighs nothing, the same as no severity at all, so a group of
+		// info findings used to come back unrated and print as "(highest
+		// severity: )". A stated severity beats an absent one.
+		if s := ff[i].Severity; severityWeight(s) > severityWeight(sev) || sev == "" {
+			sev = s
 		}
-		if confidenceWeight(ff[i].Confidence) > confidenceWeight(conf) {
-			conf = ff[i].Confidence
+		if c := ff[i].Confidence; confidenceWeight(c) > confidenceWeight(conf) || conf == "" {
+			conf = c
 		}
 	}
 	return sev, conf
+}
+
+// notImpactingNote is the sentence a dependency line carries when every
+// advisory behind it was shown not to affect this build. Without it the line
+// is an instruction to upgrade with nothing saying the upgrade is not urgent.
+// One advisory that is impacting or undetermined and the note is not made: it
+// is a statement about the whole group.
+func notImpactingNote(ff []findings.Finding, idx []int) string {
+	var reasons []string
+	seen := map[string]bool{}
+	for _, i := range idx {
+		m := ff[i].Metadata
+		if m["applicability"] != string(applicability.NotImpacting) {
+			return ""
+		}
+		r := applicability.Rung(m["applicability_stopped_at"]).DoesNotHold()
+		if !seen[r] {
+			seen[r] = true
+			reasons = append(reasons, r)
+		}
+	}
+	if len(reasons) == 0 {
+		return ""
+	}
+	return " Not currently impacting this application: " + strings.Join(reasons, "; ") + "."
 }
 
 // MajorNote is what a major-version upgrade's summary adds to the usual line.
@@ -338,8 +367,9 @@ func upgradeIssue(kind IssueKind, a fix.UpgradeAction, ff []findings.Finding, us
 		from = "the installed version"
 	}
 	s := fmt.Sprintf("Upgrade %s %s -> %s%s: fixes %s (highest severity: %s).",
-		a.Package, from, a.To, inDir(a.Manifest),
-		plural(len(a.Findings), "known vulnerability", "known vulnerabilities"), sev)
+		a.Package, from, fix.SpelledLike(a.From, a.To), inDir(a.Manifest),
+		plural(len(a.Findings), "known vulnerability", "known vulnerabilities"), severityOrUnrated(sev))
+	s += notImpactingNote(ff, a.Findings)
 	if kind == KindMajorUpgrade {
 		s += MajorNote
 	}
@@ -366,7 +396,7 @@ func targetNote(a fix.UpgradeAction) string {
 	switch {
 	case a.PolicyTarget != "":
 		return fmt.Sprintf(" No version inside the upgrade policy clears every advisory: %s would still be affected by %s; only %s does, and it needs --include-major.",
-			a.PolicyTarget, ids, a.To)
+			fix.SpelledLike(a.From, a.PolicyTarget), ids, fix.SpelledLike(a.From, a.To))
 	case len(a.Remaining) > 0:
 		return fmt.Sprintf(" Still affected after this upgrade, with no fix published: %s.", ids)
 	case a.Unverified:
@@ -417,18 +447,20 @@ func noFixIssues(unplanned []int, ff []findings.Finding, used []bool) []Issue {
 		}
 		vulns := plural(len(idx), "known vulnerability", "known vulnerabilities")
 		var s string
-		if best := fix.BestFix(fixes); best != "" {
+		best := fix.SpelledLike(k.version, fix.BestFix(fixes))
+		if best != "" {
 			// A fix exists; nox fix cannot apply it (an ecosystem it does not
 			// drive, or a version it will not move to automatically).
 			s = fmt.Sprintf("Upgrade %s to %s or later%s yourself: fixes %s (highest severity: %s); nox fix cannot apply this upgrade.",
-				name, best, inDir(k.manifest), vulns, sev)
+				name, best, inDir(k.manifest), vulns, severityOrUnrated(sev))
 		} else {
 			s = fmt.Sprintf("%s%s has %s with no fixed version published (highest severity: %s). "+
 				"Check the advisories for a workaround, or replace the package.",
-				name, inDir(k.manifest), vulns, sev)
+				name, inDir(k.manifest), vulns, severityOrUnrated(sev))
 		}
+		s += notImpactingNote(ff, idx)
 		out = append(out, Issue{Kind: KindNoFix, Summary: s, Severity: sev, Confidence: conf, Findings: len(idx),
-			Fingerprints: fingerprints(ff, idx), FixedIn: fix.BestFix(fixes), rank: rank(sev, conf),
+			Fingerprints: fingerprints(ff, idx), FixedIn: best, rank: rank(sev, conf),
 			Ecosystem: k.eco, Package: k.pkg, Version: k.version,
 			Attention: anyAttention(ff, idx)})
 	}

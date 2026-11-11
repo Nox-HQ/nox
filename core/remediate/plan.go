@@ -308,7 +308,7 @@ func versionStep(a *fix.UpgradeAction) string {
 	if from == "" {
 		from = "installed"
 	}
-	return from + " -> " + a.To
+	return from + " -> " + fix.SpelledLike(a.From, a.To)
 }
 
 func classifyNoFix(it *Item, is *assess.Issue) {
