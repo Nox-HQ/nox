@@ -972,7 +972,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// but demoted out of gating severity rather than dropped: a
 					// silent disappearance is indistinguishable from a scanner
 					// that simply missed it.
-					message := fmt.Sprintf("Known vulnerability %s in %s@%s: %s", ov.ID, pkg.Name, pkg.Version, ov.Summary)
+					message := headline("Known vulnerability "+ov.ID, pkg.Name, pkg.Version, ov.Summary)
 					if pkg.Spec != "" {
 						// The version is a range's lower bound, not an install.
 						meta["declared_spec"] = pkg.Spec
@@ -991,8 +991,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// the same treatment an unreachable Go advisory gets below.
 					if !status.Gating() {
 						sev = findings.SeverityInfo
-						message = fmt.Sprintf("THEORETICAL %s in %s@%s: %s",
-							strings.ToLower(string(status)), pkg.Name, pkg.Version, ov.Summary)
+						message = headline("THEORETICAL "+strings.ToLower(string(status)),
+							pkg.Name, pkg.Version, ov.Summary)
 						if ov.Theoretical() {
 							meta["theoretical"] = "true"
 						}

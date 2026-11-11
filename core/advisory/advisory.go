@@ -35,6 +35,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nox-hq/nox/core/applicability"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
 )
@@ -624,7 +625,7 @@ func relevanceSentence(f *findings.Finding, r Relevance) string {
 	m := f.Metadata
 	switch r {
 	case RelNotImpacting:
-		return "This build was shown not to be affected (" + m["applicability_stopped_at"] + " was refuted); reported with that reason, not acted on."
+		return "This build was shown not to be affected (" + applicability.Rung(m["applicability_stopped_at"]).DoesNotHold() + "); reported with that reason, not acted on."
 	case RelCallReachable:
 		if sym := m["affected_symbol_reached"]; sym != "" {
 			if m["affected_symbol_evidence"] == "source_reference" {
@@ -643,7 +644,8 @@ func relevanceSentence(f *findings.Finding, r Relevance) string {
 	if stopped == "" {
 		return "Relevance could not be determined (no applicability analysis recorded); treated as possibly affected, not as safe."
 	}
-	return fmt.Sprintf("Relevance could not be determined (%s was not established: %s); treated as possibly affected, not as safe.", stopped, because)
+	return fmt.Sprintf("Relevance could not be determined (%s was not established: %s); treated as possibly affected, not as safe.",
+		applicability.Rung(stopped).Question(), applicability.Reason(because))
 }
 
 func waiverWord(s findings.Status) string {

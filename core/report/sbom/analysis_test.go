@@ -2,6 +2,7 @@ package sbom
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/nox-hq/nox/core/analyzers/deps"
@@ -45,6 +46,9 @@ func TestCycloneDXRecordsNotImpactingVerdictsAsVEX(t *testing.T) {
 	a := got["GHSA-1234-5678-9012"]
 	if a == nil || a.State != "not_affected" || a.Justification != "code_not_present" || a.Detail == "" {
 		t.Errorf("not-impacting verdict: analysis %+v, want not_affected / code_not_present with a detail", a)
+	}
+	if a != nil && (strings.Contains(a.Detail, "symbol_used") || !strings.Contains(a.Detail, "not linked by this build")) {
+		t.Errorf("detail %q names the step by its identifier instead of saying what was shown", a.Detail)
 	}
 	if got["GHSA-abcd-efgh-ijkl"] != nil {
 		t.Errorf("undetermined verdict carries an analysis: %+v", got["GHSA-abcd-efgh-ijkl"])
