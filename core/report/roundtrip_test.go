@@ -568,7 +568,8 @@ func TestRoundTrip_SARIFStructure(t *testing.T) {
 	// severity with no record of the override.
 	var sawProps bool
 	for _, res := range rep.Runs[0].Results {
-		if res.RuleID == "SEC001" {
+		// No rules are declared here, so the result is named <rule>/<severity>.
+		if rule, _, _ := strings.Cut(res.RuleID, "/"); rule == "SEC001" {
 			sawProps = res.Properties["reachability"] == "reachable"
 		}
 	}

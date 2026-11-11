@@ -100,6 +100,10 @@ func (r *ScanResult) SARIFReporter(version string) *sarif.Reporter {
 	}
 	rep.Capabilities = report.CapabilitiesFrom(r.Capabilities, r.Coverage)
 	rep.CompetenceProfiles = r.CompetenceProfiles
+	// Not embedded, but consulted: which descriptor a finding is reported under
+	// depends on its rule's declared severity, and the CLI (which embeds the
+	// catalog) and MCP (which does not) must name the same finding the same way.
+	rep.Declared = r.Rules
 	if sc := r.Scope.report(); sc != nil {
 		rep.NotScanned = sc.NotScanned
 	}
