@@ -37,8 +37,8 @@ is rejected.
   behavior (no request, no `SLOP-002`, no degradation). A feed named in
   `scan.slop.feed` is used as configured, as before.
 - **No request when it must not**: `--offline` (or `--no-osv`, `scan.osv.disabled`)
-  reads only a verified cached copy; `scan.intelligence.disabled` consults
-  nothing. Without a cached copy the scan records a non-blocking `slop_feed`
+  reads only a verified cached copy, and that holds for a feed `scan.slop.feed`
+  names by URL too; `scan.intelligence.disabled` consults nothing. Without a cached copy the scan records a non-blocking `slop_feed`
   degradation saying the feed was **not checked** and why: that is not "nothing
   high-risk".
 - **Not published yet** (the service answers 404): a non-blocking degradation.

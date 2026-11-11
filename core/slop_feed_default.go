@@ -15,7 +15,7 @@ import (
 // resolveSlopFeed decides which predictive slopsquat feed, if any, the SLOP
 // analyzer gets, and records a degradation for every way it can end up with none.
 //
-//   - scan.slop.feed set: that feed, exactly as before.
+//   - scan.slop.feed set: that feed, under its own verification settings.
 //   - scan.slop.disabled: none, silently (an explicit opt-out).
 //   - otherwise: NOX Intelligence's signed feed, verified under the project's
 //     pinned key when scan.slop.signature_key_path names one and under the key
@@ -27,13 +27,16 @@ import (
 // requested: a verified cached copy is used, and otherwise the scan says the
 // feed was not checked and why, so absence of SLOP-002 never reads as "nothing
 // high-risk".
-func resolveSlopFeed(ctx context.Context, target string, cfg *ScanConfig, opts ScanOptions, deg *degrade.Degradations) []slop.Option { //nolint:gocritic // mirrors RunScanContext
+func resolveSlopFeed(ctx context.Context, target string, cfg *ScanConfig, opts ScanOptions, deg *degrade.Degradations, requests *feedRequests) []slop.Option { //nolint:gocritic // mirrors RunScanContext
 	if !opts.Scopes.Has(ScopeSupplyChain) {
 		return nil
 	}
 	sc := cfg.Scan.Slop
+	// One rule for every feed: --offline, --no-osv and scan.osv.disabled keep
+	// the scan off the network, and a verified cached copy is still read.
+	noNetwork := opts.Offline || opts.DisableOSV || cfg.Scan.OSV.Disabled
 	if sc.Feed != "" {
-		return explicitSlopFeed(ctx, target, sc, opts, deg)
+		return explicitSlopFeed(ctx, target, sc, noNetwork, deg, requests)
 	}
 	if sc.Disabled {
 		return nil
@@ -45,15 +48,13 @@ func resolveSlopFeed(ctx context.Context, target string, cfg *ScanConfig, opts S
 			"SLOP-002 is off; high-risk slopsquat targets are not flagged from the feed. This is not \"nothing high-risk\"")
 		return nil
 	}
-	noNetwork := opts.Offline || opts.DisableOSV || cfg.Scan.OSV.Disabled
-
 	key, err := resolveFeedKey(target, sc.SignatureKeyPath)
 	if err != nil {
 		deg.Add(degrade.SlopFeed, fmt.Sprintf("the slopsquat feed key could not be used: %v", err),
 			"the SLOP-002 predictive dimension is disabled; high-risk slopsquat targets are not being flagged from the feed")
 		return nil
 	}
-	loaded, err := loadRemoteSlopFeed(ctx, target, sc, feedURL, noNetwork, slopfeed.VerifyOptions{RequireSignature: true, Verifier: key.verify})
+	loaded, err := loadRemoteSlopFeed(ctx, target, sc, feedURL, noNetwork, slopfeed.VerifyOptions{RequireSignature: true, Verifier: key.verify}, requests)
 	if err != nil {
 		recordSlopFeedFailure(ctx, deg, key, feedURL, opts.Offline, noNetwork, err)
 		return nil
@@ -78,9 +79,10 @@ func recordSlopFeedFailure(ctx context.Context, deg *degrade.Degradations, key f
 	}
 }
 
-// explicitSlopFeed is the pre-existing behavior for a feed named in .nox.yaml.
-func explicitSlopFeed(ctx context.Context, target string, sc SlopConfig, opts ScanOptions, deg *degrade.Degradations) []slop.Option {
-	loaded, err := loadSlopFeed(ctx, target, sc, opts.Offline)
+// explicitSlopFeed loads the feed .nox.yaml names. One named by URL is fetched
+// only when the scan may use the network; otherwise its verified cache is read.
+func explicitSlopFeed(ctx context.Context, target string, sc SlopConfig, noNetwork bool, deg *degrade.Degradations, requests *feedRequests) []slop.Option {
+	loaded, err := loadSlopFeed(ctx, target, sc, noNetwork, requests)
 	if err != nil {
 		deg.Add(degrade.SlopFeed,
 			fmt.Sprintf("predictive slopsquat feed %q could not be loaded: %v", sc.Feed, err),
@@ -92,7 +94,7 @@ func explicitSlopFeed(ctx context.Context, target string, sc SlopConfig, opts Sc
 
 // loadRemoteSlopFeed fetches (or, with no network, reads the verified cache of)
 // the feed at url under the given verification.
-func loadRemoteSlopFeed(ctx context.Context, target string, sc SlopConfig, url string, noNetwork bool, verify slopfeed.VerifyOptions) (*slopfeed.Loaded, error) {
+func loadRemoteSlopFeed(ctx context.Context, target string, sc SlopConfig, url string, noNetwork bool, verify slopfeed.VerifyOptions, requests *feedRequests) (*slopfeed.Loaded, error) {
 	ttl := feed.DefaultRefreshInterval
 	if sc.Refresh != "" {
 		parsed, err := parseFeedRefresh(sc.Refresh)
@@ -105,5 +107,5 @@ func loadRemoteSlopFeed(ctx context.Context, target string, sc SlopConfig, url s
 	if cacheDir != "" && !filepath.IsAbs(cacheDir) {
 		cacheDir = filepath.Join(scanRootDir(target), cacheDir)
 	}
-	return feed.LoadRemote(ctx, feed.RemoteOptions{URL: url, CacheDir: cacheDir, TTL: ttl, Offline: noNetwork, Verify: verify})
+	return feed.LoadRemote(ctx, feed.RemoteOptions{URL: url, CacheDir: cacheDir, TTL: ttl, Offline: noNetwork, Verify: verify, OnRequest: requests.note})
 }

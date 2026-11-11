@@ -303,3 +303,57 @@ func TestLoadRemoteOverHTTPSVerifiesAndCaches(t *testing.T) {
 		t.Fatalf("expected exactly one request, got %d", got)
 	}
 }
+
+// A request the loader makes is a request the scan made, so the caller is told
+// about it: once when the feed is fetched, not at all when the cache answers or
+// the load is offline, and also when the request fails, because an unanswered
+// request still left the machine.
+func TestLoadRemoteReportsTheRequestsItMakes(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(nil)
+	var hits int64
+	srv := countingServer(signedFeedBytes(t, priv), &hits)
+	defer srv.Close()
+
+	var requested []string
+	opts := RemoteOptions{
+		URL:       srv.URL,
+		CacheDir:  t.TempDir(),
+		TTL:       time.Hour,
+		Verify:    slopfeed.VerifyOptions{RequireSignature: true, Verifier: slopfeed.Ed25519Verifier(pub)},
+		OnRequest: func(u string) { requested = append(requested, u) },
+	}
+	if _, err := LoadRemote(context.Background(), opts); err != nil {
+		t.Fatalf("first load: %v", err)
+	}
+	if len(requested) != 1 || requested[0] != srv.URL {
+		t.Fatalf("first load reported %q, want the one request to %s", requested, srv.URL)
+	}
+
+	requested = nil
+	if _, err := LoadRemote(context.Background(), opts); err != nil {
+		t.Fatalf("second load: %v", err)
+	}
+	if len(requested) != 0 {
+		t.Errorf("a fresh cache answered, yet %q was reported as requested", requested)
+	}
+
+	offline := opts
+	offline.Offline = true
+	offline.TTL = 0
+	if _, err := LoadRemote(context.Background(), offline); err != nil {
+		t.Fatalf("offline load: %v", err)
+	}
+	if len(requested) != 0 {
+		t.Errorf("an offline load reported %q as requested", requested)
+	}
+
+	srv.Close()
+	failing := opts
+	failing.CacheDir = t.TempDir()
+	if _, err := LoadRemote(context.Background(), failing); err == nil {
+		t.Fatal("a closed server with no cache must fail the load")
+	}
+	if len(requested) != 1 {
+		t.Errorf("a request that failed reported %q, want it reported once", requested)
+	}
+}

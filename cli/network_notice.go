@@ -90,3 +90,18 @@ func goModulesNetworkNotice(sources []string) string {
 		"Opt out: GOPROXY=off keeps the go command off the network, and Go advisories are then not narrowed to the packages "+
 		"the build links; --offline or scan.osv.disabled: true makes no network request.", strings.Join(named, ", then "))
 }
+
+// feedNetworkNotice names the signed feeds a scan asked for. They are requests
+// of their own: the slopsquat feed is fetched for a project with no dependency
+// at all, when the dependency notice has nothing to say, and either feed's URL
+// can be pointed somewhere else in .nox.yaml. urls is what the loaders
+// recorded; it is empty, and nothing is printed, when the cache answered.
+func feedNetworkNotice(urls []string) string {
+	if len(urls) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("[network] signed feeds: %s requested (a GET of a public file, verified against a pinned key and "+
+		"cached on this machine so later scans do not ask again). Nothing from the repository was sent. "+
+		"Opt out: scan.slop.disabled: true and scan.mcp_feed.disabled: true in .nox.yaml request neither feed; "+
+		"--offline or scan.osv.disabled: true makes no network request.", strings.Join(urls, " and "))
+}

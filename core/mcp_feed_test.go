@@ -227,3 +227,57 @@ func TestMCPFeed_ReadsVSCodeServersToo(t *testing.T) {
 	}
 	_ = degrade.MCP
 }
+
+// docs/intelligence.md: "--offline, --no-osv, scan.osv.disabled make no request
+// (a verified cached copy is still read)". --no-osv used to fetch the feed, and
+// scan.osv.disabled used to ignore a verified copy it already held.
+func TestMCPFeed_NetworkOffMakesNoRequestAndStillReadsTheCache(t *testing.T) {
+	good, _ := os.ReadFile(mcpFeedTestdata + "feed.json")
+	tests := []struct {
+		name    string
+		opts    ScanOptions
+		noxYAML string
+	}{
+		{name: "--no-osv", opts: ScanOptions{DisableOSV: true}},
+		{name: "scan.osv.disabled", noxYAML: "  osv:\n    disabled: true\n"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, requests := feedProject(t, feedServers, 200, good, true)
+			online, err := os.ReadFile(filepath.Join(dir, ".nox.yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			networkOff := func() *ScanResult {
+				t.Helper()
+				writeFile(t, filepath.Join(dir, ".nox.yaml"), string(online)+tc.noxYAML)
+				res, err := RunScanContext(context.Background(), dir, tc.opts)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return res
+			}
+
+			res := networkOff()
+			if requests.Load() != 0 {
+				t.Fatalf("made %d feed requests", requests.Load())
+			}
+			ds := feedDegradations(res)
+			if len(ds) != 1 || !ds[0].Advisory || !strings.Contains(ds[0].Detail, "not checked") {
+				t.Fatalf("no cache and no network = %+v, want one non-blocking \"not checked\"", ds)
+			}
+
+			// Online once fills the cache.
+			writeFile(t, filepath.Join(dir, ".nox.yaml"), string(online))
+			if _, err := RunScan(dir); err != nil {
+				t.Fatal(err)
+			}
+			requests.Store(0)
+			res = networkOff()
+			if requests.Load() != 0 || len(feedFindings(res)) != 3 || len(feedDegradations(res)) != 0 {
+				t.Fatalf("from the verified cache: requests=%d findings=%d degradations=%+v",
+					requests.Load(), len(feedFindings(res)), feedDegradations(res))
+			}
+		})
+	}
+}

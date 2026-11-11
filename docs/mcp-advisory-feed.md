@@ -68,7 +68,8 @@ re-verified on every read.
 - Only when the intelligence service is in use (or `url` is set): with
   `scan.intelligence.disabled` and no `url`, nothing is fetched and the scan says
   the servers were not checked.
-- `--offline` makes no request. It reads the verified cache; with none, it says so.
+- `--offline`, `--no-osv` and `scan.osv.disabled` make no request. Each reads the
+  verified cache; with none, the scan says the servers were not checked.
 - Within `refresh` (24h by default) a cached feed is used without a request, so
   repeated scans are deterministic. If a refresh fails, the verified cached copy
   is used and the scan says the feed could not be refreshed.
@@ -81,8 +82,8 @@ checked**, never "no advisories":
 | cause | blocks a build (`--fail-on-degraded`)? |
 |---|---|
 | the service answers 404: it does not serve the feed, or has not published one (the service's own `disabled_reason` is quoted) | no |
-| `scan.intelligence.disabled` (or `scan.osv.disabled`): nothing is requested | no |
-| offline with no cached feed | no |
+| `scan.intelligence.disabled` with no `url`: nothing is requested | no |
+| `--offline`, `--no-osv` or `scan.osv.disabled` with no cached feed | no |
 | a stale cached copy was used because the refresh failed | no |
 | the feed does not verify under the built-in or the pinned key (digest, signature, schema), including a rotated service key | **yes** |
 | the service is unreachable with no cache | **yes** |

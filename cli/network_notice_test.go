@@ -108,3 +108,27 @@ func TestGoModulesNetworkNotice(t *testing.T) {
 		t.Errorf("the module cache answered, so nothing was requested; got %q", got)
 	}
 }
+
+// The signed feeds are requests of their own: a project with no dependency
+// still asks for the slopsquat feed, and the dependency notice is silent then.
+func TestFeedNetworkNotice(t *testing.T) {
+	if got := feedNetworkNotice(nil); got != "" {
+		t.Errorf("no feed requested, want no notice, got %q", got)
+	}
+
+	one := feedNetworkNotice([]string{"https://intel.klarlabs.de/v1/feeds/slopsquat"})
+	for _, want := range []string{"[network]", "https://intel.klarlabs.de/v1/feeds/slopsquat", "Nothing from the repository was sent",
+		"scan.slop.disabled", "scan.mcp_feed.disabled", "--offline"} {
+		if !strings.Contains(one, want) {
+			t.Errorf("notice lacks %q:\n%s", want, one)
+		}
+	}
+	if strings.Count(one, "\n") != 0 {
+		t.Errorf("must be one line, got:\n%s", one)
+	}
+
+	two := feedNetworkNotice([]string{"https://intel.klarlabs.de/v1/feeds/mcp", "https://intel.klarlabs.de/v1/feeds/slopsquat"})
+	if !strings.Contains(two, "/v1/feeds/mcp") || !strings.Contains(two, "/v1/feeds/slopsquat") {
+		t.Errorf("notice must name both feeds:\n%s", two)
+	}
+}

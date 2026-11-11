@@ -839,6 +839,9 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		if note := goModulesNetworkNotice(result.Inventory.GoModulesFetchedVia()); note != "" {
 			fmt.Println(note)
 		}
+		if note := feedNetworkNotice(result.FeedsRequested); note != "" {
+			fmt.Println(note)
+		}
 	}
 
 	// Report incomplete checks even under --quiet, and on stderr. A scan that
