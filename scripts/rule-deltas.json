@@ -30,5 +30,12 @@
     "duplicate-merged": "the vulnerability source reported one vulnerability under two identifiers (nox_same_as, e.g. a Go module advisory and its GitHub advisory); they are now one finding that keeps every id in aliases",
     "equivalent-accepted": "the absence rule's required property is now also satisfied by its standard equivalent, written the way that standard writes it"
   },
-  "entries": []
+  "entries": [
+    {
+      "rule": "SEC-008",
+      "classification": "refined-away",
+      "reason": "SEC-008 matches the line declaring a Google service-account document; the credential is that document's private_key. When the enclosing object's own private_key field is a string too short to be a key (under 44 characters once PEM armour and line breaks are removed), the finding is withdrawn with a recorded refutation. certbot 1 -> 0 is certbot-dns-google/src/certbot_dns_google/__init__.py:68, a documentation sample whose private_key is \"...\"",
+      "pr": 1067
+    }
+  ]
 }
