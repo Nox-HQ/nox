@@ -144,7 +144,11 @@ def main():
         print(f"\t\t\tpattern: `{r['regex']}`,")
         print(f'\t\t\tdescription: "{desc}",')
         print(f"\t\t\tkeywords: {kw_str},")
-        print(f'\t\t\tremediation: "Imported from Gitleaks: {r["id"]}",')
+        # The remediation field is printed to users as guidance ("nox fix plan",
+        # "nox explain"), so it says what to do. Where the pattern came from is
+        # a comment.
+        print(f'\t\t\t// Pattern imported from Gitleaks: {r["id"]}.')
+        print('\t\t\tremediation: "Rotate the exposed credential immediately",')
         print("\t\t\treferences: []string{},")
         print("\t\t},")
 

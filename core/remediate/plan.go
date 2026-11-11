@@ -433,18 +433,32 @@ func needsFor(is *assess.Issue, rs *rules.RuleSet) string {
 	if n, ok := needsByClass[is.VulnClass]; ok {
 		return n
 	}
-	missing := needsByFamily[catalog.Family(is.RuleID).Key]
+	family := catalog.Family(is.RuleID).Key
+	missing := needsByFamily[family]
 	if missing == "" {
 		missing = "Whether this is deliberate: the code alone does not say, and nox does not guess intent."
 	}
 	if rs != nil {
-		if r, ok := rs.ByID(is.RuleID); ok && strings.TrimSpace(r.Remediation) != "" {
-			return missing + " To supply it: " + strings.TrimSpace(r.Remediation)
+		if r, ok := rs.ByID(is.RuleID); ok {
+			if family == "secrets" && r.Severity == findings.SeverityInfo {
+				missing = needsNoCredential
+			}
+			if guidance := strings.TrimSpace(r.Remediation); guidance != "" {
+				return missing + " To supply it: " + guidance
+			}
 		}
 	}
 	return missing + " To supply it: open the flagged location and run nox explain " + is.RuleID +
 		" for what the rule looks for."
 }
+
+// needsNoCredential is what nox is missing for a rule in the secrets family
+// that reports something other than a credential: a resource identifier, a
+// public key. Every such rule is declared at info severity. The family's own
+// sentence tells the reader to treat the value as compromised and rotate it,
+// which is work that does not exist when nothing secret was exposed.
+const needsNoCredential = "A decision about whether this value belongs in the file. " +
+	"It is not a credential, so nothing was exposed and there is nothing to rotate."
 
 // needsByFamily is what nox is missing for a rule that has no entry of its own,
 // by rule family. Each states the information, not the edit.
