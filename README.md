@@ -53,11 +53,24 @@ brew tap felixgeelhaar/tap && brew install nox
 # Scan the current directory
 nox scan .
 
-# Output:
-# nox dev -- scanning .
-# [results] 12 findings, 47 dependencies, 3 AI components
+# Output, abridged (the numbers are from one real project):
+# nox 1.65.0 — scanning .
+# [results] 108 findings, 694 dependencies, 3 AI components
+# [network] ...one line for each kind of request the scan made
+#
+# Nox Security Assessment
+#
+# 12 issues need attention (21 findings).
+#   1. ...each with its rule, location, severity and confidence
+#
+# Checks completed: secrets, application code, dependencies (694 packages), ...
+# Not checked: ...whatever the scan could not look at, and why
+# Next steps: ...
 # [done]
 ```
+
+The exit code is the verdict: `0` nothing found, `1` findings, `2` the scan
+could not run.
 
 Nox writes `findings.json` to the current directory. To generate all output formats at once:
 
@@ -98,6 +111,10 @@ reports/
 nox serve --allowed-paths /path/to/project
 ```
 
+This starts an MCP server on stdio. Every tool is read-only except three, and
+those refuse without explicit confirmation. See [MCP Server](#mcp-server) for
+the tools and resources.
+
 ### Use in your editor (LSP)
 
 `nox lsp` runs a Language Server over stdio, publishing findings as inline
@@ -111,10 +128,6 @@ PyCharm Professional, WebStorm, …; LSP4IJ for the Community editions).
 ```bash
 nox lsp    # spoken by the editor extension; not run by hand
 ```
-This starts an MCP server on stdio. Every tool is read-only except three, and
-those refuse without explicit confirmation. See [MCP Server](#mcp-server) for
-the tools and resources.
-
 
 ## Installation
 
@@ -677,10 +690,10 @@ See [`docs/usage.md`](docs/usage.md) for the full CLI reference.
 
 ## Architecture
 
-Six top-level packages with strict dependency direction (`core` depends on nothing):
+Seven top-level packages with strict dependency direction (`core` imports none of the others):
 
 ```
-core/       Scan engine, rule catalog, report generation (no CLI, no network)
+core/       Scan engine, rule catalog, report generation (no CLI; no network with --offline)
 cli/        Argument parsing, TUI, output handling
 server/     MCP server (stdio, sandboxed, rate-limited)
 plugin/     gRPC-based plugin host with safety profiles
@@ -863,17 +876,34 @@ nox serve --allowed-paths /path/to/project   # or name the roots
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `scan` | `path` (required) | Run a security scan on a directory |
-| `get_findings` | `format` (json\|sarif) | Get findings from last scan |
-| `get_sbom` | `format` (cdx\|spdx) | Get software bill of materials |
-| `get_finding_detail` | `finding_id`, `context_lines` | Get enriched finding with source context |
-| `list_findings` | `severity`, `rule`, `file`, `limit` | List findings with filtering |
+| `scan` | `path` (required), `only`, `skip`, `previous` | Scan a directory; `only`/`skip` narrow it to scopes, `previous` reports what changed since an earlier run |
+| `summary` | -- | Counts for the last scan by severity, confidence and rule family. The place to start |
+| `analysis_capabilities` | -- | What this installation can establish, and what the last scan actually established |
+| `list_findings` | `severity`, `rule`, `file`, `include_suppressed`, `limit`, `offset` | List findings, filtered and paginated |
+| `get_findings` | `format` (json\|sarif) | Get every finding from the last scan |
+| `get_finding_detail` | `finding_id`, `context_lines` | Get one finding with source context and remediation |
+| `get_finding_by_fingerprint` | `fingerprint` | Look up one finding and its status (new, baselined, suppressed, VEX) |
+| `why` | `fingerprint` | Explain a finding: what was observed, what supports it, what argues against it, what was not evaluated |
+| `fix_plan` | `path`, `include_major` | Plan the fixes: safe to apply, needs review, needs information. Changes nothing |
+| `advisories` | `previous`, `policy` | Decide what to do about dependency advisories in the last scan (new, relevance, policy). Read-only: never opens a pull request or merges |
+| `get_sbom` | `format` (cdx\|spdx) | Get the software bill of materials |
+| `diff` | `path`, `base`, `head`, `offline` | Scan only the files changed between two git refs |
+| `rules` | -- | List every rule with its severity, CWE and remediation |
 | `baseline_status` | `path` | Get baseline statistics |
 | `baseline_add` | `path`, `fingerprint`, `reason`, `confirmed` (all required), `owner` | Add a finding to the baseline, which stops nox reporting it |
-| `advisories` | `previous`, `policy` | Decide what to do about dependency advisories in the last scan (new, relevance, policy). Read-only: never opens a pull request or merges |
+| `baseline_add_many` | `path`, `fingerprints`, `reason`, `confirmed` (all required), `owner` | Add several findings to the baseline in one call |
+| `vex_status` | `path` | Load a VEX document and summarise its statuses |
+| `protect_status` | `path` | Report whether the nox pre-commit hook is installed |
+| `annotate` | -- | Build a GitHub pull request review payload from the findings. Builds it; does not post it |
+| `badge` | `label` | Render the security grade as an SVG badge |
+| `dashboard` | `path` | Render the last scan as a standalone HTML dashboard |
+| `agent_graph` | `format` (mermaid\|dot) | Render which tools each detected agent can call |
+| `data_sensitivity_report` | -- | Summarise the PII and sensitive-data findings |
+| `threat_model` | `previous` | Assemble a threat model from the last scan, with a STRIDE table and the evidence for each entry |
+| `compliance_iso27001` | -- | Map the scan's evidence to ISO/IEC 27001:2022 Annex A controls, and say what it cannot show |
 | `attack_plan` | `path` | Build exploit hypotheses from the last scan. Offline: contacts no target, executes nothing |
-| `plugin.list` | -- | List registered plugins |
-| `plugin.call_tool` | `tool`, `input`, `workspace_root` | Invoke a plugin tool |
+| `plugin_install` | `name`, `confirmed` (both required), `version` | Install a plugin from a configured registry: fetch, verify the digest, register |
+| `version` | -- | Report the nox version, commit and build date |
 
 ### Resources
 
@@ -884,6 +914,20 @@ nox serve --allowed-paths /path/to/project   # or name the roots
 | `nox://sbom/cdx` | application/json | CycloneDX SBOM |
 | `nox://sbom/spdx` | application/json | SPDX SBOM |
 | `nox://ai-inventory` | application/json | AI component inventory |
+| `nox://rules` | application/json | Every rule, with its metadata |
+| `nox://dashboard` | text/html | HTML dashboard of the last scan |
+| `nox://project/{project}/findings` | application/json | Findings of one project |
+| `nox://project/{project}/sarif` | application/json | SARIF 2.1.0 report of one project |
+| `nox://project/{project}/sbom/cdx` | application/json | CycloneDX SBOM of one project |
+| `nox://project/{project}/sbom/spdx` | application/json | SPDX SBOM of one project |
+| `nox://project/{project}/ai-inventory` | application/json | AI component inventory of one project |
+| `nox://project/{project}/dashboard` | text/html | HTML dashboard of one project |
+
+In the per-project URIs, `{project}` is the URL-encoded absolute path of a
+directory the server has scanned.
+
+Both tables are checked against the running server by
+`server/docs_surface_test.go`, so they cannot fall behind it.
 
 Output is truncated at 1 MB. Workspace paths are allowlisted.
 
@@ -914,18 +958,4 @@ For reporting security vulnerabilities, please see [SECURITY.md](SECURITY.md).
 
 ## License
 
-| `nox://rules` | application/json | Every rule, with its metadata |
-| `nox://dashboard` | text/html | HTML dashboard of the last scan |
-| `nox://project/{project}/findings` | application/json | Findings of one project |
-| `nox://project/{project}/sarif` | application/json | SARIF 2.1.0 report of one project |
-| `nox://project/{project}/sbom/cdx` | application/json | CycloneDX SBOM of one project |
-| `nox://project/{project}/sbom/spdx` | application/json | SPDX SBOM of one project |
-| `nox://project/{project}/ai-inventory` | application/json | AI component inventory of one project |
-| `nox://project/{project}/dashboard` | text/html | HTML dashboard of one project |
-
-In the per-project URIs, `{project}` is the URL-encoded absolute path of a
-directory the server has scanned.
-
-Both tables are checked against the running server by
-`server/docs_surface_test.go`, so they cannot fall behind it.
 Nox is licensed under the [Apache License 2.0](LICENSE).
