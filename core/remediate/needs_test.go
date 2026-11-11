@@ -134,3 +134,18 @@ func TestNeedsDoesNotRotateAPublishedExample(t *testing.T) {
 		}
 	}
 }
+
+// A test-mode key is a real secret. Only the published example is told there
+// is nothing to rotate; a key to a vendor's test environment is still replaced.
+func TestNeedsStillRotateATestModeKey(t *testing.T) {
+	rs := BuiltinRules()
+	for _, id := range []string{"SEC-030", "SEC-070", "SEC-262", "SEC-338"} {
+		n := needsFor(&assess.Issue{RuleID: id, ValueClass: findings.ValueClassTestMode}, rs)
+		if strings.Contains(n, "nothing to rotate") {
+			t.Errorf("%s on a test-mode key says there is nothing to rotate: %q", id, n)
+		}
+		if !strings.Contains(n, "compromised") {
+			t.Errorf("%s on a test-mode key does not say to treat it as compromised: %q", id, n)
+		}
+	}
+}

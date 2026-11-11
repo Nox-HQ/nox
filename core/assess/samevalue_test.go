@@ -210,3 +210,48 @@ func TestPublishedExampleIsItsOwnIssue(t *testing.T) {
 		}
 	}
 }
+
+// testMode marks a finding the way the secrets analyzer does for a key to a
+// vendor's test environment: medium, saying so, with the rule's rating kept.
+func testMode(f findings.Finding, message string) findings.Finding {
+	f.Metadata = map[string]string{
+		findings.MetaValueClass:   findings.ValueClassTestMode,
+		findings.MetaRuleSeverity: string(f.Severity),
+	}
+	f.Severity, f.Message = findings.SeverityMedium, message
+	return f
+}
+
+// A test-mode key two rules report is one issue, titled by what the key is, and
+// it is not the live key of the same rules: that one keeps its own issue and
+// its own rating, so the list still leads with it.
+func TestTestModeKeyIsItsOwnIssue(t *testing.T) {
+	const title = "Test-mode credential: Lob API Key detected"
+	const msg = title + ". It reaches the vendor's test environment and no live data."
+	got := codeIssuesOf(
+		testMode(secretAt("SEC-070", "high", "medium", ".env.test", span{2, 2, 13, 53}), msg),
+		testMode(secretAt("SEC-262", "high", "medium", ".env.test", span{2, 2, 1, 54}), msg),
+		secretAt("SEC-070", "high", "medium", ".env", span{2, 2, 13, 53}),
+		secretAt("SEC-262", "high", "medium", ".env", span{2, 2, 1, 54}),
+	)
+	want := []struct {
+		summary, class string
+		severity       findings.Severity
+	}{
+		{"[SEC-070, also SEC-262] at .env:2 (high severity", "", findings.SeverityHigh},
+		{title + " [SEC-070, also SEC-262] at .env.test:2 (medium severity", findings.ValueClassTestMode, findings.SeverityMedium},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("%d issues, want %d: %+v", len(got), len(want), summaries(got))
+	}
+	for i, w := range want {
+		is := got[i]
+		if !strings.Contains(is.Summary, w.summary) {
+			t.Errorf("issue %d: %q lacks %q", i, is.Summary, w.summary)
+		}
+		if is.ValueClass != w.class || is.Severity != w.severity || is.Findings != 2 {
+			t.Errorf("issue %d = class %q severity %s findings %d, want %+v with 2 findings",
+				i, is.ValueClass, is.Severity, is.Findings, w)
+		}
+	}
+}

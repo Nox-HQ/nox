@@ -3,6 +3,7 @@ package secrets
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
 )
@@ -61,16 +62,52 @@ func classifyValue(content []byte, f *findings.Finding) {
 	if what, ok := publishedValueOf(value); ok {
 		reclassify(f, findings.SeverityInfo, findings.ValueClassPublishedExample,
 			what+": public documentation, not a credential")
+		return
+	}
+	if isTestModeKey(f.RuleID, value) {
+		reclassify(f, findings.SeverityMedium, findings.ValueClassTestMode,
+			"Test-mode credential: "+strings.TrimSuffix(f.Message, ".")+
+				". It reaches the vendor's test environment and no live data.")
 	}
 }
 
+// testModePrefixes are the prefixes by which a vendor marks a credential for
+// its test environment: Stripe's secret and restricted keys (Clerk uses the
+// same sk_test_ for a development instance), Duffel's and Shippo's tokens.
+// Each names the mode in the key itself, so it holds under whichever rule
+// matched. Such a key is a real secret and stays reported; what it cannot do
+// is move money or read a live customer, which is what the rule's rating
+// describes.
+var testModePrefixes = []string{"sk_test_", "rk_test_", "duffel_test_", "shippo_test_"}
+
+// bareTestPrefixRules are the rules under which a bare "test_" marks a test
+// key. Lob's keys are test_… and live_… with no vendor name in them, and
+// "test_" is also how anybody names a test value, so outside Lob's own rules
+// the prefix says nothing.
+var bareTestPrefixRules = map[string]bool{"SEC-070": true, "SEC-262": true}
+
+func isTestModeKey(ruleID, value string) bool {
+	for _, p := range testModePrefixes {
+		if strings.HasPrefix(value, p) {
+			return true
+		}
+	}
+	return bareTestPrefixRules[ruleID] && strings.HasPrefix(value, "test_")
+}
+
+// reclassify records what the analyzer established about a finding's value and
+// lowers the finding to severity. It never raises one: a rule that already
+// rates its match lower keeps that rating.
 func reclassify(f *findings.Finding, severity findings.Severity, class, message string) {
 	if f.Metadata == nil {
 		f.Metadata = map[string]string{}
 	}
 	f.Metadata[findings.MetaValueClass] = class
 	f.Metadata[findings.MetaRuleSeverity] = string(f.Severity)
-	f.Severity = severity
+	// SeverityRank counts down from the most severe: critical is 0.
+	if findings.SeverityRank(severity) > findings.SeverityRank(f.Severity) {
+		f.Severity = severity
+	}
 	f.Message = message
 }
 
