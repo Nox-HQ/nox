@@ -39,6 +39,9 @@ jobs:
       # upgrades, reading fix.outdated.directories/hold from .nox.yaml, and
       # refreshing base images and composite actions. Bump both lines together;
       # the sha256 is of nox_<version>_linux_amd64.tar.gz, checked on download.
+      # The Action pins in README.md, MARKETPLACE.md, docs/ and examples/ move
+      # in the same change, to that release's commit: cli/docs_pins_test.go
+      # fails until they name this version.
       nox-version: '1.65.0'
       nox-sha256: '9297e548654ad1f1ca7596cae14efba9578cb051b665a9113aa6f4c5b1ccadc3'
       outdated-fixes: true
