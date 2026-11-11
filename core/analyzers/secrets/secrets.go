@@ -357,6 +357,13 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) ([]findings.Finding
 				"the matched value is entirely a reference to where the secret is stored — a template variable, a secret-manager lookup or an environment interpolation with no literal fallback — not the secret itself")
 			continue
 		}
+		// A service-account document whose own private_key field cannot
+		// hold a key shows the file's shape. See service_account.go.
+		if isKeylessServiceAccount(content, &results[i]) {
+			a.refute(candidate, evidence.KindStatic,
+				"the service-account document this line belongs to carries no key: its private_key field holds a value shorter than any private key, so this is a sample, a template or a redacted copy of the file, not the credential")
+			continue
+		}
 		// A vendor-binding rule's value that runs on into a call, an
 		// attribute or an index is a code identifier's prefix, not a
 		// credential. See binding.go.
