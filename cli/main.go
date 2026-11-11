@@ -833,6 +833,12 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		if note := mavenNetworkNotice(cfg, result.Inventory.MavenPOMsRequested()); note != "" {
 			fmt.Println(note)
 		}
+		if note := imageNetworkNotice(result.Inventory.ImageHostsContacted()); note != "" {
+			fmt.Println(note)
+		}
+		if note := goModulesNetworkNotice(result.Inventory.GoModulesFetchedVia()); note != "" {
+			fmt.Println(note)
+		}
 	}
 
 	// Report incomplete checks even under --quiet, and on stderr. A scan that

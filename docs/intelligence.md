@@ -13,11 +13,16 @@ the scan. If a sentence here is not true of the binary, that is a bug.
 | `scan.intelligence.contribute: true` **only** | redacted observations: per finding, the fields in `nox intel allowlist` — fingerprint, rule id, ecosystem/package/version range, verdict — never a path, a line, a snippet, a secret, or a prompt | the intelligence service |
 | every online scan of a Maven project whose parent POM or imported BOM is not in the repository | `(groupId, artifactId, version)` of each such parent and BOM, as `/v1/maven/poms` requests; the service returns the published `pom.xml` from Maven Central and nox resolves the versions itself. A separate `[network]` line counts them | the intelligence service, which fetches from Maven Central |
 | every online scan, when a signed feed is not cached or has expired (24h) | two plain `GET`s of public files: `/v1/feeds/slopsquat` and, when the scan found registry-launched MCP servers, `/v1/feeds/mcp`. Nothing about the project is sent | the intelligence service |
+| every online scan of a Dockerfile whose `FROM` names an image by digest, when the image is not already in `~/.nox/cache/oci` | an anonymous pull of that image: its name and digest, to fetch the manifest and the layers. Nothing about the project is sent. A separate `[network]` line names every host asked | not the intelligence service: the image's registry, the token service the registry names and the storage host it redirects to (for Docker Hub, `registry-1.docker.io`, `auth.docker.io` and Docker's CDN) |
+| every online scan of a Go module, when the Go module cache does not hold every module the build needs | nox runs `go list -deps` to learn which packages the build links, and the go command fetches the missing modules as `go build` would: module paths and versions from `go.mod`. A separate `[network]` line names where it was allowed to fetch from | not the intelligence service: whatever `GOPROXY` names (`proxy.golang.org`, then the modules' own source hosts, unless your Go environment says otherwise) |
 | never | source code, file paths, file contents, prompts, credentials, customer data | — |
 
 A scan that made the lookup says so once, in a `[network]` line after the
 results: how many dependencies, where they went, and how to opt out. A scan that
 made no lookup (`--offline`, `--no-osv`, no dependencies) prints no such line.
+Image pulls and Go module fetches each get a `[network]` line of their own, and
+only on a scan that made them: one whose image cache or module cache already
+held what was needed asked nobody and says nothing.
 
 `nox intel preview <path>` prints exactly what a contribution from `<path>`
 would carry, without sending it. `nox intel allowlist` prints every field an
@@ -128,6 +133,21 @@ scan:
 ```sh
 nox scan --offline       # no lookups at all: zero outbound connections (TestScan_OfflineAsksNobody)
 nox scan --no-osv        # same, for the vulnerability lookup only
+```
+
+The two requests that do not go to an advisory source have switches of their
+own, and `--offline` covers both:
+
+```yaml
+scan:
+  images:
+    enabled: false       # read no base image; --offline and --no-osv read cached images only
+```
+
+```sh
+GOPROXY=off nox scan     # the go command fetches nothing; Go advisories are then
+                         # not narrowed to the packages the build links
+GOPRIVATE=git.example.com/* nox scan   # those module paths never reach a public proxy
 ```
 
 Resolution order for the endpoint:

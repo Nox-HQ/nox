@@ -97,6 +97,45 @@ type Client struct {
 	registryOverride string // tests: a base URL that replaces https://<registry>
 	mu               sync.Mutex
 	tokens           map[string]string
+	contacted        map[string]struct{}
+}
+
+// Contacted returns every host this client sent a request to, sorted: the
+// registries, the token services their challenges named, and the hosts their
+// blob requests redirected to. A read the cache answered contacts none.
+func (c *Client) Contacted() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	hosts := make([]string, 0, len(c.contacted))
+	for h := range c.contacted {
+		hosts = append(hosts, h)
+	}
+	sort.Strings(hosts)
+	return hosts
+}
+
+// do sends req and records where it went: the host asked, and the host that
+// answered when the request was redirected.
+func (c *Client) do(req *http.Request) (*http.Response, error) {
+	hc := c.HTTP
+	if hc == nil {
+		hc = http.DefaultClient
+	}
+	c.noteContact(req.URL.Host)
+	resp, err := hc.Do(req)
+	if err == nil && resp.Request != nil {
+		c.noteContact(resp.Request.URL.Host)
+	}
+	return resp, err
+}
+
+func (c *Client) noteContact(host string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.contacted == nil {
+		c.contacted = map[string]struct{}{}
+	}
+	c.contacted[host] = struct{}{}
 }
 
 const (
@@ -402,10 +441,6 @@ func (c *Client) get(ctx context.Context, ref Ref, kind, digest string) (*http.R
 		base = c.registryOverride
 	}
 	u := fmt.Sprintf("%s/v2/%s/%s/%s", base, ref.Repository, kind, digest)
-	hc := c.HTTP
-	if hc == nil {
-		hc = http.DefaultClient
-	}
 	for attempt := 0; attempt < 2; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody)
 		if err != nil {
@@ -417,7 +452,7 @@ func (c *Client) get(ctx context.Context, ref Ref, kind, digest string) (*http.R
 		if tok := c.token(ref); tok != "" {
 			req.Header.Set("Authorization", "Bearer "+tok)
 		}
-		resp, err := hc.Do(req)
+		resp, err := c.do(req)
 		if err != nil {
 			return nil, err
 		}
@@ -474,11 +509,7 @@ func (c *Client) authorize(ctx context.Context, ref Ref, challenge string) error
 	if err != nil {
 		return err
 	}
-	hc := c.HTTP
-	if hc == nil {
-		hc = http.DefaultClient
-	}
-	resp, err := hc.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return err
 	}

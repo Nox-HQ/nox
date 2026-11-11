@@ -68,3 +68,43 @@ func TestMavenNetworkNotice(t *testing.T) {
 		}
 	}
 }
+
+// A digest-pinned base image is pulled from its registry, the token service
+// the registry names and the storage host it redirects to. None of them is the
+// advisory source, so the dependency notice does not cover them.
+func TestImageNetworkNotice(t *testing.T) {
+	got := imageNetworkNotice([]string{"auth.docker.io", "production.cloudflare.docker.com", "registry-1.docker.io"})
+	for _, want := range []string{"[network]", "auth.docker.io", "production.cloudflare.docker.com", "registry-1.docker.io",
+		"scan.images.enabled: false", "--offline"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("notice lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Count(got, "\n") != 0 {
+		t.Errorf("must be one line, got:\n%s", got)
+	}
+	if got := imageNetworkNotice(nil); got != "" {
+		t.Errorf("the image cache answered, so nothing was requested; got %q", got)
+	}
+}
+
+// The go command fetches modules the cache lacks when nox asks it what the
+// build links. The notice names where it was allowed to go and how to stop it.
+func TestGoModulesNetworkNotice(t *testing.T) {
+	got := goModulesNetworkNotice([]string{"https://proxy.golang.org", "direct"})
+	for _, want := range []string{"[network]", "https://proxy.golang.org", "the modules' own source hosts", "GOPRIVATE",
+		"GOPROXY=off", "--offline"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("notice lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "direct") {
+		t.Errorf("\"direct\" is the go command's word, not a host a reader can recognise:\n%s", got)
+	}
+	if strings.Count(got, "\n") != 0 {
+		t.Errorf("must be one line, got:\n%s", got)
+	}
+	if got := goModulesNetworkNotice(nil); got != "" {
+		t.Errorf("the module cache answered, so nothing was requested; got %q", got)
+	}
+}
