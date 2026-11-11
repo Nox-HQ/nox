@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+What an audit of 1.65.0 found in the findings themselves: ratings and
+wording that claimed more than the scan knew.
+
+### Changed
+
+- A vendor's published example key is reported at info, as documentation.
+  `AKIAIOSFODNN7EXAMPLE` and its secret key from AWS's documentation and
+  Stripe's sample `sk_test_` key were reported as high or critical
+  credentials to rotate. A finding whose whole matched value is one of
+  eight such values now says whose documentation it comes from and carries
+  `value_class: published_example` and the rule's own rating as
+  `rule_severity`. It no longer fails a scan that has no policy and no
+  longer meets a severity threshold, as a dependency vulnerability shown
+  not to impact the build has not since 1.58.0. A key that only contains
+  `EXAMPLE`, or starts with a published value, keeps its rating.
+- A test-mode key is reported at medium, as a test-mode key. A Stripe
+  `sk_test_` or `rk_test_`, Duffel `duffel_test_`, Shippo `shippo_test_`
+  or Lob `test_` key was rated like the live key, critical or high. It is
+  still a secret in the repository: it still fails a scan with no policy
+  and the fix plan still says to rotate it, but it no longer meets
+  `--severity-threshold high`. The finding carries `value_class: test_mode`
+  and `rule_severity`. A class only ever lowers a rating.
+- A dependency finding's message says what was established in words. It
+  used to end in the applicability ladder's identifiers ("established as
+  far as "affected_version"; symbol_used was not established"), in SARIF,
+  pull request comments, `nox explain` and the CycloneDX analysis detail.
+  The metadata keys and values are unchanged, and so is every fingerprint:
+  a dependency finding's identity is still computed over the 1.65.0
+  wording, so baselines, waivers and VEX statements keep matching.
+
+### Fixed
+
+- A sample Google service-account file was reported as a critical leaked
+  key. SEC-008 matches the line that says a JSON document is a
+  service-account file; the credential is the document's `private_key`.
+  When that field holds a value too short to be a key (`"..."`, a template
+  variable, the PEM armour with the body left out), the finding is
+  withdrawn and the reason recorded. A document with a key in it, and any
+  document nox cannot read to its closing brace, is reported as before.
+- The assessment printed "(highest severity: )" for a dependency whose
+  advisories are all info, spelled a Go upgrade target without the `v` the
+  installed version has (`v0.58.0 to 0.58.1-…`), and did not say when
+  every advisory on the line was shown not to impact the build.
+- One credential that two rules report is one issue in the assessment. A
+  Lob key (SEC-070 and SEC-262), an AWS access key (SEC-001 and SEC-508)
+  and a PEM key (SEC-004 and SEC-299) were listed twice at the same file
+  and line and counted as two issues. The title names both rules. The
+  findings and their count are unchanged.
+- The fix plan told the reader to rotate "the exposed value" for a rule
+  that reports an identifier or a public key (an S3 URL at info), and
+  printed "Imported from Gitleaks: <id>" as the thing to supply for 186
+  rules, which `nox explain` also showed as the remediation. Each now
+  says what to do.
+- A distribution advisory with no summary left ":  —" in the message.
+
 ## [1.65.0] - 2026-11-10
 
 ### Changed
