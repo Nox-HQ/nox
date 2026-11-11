@@ -468,17 +468,20 @@ func noFixIssues(unplanned []int, ff []findings.Finding, used []bool) []Issue {
 }
 
 // codeIssues groups every remaining finding by its rule (and, for taint, by
-// vulnerability class), since one rule is one kind of change.
+// vulnerability class), since one rule is one kind of change. A credential two
+// rules both report is grouped under the stronger of them: see valueOwners.
 func codeIssues(in Input, used []bool) []Issue {
 	ff := in.Findings
 	type key struct{ rule, class string }
 	groups := map[key][]int{}
 	var order []key
+	owner := valueOwners(ff, used)
 	for i := range ff {
 		if used[i] {
 			continue
 		}
-		k := key{ff[i].RuleID, ff[i].Metadata["vuln_class"]}
+		o := &ff[owner[i]]
+		k := key{o.RuleID, o.Metadata["vuln_class"]}
 		if _, ok := groups[k]; !ok {
 			order = append(order, k)
 		}
@@ -488,11 +491,15 @@ func codeIssues(in Input, used []bool) []Issue {
 	for _, k := range order {
 		idx := groups[k]
 		sev, conf := worst(ff, idx, used)
-		group := make([]findings.Finding, len(idx))
+		all := make([]findings.Finding, len(idx))
+		group := make([]findings.Finding, 0, len(idx))
 		for j, i := range idx {
-			group[j] = ff[i]
+			all[j] = ff[i]
+			if ff[i].RuleID == k.rule {
+				group = append(group, ff[i])
+			}
 		}
-		title := issueTitle(in.Rules, group, k.class)
+		title := issueTitle(in.Rules, group, k.class, alsoRules(all, k.rule))
 		s := fmt.Sprintf("%s %s (%s severity, %s confidence).",
 			title, where(ff, idx), severityOrUnrated(sev), confidenceOrUnknown(conf))
 		out = append(out, Issue{Kind: KindCode, Summary: s, Severity: sev, Confidence: conf, Findings: len(idx),
@@ -525,8 +532,15 @@ const maxTitle = 90
 
 // issueTitle names a group of findings: the taint class in words, else the
 // rule's own description, else the message the group's findings share.
-func issueTitle(rs *rules.RuleSet, group []findings.Finding, class string) string {
+//
+// also names the other rules that reported the same values, so a reader who
+// looks one of them up in findings.json finds it accounted for here.
+func issueTitle(rs *rules.RuleSet, group []findings.Finding, class string, also []string) string {
 	f := group[0]
+	label := " [" + f.RuleID + "]"
+	if len(also) > 0 {
+		label = " [" + f.RuleID + ", also " + strings.Join(also, ", ") + "]"
+	}
 	if class != "" {
 		if p, ok := classPhrases[class]; ok {
 			return p
@@ -535,10 +549,10 @@ func issueTitle(rs *rules.RuleSet, group []findings.Finding, class string) strin
 	}
 	if rs != nil {
 		if r, ok := rs.ByID(f.RuleID); ok && strings.TrimSpace(r.Description) != "" {
-			return truncate(sentence(r.Description), maxTitle) + " [" + f.RuleID + "]"
+			return truncate(sentence(r.Description), maxTitle) + label
 		}
 	}
-	return truncate(sharedMessage(group), maxTitle) + " [" + f.RuleID + "]"
+	return truncate(sharedMessage(group), maxTitle) + label
 }
 
 // sharedMessage is what every message in the group says. One finding's message
