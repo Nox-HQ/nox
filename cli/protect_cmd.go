@@ -13,8 +13,9 @@ import (
 // runProtect implements the "nox protect" command with install, uninstall, and
 // status subcommands for managing git pre-commit hooks.
 func runProtect(args []string) int {
+	const protectUsage = "Usage: nox protect <install|uninstall|status> [flags]"
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: nox protect <install|uninstall|status> [flags]")
+		fmt.Fprintln(os.Stderr, protectUsage)
 		return 2
 	}
 
@@ -22,6 +23,8 @@ func runProtect(args []string) int {
 	remaining := args[1:]
 
 	switch subcommand {
+	case "-h", "-help", "--help", "help":
+		return printGroupHelp(protectUsage)
 	case "install":
 		return protectInstall(remaining)
 	case "uninstall":
@@ -30,7 +33,7 @@ func runProtect(args []string) int {
 		return protectStatus(remaining)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown protect subcommand: %s\n", subcommand)
-		fmt.Fprintln(os.Stderr, "Usage: nox protect <install|uninstall|status> [flags]")
+		fmt.Fprintln(os.Stderr, protectUsage)
 		return 2
 	}
 }

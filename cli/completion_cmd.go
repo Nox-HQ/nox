@@ -13,6 +13,8 @@ func runCompletion(args []string) int {
 
 	shell := args[0]
 	switch shell {
+	case "-h", "-help", "--help", "help":
+		return printGroupHelp("Usage: nox completion <bash|zsh|fish|powershell>")
 	case "bash":
 		fmt.Print(bashCompletion)
 	case "zsh":
