@@ -2311,10 +2311,13 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
-          go-version: '1.25'
+          go-version: '1.27'
 
       - name: Install nox
-        run: go install github.com/nox-hq/nox/cli@latest
+        # Go names the binary after its package directory ("cli").
+        run: |
+          go install github.com/nox-hq/nox/cli@latest
+          mv "$(go env GOPATH)/bin/cli" "$(go env GOPATH)/bin/nox"
 
       - name: Run security scan
         run: nox scan . --format sarif,json --output results/
@@ -2379,8 +2382,9 @@ waivers, gating) lives in
 ### Generic CI
 
 ```bash
-# Install
+# Install (Go names the binary after its package directory, "cli")
 go install github.com/nox-hq/nox/cli@latest
+mv "$(go env GOPATH)/bin/cli" "$(go env GOPATH)/bin/nox"
 
 # Scan (exit code 1 if findings detected)
 nox scan . --format all --output results/ -q

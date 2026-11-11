@@ -8,7 +8,7 @@
   <img src="https://github.com/nox-hq/nox/actions/workflows/ci.yml/badge.svg" alt="CI" />
   <img src=".github/nox-badge.svg" alt="Security" />
   <img src=".github/coverage-badge.svg" alt="Coverage" />
-  <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white" alt="Go" />
+  <img src="https://img.shields.io/badge/Go-1.27+-00ADD8?logo=go&logoColor=white" alt="Go" />
   <img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License" />
 </p>
 
@@ -48,7 +48,7 @@ Install and scan a project in under a minute:
 ```bash
 # Install
 brew tap felixgeelhaar/tap && brew install nox
-# or: go install github.com/nox-hq/nox/cli@latest
+# or with Go: see Installation below
 
 # Scan the current directory
 nox scan .
@@ -127,7 +127,14 @@ brew install nox
 
 ```bash
 go install github.com/nox-hq/nox/cli@latest
+# Go names a binary after its package directory, so this one is called "cli".
+mv "$(go env GOPATH)/bin/cli" "$(go env GOPATH)/bin/nox"
 ```
+
+With `GOBIN` set, the binary is there instead of `$(go env GOPATH)/bin`. A build
+installed this way reports its release (`nox version`) but not its commit, so
+`nox install-ci` asks for the commit with `--nox-ref`; the Homebrew and release
+binaries know theirs.
 
 ### Build from Source
 
