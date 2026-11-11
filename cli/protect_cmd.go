@@ -216,36 +216,13 @@ func protectStatus(args []string) int {
 
 // generateHookScript produces the shell script content for the pre-commit hook.
 func generateHookScript(threshold string) string {
-	return fmt.Sprintf(`#!/bin/sh
-# %s - https://github.com/nox-hq/nox
-# To uninstall: nox protect uninstall
-
-nox scan --staged --severity-threshold %s --quiet .
-exit_code=$?
-if [ $exit_code -eq 1 ]; then
-    echo ""
-    echo "nox: commit blocked — secrets or security issues found in staged files"
-    echo "nox: use '// nox:ignore RULE-ID -- reason' to suppress false positives"
-    echo "nox: use 'git commit --no-verify' to skip this check (not recommended)"
-    exit 1
-fi
-# Propagate any other non-zero exit (2 = scan error). Falling through to exit 0
-# here would let a commit through when the scan CRASHED — a failed gate that
-# reports success, the worst outcome for a security hook.
-if [ $exit_code -ne 0 ]; then
-    echo "nox: pre-commit scan errored (exit $exit_code) — not blocking, not passing" >&2
-    exit $exit_code
-fi
-exit 0
-`, git.HookMarker, threshold)
-}
-
-// isValidThreshold returns true if the given string is a recognized severity
-// threshold value.
-func isValidThreshold(s string) bool {
-	switch s {
-	case "critical", "high", "medium", "low":
-		return true
-	}
-	return false
+	return hookSpec{
+		kind:      "pre-commit",
+		bin:       "nox",
+		threshold: threshold,
+		header: []string{
+			git.HookMarker + " - https://github.com/nox-hq/nox",
+			"To uninstall: nox protect uninstall",
+		},
+	}.render()
 }
