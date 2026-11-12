@@ -76,6 +76,12 @@ wording that claimed more than the scan knew.
   a dependency finding's identity is still computed over the 1.65.0
   wording, so baselines, waivers and VEX statements keep matching.
 
+- `results.sarif` from `nox scan` describes only the rules its results point
+  at, as the MCP report already did. It embedded the whole catalog: 1,503
+  descriptors, 1.97 MB for a scan with six results, which every Code Scanning
+  upload carried and nothing read. Alert identity is unchanged: a result
+  points at the same descriptor id as before.
+
 ### Fixed
 
 - `nox install-hook` printed "Hook will fail on findings of severity:
