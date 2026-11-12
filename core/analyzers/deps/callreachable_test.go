@@ -92,7 +92,7 @@ import "crypto/sha256"
 func main() { sha256.Sum256([]byte("x")) }
 `,
 	})
-	linked, known := goImportedPackages(t.Context(), dir)
+	linked, known, _ := goImportedPackages(t.Context(), dir)
 	if !known {
 		t.Skip("the toolchain could not enumerate this module")
 	}

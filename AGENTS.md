@@ -46,9 +46,13 @@ Always: when changing scanner behaviour, measure the blast radius on real repos
 
 ## Design Tensions To Watch
 # Introduced 2026-07-19 (#248) and NOT yet resolved — see memory/open-threads.md
-- CLAUDE.md states **"/core — scan engine (no CLI, no network)"**, but
-  `core/analyzers/deps` both makes HTTP calls (OSV, pre-existing) and now spawns
-  a subprocess (`go list -deps`, new). Core is no longer network- or exec-free.
+- CLAUDE.md used to state **"/core — scan engine (no CLI, no network)"**. It now
+  says what core does: `core/analyzers/deps` makes HTTP calls (OSV, NOX
+  Intelligence), the signed feeds are fetched (`core/mcpfeed`,
+  `core/analyzers/slop/feed`), `core/image` pulls base images, and a subprocess
+  (`go list -deps`) can fetch modules. Each is named on a `[network]` line and
+  none happens under `--offline` (`core/scan_feed_requests_test.go` holds the
+  feeds to that). Core is still not exec-free.
 - CLAUDE.md states **"Deterministic: same inputs produce same outputs"**.
   Reachability depends on toolchain presence and module-cache state, so the same
   repository yields `reachable=false` on one machine and `undetermined` on

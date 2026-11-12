@@ -132,6 +132,30 @@ type PackageInventory struct {
 	// pomsRequested counts the Maven parent and BOM coordinates sent to the
 	// POM source, so the scan can say what left the machine.
 	pomsRequested int
+	// goFetchedVia is where the go command was allowed to fetch modules from
+	// to enumerate the build; imageHosts is every host asked for a base
+	// image. Both are empty when the caches answered.
+	goFetchedVia []string
+	imageHosts   []string
+}
+
+// GoModulesFetchedVia is where the go command was allowed to fetch modules
+// from when it enumerated the packages the build links: each GOPROXY entry as
+// scheme and host, and "direct" for the modules' own source hosts. Empty when
+// the module cache answered, and on a scan that makes no lookups.
+func (pi *PackageInventory) GoModulesFetchedVia() []string {
+	pi.mu.Lock()
+	defer pi.mu.Unlock()
+	return append([]string(nil), pi.goFetchedVia...)
+}
+
+// ImageHostsContacted is every host the scan asked for a base image's
+// manifest, layers or pull token, sorted. Empty when every blob came from the
+// cache, and on a scan that makes no lookups.
+func (pi *PackageInventory) ImageHostsContacted() []string {
+	pi.mu.Lock()
+	defer pi.mu.Unlock()
+	return append([]string(nil), pi.imageHosts...)
 }
 
 // MavenPOMsRequested is how many published Maven POM coordinates the scan asked
@@ -853,6 +877,10 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 	}
 
+	if contacted, ok := a.images.(interface{ Contacted() []string }); ok {
+		inventory.imageHosts = contacted.Contacted()
+	}
+
 	// Query OSV for vulnerabilities if enabled.
 	if a.osvEnabled {
 		pkgs := inventory.Packages()
@@ -877,7 +905,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 				linkedGoKnown bool
 			)
 			if goModDir != "" {
-				linkedGoPkgs, linkedGoKnown = goImportedPackages(ctx, goModDir)
+				linkedGoPkgs, linkedGoKnown, inventory.goFetchedVia = goImportedPackages(ctx, goModDir)
 			}
 			// Built once per scan and only when there is a Go module to build
 			// it over, so a repository with no go.mod pays nothing. It answers

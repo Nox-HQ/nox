@@ -44,6 +44,10 @@ type Options struct {
 	HTTPClient *http.Client
 	// Verify checks digest-then-signature under the pinned key. Required.
 	Verify slopfeed.SignatureVerifier
+	// OnRequest, when set, is called with the feed URL each time a request is
+	// about to leave the machine, whether or not it is answered. It is not
+	// called when the cache answers or the load is offline.
+	OnRequest func(url string)
 }
 
 // Loaded is a verified feed and where it came from.
@@ -168,6 +172,9 @@ func fetch(ctx context.Context, opts Options, cache string) (*Feed, error) {
 	client := opts.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: httpTimeout}
+	}
+	if opts.OnRequest != nil {
+		opts.OnRequest(opts.URL)
 	}
 	resp, err := get(ctx, client, opts.URL)
 	if err != nil {

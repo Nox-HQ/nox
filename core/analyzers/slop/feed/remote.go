@@ -58,6 +58,11 @@ type RemoteOptions struct {
 	// Verify is applied to both freshly fetched and cached bytes. Only bytes
 	// that pass verification are ever cached or returned.
 	Verify slopfeed.VerifyOptions
+	// OnRequest, when set, is called with the feed URL each time a request is
+	// about to leave the machine, whether or not it is answered. It is not
+	// called when the cache answers or the load is offline, so a caller can
+	// say truthfully which hosts a scan contacted.
+	OnRequest func(url string)
 }
 
 // LoadRemote fetches, verifies, and caches a feed from a URL, then returns it
@@ -182,6 +187,9 @@ func fetchAndCacheFeed(ctx context.Context, opts RemoteOptions, cachePath string
 	}
 	req.Header.Set("User-Agent", "nox-slopfeed-client")
 
+	if opts.OnRequest != nil {
+		opts.OnRequest(opts.URL)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetching feed: %w", err)

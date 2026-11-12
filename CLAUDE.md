@@ -17,7 +17,11 @@ Key design constraints:
 Four top-level packages with strict dependency direction (`core` depends on nothing, others depend on `core`):
 
 ```
-/core       — scan engine (no CLI, no network)
+/core       — scan engine (no CLI; a scan's network use is advisory and signed-feed
+              lookups, image pulls and Go module fetches, each named on a
+              [network] line and none made under --offline; contributing
+              observations is opt-in; core/attack and core/confirm contact a
+              target only with --authorize)
 /cli        — argument parsing, output handling
 /server     — MCP server (stdio, sandboxed, rate-limited)
 /ai-assist  — optional LLM-based explanations (separate module, no side effects)

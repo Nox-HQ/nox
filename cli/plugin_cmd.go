@@ -22,12 +22,15 @@ import (
 
 // runPlugin dispatches plugin subcommands.
 func runPlugin(args []string) int {
+	const pluginUsage = "Usage: nox plugin <search|info|install|update|list|remove|call|init|test|entry>"
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: nox plugin <search|info|install|update|list|remove|call|init|test|entry>")
+		fmt.Fprintln(os.Stderr, pluginUsage)
 		return 2
 	}
 
 	switch args[0] {
+	case "-h", "-help", "--help", "help":
+		return printGroupHelp(pluginUsage)
 	case "search":
 		return runPluginSearch(args[1:])
 	case "info":
@@ -50,7 +53,7 @@ func runPlugin(args []string) int {
 		return runPluginEntry(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown plugin command: %s\n", args[0])
-		fmt.Fprintln(os.Stderr, "Usage: nox plugin <search|info|install|update|list|remove|call|init|test|entry>")
+		fmt.Fprintln(os.Stderr, pluginUsage)
 		return 2
 	}
 }

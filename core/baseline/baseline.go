@@ -17,6 +17,10 @@ import (
 
 const schemaVersion = "1.0.0"
 
+// SourceMCP marks an entry added through the MCP server: an agent asked for it
+// and the host confirmed it.
+const SourceMCP = "mcp"
+
 // Entry represents a single baselined finding.
 type Entry struct {
 	Fingerprint string            `json:"fingerprint"`
@@ -25,8 +29,11 @@ type Entry struct {
 	Severity    findings.Severity `json:"severity"`
 	Reason      string            `json:"reason,omitempty"`
 	Owner       string            `json:"owner,omitempty"`
-	CreatedAt   time.Time         `json:"created_at"`
-	ExpiresAt   *time.Time        `json:"expires_at,omitempty"`
+	// Source names the interface that wrote the entry when it was not a person
+	// at a terminal. Empty for entries written by the CLI or by hand.
+	Source    string     `json:"source,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // Baseline holds a set of baselined finding entries with fast fingerprint lookup.

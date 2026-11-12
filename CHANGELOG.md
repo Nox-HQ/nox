@@ -7,10 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-What an audit of 1.65.0 found in the findings themselves: ratings and
+Fixes from an audit of 1.65.0 as a user meets it (#1066).
+
+What an audit of 1.65.0 found in the findings themselves (#1067): ratings and
 wording that claimed more than the scan knew.
 
 ### Changed
+
+- A mistyped `--format`, `--severity-threshold` or `--min-confidence` (and
+  `output.format` in `.nox.yaml`) is an error, exit 2, before the scan runs.
+  `--format sarfi` used to exit 0 and write no report; `--severity-threshold
+  hihg` matched no severity, so a scan with a staged secret exited 0; an
+  unknown `--min-confidence` applied no filter. A CI job or Action input
+  with such a typo was green and is now red. `html`, a working format, is
+  listed in the help text and the shell completions.
+- The MCP tools `baseline_add` and `baseline_add_many` refuse without a
+  non-blank `reason` and `confirmed: true`. They stop nox reporting a
+  finding and used to do it for any caller that asked. The entry records
+  the reason, an optional `owner`, and `"source": "mcp"`, a new optional
+  field on baseline entries that older versions ignore.
+- An MCP tool that refuses sets `isError`. Twelve tools reported a failure
+  as the text "Error: ..." in a successful result, so a client branching on
+  `isError` read a refused `plugin_install` or a `baseline_add` that wrote
+  nothing as success.
+- A scan names every host it contacts. Besides the dependency lookup, a
+  `[network]` line is printed for a base-image pull (registry, token
+  service and storage host), for Go modules the go command had to fetch
+  (the module cache is asked first, with `GOPROXY=off`), and for the signed
+  slopsquat and MCP advisory feeds. A request a cache answered prints
+  nothing. A project with no dependency used to request the slopsquat feed
+  and say nothing about the network.
+- `--offline`, `--no-osv` and `scan.osv.disabled` keep every feed off the
+  network and still read a verified cached copy, as `docs/intelligence.md`
+  says. `--no-osv` used to fetch the MCP advisory feed, `scan.osv.disabled`
+  ignored a cached one, and a slopsquat feed named by URL in
+  `scan.slop.feed` was fetched under both.
 
 - A vendor's published example key is reported at info, as documentation.
   `AKIAIOSFODNN7EXAMPLE` and its secret key from AWS's documentation and
@@ -38,6 +69,44 @@ wording that claimed more than the scan knew.
   wording, so baselines, waivers and VEX statements keep matching.
 
 ### Fixed
+
+- `nox install-hook` printed "Hook will fail on findings of severity:
+  critical,high" and installed a hook that blocked only critical: a staged
+  high-severity secret was committed. The threshold is the least severe
+  severity listed. The hook also blocked without saying why (the scan's exit
+  ended the script before the explanation), left `findings.json` and
+  `ai.inventory.json` in the repository after every commit, and treated a
+  `--bin` path with a space in it as "not found", letting every commit
+  through. `install-hook` and `protect install` now write the same script.
+- A staged scan that fails names the findings that fail it (severity, rule,
+  `file:line` and the rule's message, never the matched text), on stderr and
+  under `--quiet` too. A hook's refusal used to state no reason.
+- The pre-commit framework hook (`.pre-commit-hooks.yaml`) writes its reports
+  to a temporary directory instead of the repository being committed to.
+- Go advisories are no longer narrowed when the build could not be loaded.
+  With a module neither cached nor fetchable, `go list -deps -e` exits 0 and
+  prints a partial package list, which was read as the whole link set: an
+  advisory for a package reached only through the missing module became
+  "not linked" and dropped to info. Such a build is now unknown and the
+  findings keep their severity.
+- `--help` on a command group (`baseline`, `protect`, `plugin`, `registry`,
+  `intel`, `vex`, `completion`, `uri`, `doctor`) prints usage and exits 0.
+  It was "unknown subcommand: --help", exit 2, and `nox doctor --help` ran
+  the doctor. `nox --help` lists `replay`, `why`, `intel`, `verify-secrets`
+  and `variants`, which it omitted.
+- A release installed with `go install github.com/nox-hq/nox/cli@<version>`
+  reports that version instead of "nox dev (commit: none, built: unknown)".
+  A build from a checkout reports its commit, `+dirty` with uncommitted
+  changes.
+- Documentation that described a different product: the MCP tool and
+  resource tables (README counted 10 tools and 5 resources; `nox serve`
+  registers 28 and 13, and never serves `plugin.list` or
+  `plugin.call_tool`), the Action pins in every example (v0.4.2, v1.5.0 and
+  `@v1`; now the v1.65.0 commit), the `go install` instructions (the binary
+  is named `cli`; they now rename it), the README's sample output, and the
+  statement that the scan engine makes no network request. Tests hold the
+  MCP tables to the registered surface and the pins to the release nox runs
+  on itself.
 
 - A sample Google service-account file was reported as a critical leaked
   key. SEC-008 matches the line that says a JSON document is a
