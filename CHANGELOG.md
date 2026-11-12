@@ -142,6 +142,14 @@ wording that claimed more than the scan knew.
   Those alerts close and reopen once under the new id after upgrading, and
   their dismissals do not carry over. Fingerprints, baselines, waivers and VEX
   are unchanged. See `docs/adr/0003-sarif-descriptor-per-rule-and-severity.md`.
+- The `actions/remediate` composite action ran the scan Action pinned at
+  v1.62.0, three releases behind the nox it was released with. The pin check
+  that keeps the documented Action pins on the release nox runs itself now
+  covers `actions/` too, so the pin moves with every release.
+- MARKETPLACE.md, the GitHub Marketplace listing copy, was written for v0.8.1:
+  717 rules, 19 plugins, "OSV lookups gated behind a single flag", a binary
+  cache the Action does not have, and a pre-listing checklist for that
+  release. It now describes the current Action and what an online scan sends.
 
 ## [1.65.0] - 2026-11-10
 
