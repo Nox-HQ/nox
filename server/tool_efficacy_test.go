@@ -18,12 +18,13 @@ import (
 // Two guards: a registered tool must not be a stub, and every field of a
 // handler's input struct must actually be read.
 
-// toolChain matches one `srv.Tool("name")...Handler(s.handleX)` chain. Tools are
+// toolChain matches one `srv.Tool("name")...Handler(s.handleX)` chain, with or
+// without the textTool wrapper around the handler. Tools are
 // registered from more than one function (registerTools delegates the plugin
 // tools to registerPluginTools), so this scans the whole package rather than one
 // function body — an earlier version scanned only registerTools and was blind to
 // every plugin tool, including the stub it was written to catch.
-var toolChain = regexp.MustCompile(`srv\.Tool\("([^"]+)"\)(?:\s*\.\s*\w+\([^\n]*\))*\s*\.\s*Handler\(s\.(\w+)\)`)
+var toolChain = regexp.MustCompile(`srv\.Tool\("([^"]+)"\)(?:\s*\.\s*\w+\([^\n]*\))*\s*\.\s*Handler\((?:textTool\()?s\.(\w+)\)`)
 
 // stubbedBody recognises a handler whose whole job is to announce it does not
 // work. Returning that as a SUCCESSFUL result is the trap: an agent checking

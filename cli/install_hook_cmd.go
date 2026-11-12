@@ -8,9 +8,9 @@ import (
 	"strings"
 )
 
-// runInstallHook installs a git hook that runs `nox scan --staged` (or
-// equivalent diff-scoped scan) before commit or push. Operators bypass with
-// `--no-verify` as usual; the hook respects that escape hatch.
+// runInstallHook installs a git hook that scans before a commit (the index)
+// or a push (the working tree) and blocks on findings at or above a severity.
+// --no-verify skips it, as it does any hook.
 func runInstallHook(args []string) int {
 	fs := flag.NewFlagSet("install-hook", flag.ContinueOnError)
 	var (
@@ -22,7 +22,7 @@ func runInstallHook(args []string) int {
 	)
 	fs.StringVar(&repoPath, "repo", ".", "path to the git repository")
 	fs.StringVar(&hookKind, "kind", "pre-commit", "hook kind: pre-commit or pre-push")
-	fs.StringVar(&failOn, "fail-on", "critical,high", "comma-separated severities that fail the hook")
+	fs.StringVar(&failOn, "fail-on", "critical,high", "severities that fail the hook, comma-separated; the hook blocks the least severe one listed and everything above it")
 	fs.StringVar(&bin, "bin", "nox", "name or path of the nox binary the hook should call")
 	fs.BoolVar(&force, "force", false, "overwrite existing hook script")
 	if err := fs.Parse(args); err != nil {
@@ -33,6 +33,12 @@ func runInstallHook(args []string) int {
 	case "pre-commit", "pre-push":
 	default:
 		fmt.Fprintf(os.Stderr, "error: --kind must be pre-commit or pre-push, got %q\n", hookKind)
+		return 2
+	}
+
+	threshold, err := thresholdFromFailOn(failOn)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 2
 	}
 
@@ -50,67 +56,23 @@ func runInstallHook(args []string) int {
 		}
 	}
 
-	script := renderHookScript(hookKind, bin, failOn)
+	script := hookSpec{
+		kind:      hookKind,
+		bin:       bin,
+		threshold: threshold,
+		header: []string{
+			"Installed by `nox install-hook --kind " + hookKind + "`.",
+			"Skip once with --no-verify.",
+		},
+		skipIfMissing: true,
+	}.render()
 	if err := os.WriteFile(hookPath, []byte(script), 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "error: writing hook %s: %v\n", hookPath, err)
 		return 2
 	}
 
 	fmt.Printf("nox install-hook: wrote %s\n", hookPath)
-	fmt.Printf("Hook will fail on findings of severity: %s\n", failOn)
-	fmt.Println("Bypass with `git commit --no-verify` if needed.")
+	fmt.Printf("The hook blocks findings of severity %s or above.\n", threshold)
+	fmt.Printf("Skip it once with `git %s --no-verify`.\n", strings.TrimPrefix(hookKind, "pre-"))
 	return 0
-}
-
-// renderHookScript builds the shell script body for a git hook of the
-// requested kind. Pre-commit scopes scanning to the staged diff for the
-// fastest feedback loop; pre-push scans the full working tree.
-func renderHookScript(kind, bin, failOn string) string {
-	failOn = strings.TrimSpace(failOn)
-	if failOn == "" {
-		failOn = "critical,high"
-	}
-
-	switch kind {
-	case "pre-push":
-		return fmt.Sprintf(`#!/usr/bin/env sh
-# Installed by `+"`nox install-hook --kind pre-push`"+`. Bypass with --no-verify.
-set -e
-
-if ! command -v %[1]s >/dev/null 2>&1; then
-  echo "nox: %[1]s not found on PATH; skipping pre-push scan" >&2
-  exit 0
-fi
-
-%[1]s scan . --severity-threshold "$(echo %[2]s | cut -d, -f1)" --quiet
-status=$?
-if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
-  exit "$status"
-fi
-exit 0
-`, bin, failOn)
-	default: // pre-commit
-		return fmt.Sprintf(`#!/usr/bin/env sh
-# Installed by `+"`nox install-hook --kind pre-commit`"+`. Bypass with --no-verify.
-set -e
-
-if ! command -v %[1]s >/dev/null 2>&1; then
-  echo "nox: %[1]s not found on PATH; skipping pre-commit scan" >&2
-  exit 0
-fi
-
-# Only block on staged-file findings. nox scan --staged scopes to the
-# index so the hook stays under typical commit latency budgets.
-%[1]s scan . --staged --severity-threshold "$(echo %[2]s | cut -d, -f1)" --quiet
-status=$?
-if [ "$status" -eq 1 ]; then
-  echo "nox: pre-commit scan found %[2]s findings — fix and re-stage, or commit --no-verify to bypass" >&2
-  exit 1
-fi
-if [ "$status" -ne 0 ]; then
-  exit "$status"
-fi
-exit 0
-`, bin, failOn)
-	}
 }

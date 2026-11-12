@@ -12,12 +12,15 @@ import (
 
 // runRegistry dispatches registry subcommands.
 func runRegistry(args []string) int {
+	const registryUsage = "Usage: nox registry <add|list|remove>"
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: nox registry <add|list|remove>")
+		fmt.Fprintln(os.Stderr, registryUsage)
 		return 2
 	}
 
 	switch args[0] {
+	case "-h", "-help", "--help", "help":
+		return printGroupHelp(registryUsage)
 	case "add":
 		return runRegistryAdd(args[1:])
 	case "list":
@@ -26,7 +29,7 @@ func runRegistry(args []string) int {
 		return runRegistryRemove(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown registry command: %s\n", args[0])
-		fmt.Fprintln(os.Stderr, "Usage: nox registry <add|list|remove>")
+		fmt.Fprintln(os.Stderr, registryUsage)
 		return 2
 	}
 }

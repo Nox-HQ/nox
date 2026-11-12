@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -12,10 +13,13 @@ import (
 
 func runIntel(args []string) int {
 	if len(args) == 0 {
-		printIntelUsage()
+		printIntelUsage(os.Stderr)
 		return 2
 	}
 	switch args[0] {
+	case "-h", "-help", "--help", "help":
+		printIntelUsage(os.Stdout)
+		return 0
 	case "allowlist":
 		return runIntelAllowlist(args[1:]...)
 	case "preview":
@@ -46,34 +50,34 @@ func runIntel(args []string) int {
 		return runIntelEvidence(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "nox intel: unknown subcommand %q\n\n", args[0])
-		printIntelUsage()
+		printIntelUsage(os.Stderr)
 		return 2
 	}
 }
 
-func printIntelUsage() {
-	fmt.Fprintf(os.Stderr, "Usage: nox intel <command>\n\n")
-	fmt.Fprintf(os.Stderr, "  allowlist        print every field an observation may carry (--outcomes, --attack: theirs)\n")
-	fmt.Fprintf(os.Stderr, "  preview <path>   show exactly what a scan of <path> would contribute (--outcomes: its outcome report)\n")
-	fmt.Fprintf(os.Stderr, "  id               print this installation's opaque reporter id\n")
-	fmt.Fprintf(os.Stderr, "  consent          show, accept or withdraw the contribution terms (show|status|accept|withdraw;\n")
-	fmt.Fprintf(os.Stderr, "                   'consent outcomes ...' and 'consent attack ...' for their own terms)\n")
-	fmt.Fprintf(os.Stderr, "  forget           erase this installation's reporter id from the service and stop contributing\n")
-	fmt.Fprintf(os.Stderr, "\nBlast radius (organisation token in NOX_INTEL_TOKEN; prints, sends with --upload):\n")
-	fmt.Fprintf(os.Stderr, "  components [path]            describe this service's dependencies and capabilities\n")
-	fmt.Fprintf(os.Stderr, "  evidence <attack-result>     bind `nox attack run` traces to a candidate\n")
-	fmt.Fprintf(os.Stderr, "\nOperator accounts:\n")
-	fmt.Fprintf(os.Stderr, "  login            approve this terminal from your browser and store the session\n")
-	fmt.Fprintf(os.Stderr, "  logout           revoke the session, on the server as well as here\n")
-	fmt.Fprintf(os.Stderr, "  whoami           show who this machine is signed in as\n")
-	fmt.Fprintf(os.Stderr, "  register         open the web page where an organisation is created\n")
-	fmt.Fprintf(os.Stderr, "  add-operator     add someone to your organisation and print their link\n")
-	fmt.Fprintf(os.Stderr, "  invite           re-issue an enrolment link that expired\n")
-	fmt.Fprintf(os.Stderr, "  enroll           bind an authenticator using an enrolment link\n\n")
-	fmt.Fprintf(os.Stderr, "Every scan asks %s for advisories and verifies the\n", core.DefaultIntelligenceEndpoint)
-	fmt.Fprintf(os.Stderr, "answer against OSV.dev; set scan.intelligence.disabled to ask OSV.dev directly,\n")
-	fmt.Fprintf(os.Stderr, "or --offline to ask nobody. Contribution is off unless scan.intelligence.contribute\n")
-	fmt.Fprintf(os.Stderr, "is set, and is a separate decision from querying.\n")
+func printIntelUsage(w io.Writer) {
+	_, _ = fmt.Fprintf(w, "Usage: nox intel <command>\n\n")
+	_, _ = fmt.Fprintf(w, "  allowlist        print every field an observation may carry (--outcomes, --attack: theirs)\n")
+	_, _ = fmt.Fprintf(w, "  preview <path>   show exactly what a scan of <path> would contribute (--outcomes: its outcome report)\n")
+	_, _ = fmt.Fprintf(w, "  id               print this installation's opaque reporter id\n")
+	_, _ = fmt.Fprintf(w, "  consent          show, accept or withdraw the contribution terms (show|status|accept|withdraw;\n")
+	_, _ = fmt.Fprintf(w, "                   'consent outcomes ...' and 'consent attack ...' for their own terms)\n")
+	_, _ = fmt.Fprintf(w, "  forget           erase this installation's reporter id from the service and stop contributing\n")
+	_, _ = fmt.Fprintf(w, "\nBlast radius (organisation token in NOX_INTEL_TOKEN; prints, sends with --upload):\n")
+	_, _ = fmt.Fprintf(w, "  components [path]            describe this service's dependencies and capabilities\n")
+	_, _ = fmt.Fprintf(w, "  evidence <attack-result>     bind `nox attack run` traces to a candidate\n")
+	_, _ = fmt.Fprintf(w, "\nOperator accounts:\n")
+	_, _ = fmt.Fprintf(w, "  login            approve this terminal from your browser and store the session\n")
+	_, _ = fmt.Fprintf(w, "  logout           revoke the session, on the server as well as here\n")
+	_, _ = fmt.Fprintf(w, "  whoami           show who this machine is signed in as\n")
+	_, _ = fmt.Fprintf(w, "  register         open the web page where an organisation is created\n")
+	_, _ = fmt.Fprintf(w, "  add-operator     add someone to your organisation and print their link\n")
+	_, _ = fmt.Fprintf(w, "  invite           re-issue an enrolment link that expired\n")
+	_, _ = fmt.Fprintf(w, "  enroll           bind an authenticator using an enrolment link\n\n")
+	_, _ = fmt.Fprintf(w, "Every scan asks %s for advisories and verifies the\n", core.DefaultIntelligenceEndpoint)
+	_, _ = fmt.Fprintf(w, "answer against OSV.dev; set scan.intelligence.disabled to ask OSV.dev directly,\n")
+	_, _ = fmt.Fprintf(w, "or --offline to ask nobody. Contribution is off unless scan.intelligence.contribute\n")
+	_, _ = fmt.Fprintf(w, "is set, and is a separate decision from querying.\n")
 }
 
 // intelEndpointDefault is the base URL an intel subcommand talks to when

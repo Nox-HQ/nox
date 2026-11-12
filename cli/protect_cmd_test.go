@@ -446,16 +446,7 @@ func TestIsValidThreshold(t *testing.T) {
 	}
 }
 
-// A scan error (exit 2) must NOT let the commit through. The hook used to only
-// handle exit 1 and fall to exit 0, so a crashed scan silently passed as clean.
-func TestGenerateHookScriptPropagatesScanErrors(t *testing.T) {
-	script := generateHookScript("high")
-	// The exit-1 block still blocks.
-	if !strings.Contains(script, "exit 1") {
-		t.Error("hook must block on exit 1")
-	}
-	// And a non-1 non-zero exit must propagate, not fall through to exit 0.
-	if !strings.Contains(script, "exit_code -ne 0") || !strings.Contains(script, "exit $exit_code") {
-		t.Errorf("hook must propagate a scan error rather than swallowing it as exit 0:\n%s", script)
-	}
-}
+// That a scan error (exit 2) stops the commit is asserted by running the hook:
+// TestHooks_ExitCodeAndMessage. This used to be a test that the script
+// contained the text "exit $exit_code", which a script that never reached that
+// line would also pass.

@@ -110,7 +110,7 @@ func TestGoImportedPackages(t *testing.T) {
 	write("go.mod", "module example.com/reachtest\n\ngo 1.24\n")
 	write("main.go", "package main\n\nimport \"strings\"\n\nfunc main() { _ = strings.TrimSpace(\"x\") }\n")
 
-	pkgs, ok := goImportedPackages(context.Background(), dir)
+	pkgs, ok, _ := goImportedPackages(context.Background(), dir)
 	if !ok {
 		t.Fatal("expected go list to succeed")
 	}
@@ -128,7 +128,7 @@ func TestGoImportedPackages_NotAModule(t *testing.T) {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("go toolchain not available")
 	}
-	if _, ok := goImportedPackages(context.Background(), t.TempDir()); ok {
+	if _, ok, _ := goImportedPackages(context.Background(), t.TempDir()); ok {
 		t.Error("expected ok=false for a non-module directory")
 	}
 }

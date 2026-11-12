@@ -8,7 +8,7 @@
   <img src="https://github.com/nox-hq/nox/actions/workflows/ci.yml/badge.svg" alt="CI" />
   <img src=".github/nox-badge.svg" alt="Security" />
   <img src=".github/coverage-badge.svg" alt="Coverage" />
-  <img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white" alt="Go" />
+  <img src="https://img.shields.io/badge/Go-1.27+-00ADD8?logo=go&logoColor=white" alt="Go" />
   <img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License" />
 </p>
 
@@ -33,7 +33,7 @@ If you're shipping LLM features — `chat.completions.create`, RAG ingest into a
 
 Built so you can keep your source local, your CI green, and your CISO answered without paying a per-seat SaaS bill or sending code to a vendor.
 
-> **The MCP scanner that never sees your code.** No token. No telemetry. Deterministic. Run `nox scan --offline` and the scan path makes zero outbound connections — enforced by a test, not a promise (`TestOSVDisabled_NoNetworkEgress`). Online, exactly one thing leaves the machine: the dependency list (ecosystem, package, version), sent to the advisory source — [NOX Intelligence](docs/intelligence.md) by default, every answer verified against OSV.dev, or OSV.dev directly with `scan.intelligence.disabled: true`. Source code never leaves; findings leave only if you turn contribution on.
+> **The MCP scanner that never sees your code.** No token. No telemetry. Deterministic. Run `nox scan --offline` and the scan path makes zero outbound connections — enforced by a test, not a promise (`TestOSVDisabled_NoNetworkEgress`). Online, a scan sends the dependency list (ecosystem, package, version) to the advisory source — [NOX Intelligence](docs/intelligence.md) by default, every answer verified against OSV.dev, or OSV.dev directly with `scan.intelligence.disabled: true`. It also pulls digest-pinned base images named in Dockerfiles from their registries, and lets the go command fetch modules its cache lacks. Each of these prints a `[network]` line naming where it went and how to turn it off; [the full account](docs/intelligence.md#what-leaves-the-machine) lists every request. Source code never leaves; findings leave only if you turn contribution on.
 
 - **Deterministic** -- same inputs produce same outputs, no hidden state
 - **Offline-first** -- zero required external services
@@ -48,16 +48,29 @@ Install and scan a project in under a minute:
 ```bash
 # Install
 brew tap felixgeelhaar/tap && brew install nox
-# or: go install github.com/nox-hq/nox/cli@latest
+# or with Go: see Installation below
 
 # Scan the current directory
 nox scan .
 
-# Output:
-# nox dev -- scanning .
-# [results] 12 findings, 47 dependencies, 3 AI components
+# Output, abridged (the numbers are from one real project):
+# nox 1.65.0 — scanning .
+# [results] 108 findings, 694 dependencies, 3 AI components
+# [network] ...one line for each kind of request the scan made
+#
+# Nox Security Assessment
+#
+# 12 issues need attention (21 findings).
+#   1. ...each with its rule, location, severity and confidence
+#
+# Checks completed: secrets, application code, dependencies (694 packages), ...
+# Not checked: ...whatever the scan could not look at, and why
+# Next steps: ...
 # [done]
 ```
+
+The exit code is the verdict: `0` nothing found, `1` findings, `2` the scan
+could not run.
 
 Nox writes `findings.json` to the current directory. To generate all output formats at once:
 
@@ -81,7 +94,7 @@ reports/
 
 ```yaml
 # .github/workflows/security.yml
-- uses: nox-hq/nox@9133597590c30b2235093c48425c0afcecef0700 # v1.5.0
+- uses: nox-hq/nox@7ad45c0ab5057b1533087cb1c5054848974f08b2 # v1.65.0
   with:
     path: '.'
     format: sarif
@@ -98,6 +111,10 @@ reports/
 nox serve --allowed-paths /path/to/project
 ```
 
+This starts an MCP server on stdio. Every tool is read-only except three, and
+those refuse without explicit confirmation. See [MCP Server](#mcp-server) for
+the tools and resources.
+
 ### Use in your editor (LSP)
 
 `nox lsp` runs a Language Server over stdio, publishing findings as inline
@@ -112,8 +129,6 @@ PyCharm Professional, WebStorm, …; LSP4IJ for the Community editions).
 nox lsp    # spoken by the editor extension; not run by hand
 ```
 
-This starts an MCP server on stdio with 10 read-only tools and 5 resources. See [MCP Server](#mcp-server) for details.
-
 ## Installation
 
 ### Homebrew (macOS/Linux)
@@ -127,7 +142,14 @@ brew install nox
 
 ```bash
 go install github.com/nox-hq/nox/cli@latest
+# Go names a binary after its package directory, so this one is called "cli".
+mv "$(go env GOPATH)/bin/cli" "$(go env GOPATH)/bin/nox"
 ```
+
+With `GOBIN` set, the binary is there instead of `$(go env GOPATH)/bin`. A build
+installed this way reports its release (`nox version`) but not its commit, so
+`nox install-ci` asks for the commit with `--nox-ref`; the Homebrew and release
+binaries know theirs.
 
 ### Build from Source
 
@@ -668,10 +690,10 @@ See [`docs/usage.md`](docs/usage.md) for the full CLI reference.
 
 ## Architecture
 
-Six top-level packages with strict dependency direction (`core` depends on nothing):
+Seven top-level packages with strict dependency direction (`core` imports none of the others):
 
 ```
-core/       Scan engine, rule catalog, report generation (no CLI, no network)
+core/       Scan engine, rule catalog, report generation (no CLI; no network with --offline)
 cli/        Argument parsing, TUI, output handling
 server/     MCP server (stdio, sandboxed, rate-limited)
 plugin/     gRPC-based plugin host with safety profiles
@@ -854,17 +876,34 @@ nox serve --allowed-paths /path/to/project   # or name the roots
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `scan` | `path` (required) | Run a security scan on a directory |
-| `get_findings` | `format` (json\|sarif) | Get findings from last scan |
-| `get_sbom` | `format` (cdx\|spdx) | Get software bill of materials |
-| `get_finding_detail` | `finding_id`, `context_lines` | Get enriched finding with source context |
-| `list_findings` | `severity`, `rule`, `file`, `limit` | List findings with filtering |
-| `baseline_status` | `path` | Get baseline statistics |
-| `baseline_add` | `path`, `fingerprint`, `reason` | Add finding to baseline |
+| `scan` | `path` (required), `only`, `skip`, `previous` | Scan a directory; `only`/`skip` narrow it to scopes, `previous` reports what changed since an earlier run |
+| `summary` | -- | Counts for the last scan by severity, confidence and rule family. The place to start |
+| `analysis_capabilities` | -- | What this installation can establish, and what the last scan actually established |
+| `list_findings` | `severity`, `rule`, `file`, `include_suppressed`, `limit`, `offset` | List findings, filtered and paginated |
+| `get_findings` | `format` (json\|sarif) | Get every finding from the last scan |
+| `get_finding_detail` | `finding_id`, `context_lines` | Get one finding with source context and remediation |
+| `get_finding_by_fingerprint` | `fingerprint` | Look up one finding and its status (new, baselined, suppressed, VEX) |
+| `why` | `fingerprint` | Explain a finding: what was observed, what supports it, what argues against it, what was not evaluated |
+| `fix_plan` | `path`, `include_major` | Plan the fixes: safe to apply, needs review, needs information. Changes nothing |
 | `advisories` | `previous`, `policy` | Decide what to do about dependency advisories in the last scan (new, relevance, policy). Read-only: never opens a pull request or merges |
+| `get_sbom` | `format` (cdx\|spdx) | Get the software bill of materials |
+| `diff` | `path`, `base`, `head`, `offline` | Scan only the files changed between two git refs |
+| `rules` | -- | List every rule with its severity, CWE and remediation |
+| `baseline_status` | `path` | Get baseline statistics |
+| `baseline_add` | `path`, `fingerprint`, `reason`, `confirmed` (all required), `owner` | Add a finding to the baseline, which stops nox reporting it |
+| `baseline_add_many` | `path`, `fingerprints`, `reason`, `confirmed` (all required), `owner` | Add several findings to the baseline in one call |
+| `vex_status` | `path` | Load a VEX document and summarise its statuses |
+| `protect_status` | `path` | Report whether the nox pre-commit hook is installed |
+| `annotate` | -- | Build a GitHub pull request review payload from the findings. Builds it; does not post it |
+| `badge` | `label` | Render the security grade as an SVG badge |
+| `dashboard` | `path` | Render the last scan as a standalone HTML dashboard |
+| `agent_graph` | `format` (mermaid\|dot) | Render which tools each detected agent can call |
+| `data_sensitivity_report` | -- | Summarise the PII and sensitive-data findings |
+| `threat_model` | `previous` | Assemble a threat model from the last scan, with a STRIDE table and the evidence for each entry |
+| `compliance_iso27001` | -- | Map the scan's evidence to ISO/IEC 27001:2022 Annex A controls, and say what it cannot show |
 | `attack_plan` | `path` | Build exploit hypotheses from the last scan. Offline: contacts no target, executes nothing |
-| `plugin.list` | -- | List registered plugins |
-| `plugin.call_tool` | `tool`, `input`, `workspace_root` | Invoke a plugin tool |
+| `plugin_install` | `name`, `confirmed` (both required), `version` | Install a plugin from a configured registry: fetch, verify the digest, register |
+| `version` | -- | Report the nox version, commit and build date |
 
 ### Resources
 
@@ -875,14 +914,30 @@ nox serve --allowed-paths /path/to/project   # or name the roots
 | `nox://sbom/cdx` | application/json | CycloneDX SBOM |
 | `nox://sbom/spdx` | application/json | SPDX SBOM |
 | `nox://ai-inventory` | application/json | AI component inventory |
+| `nox://rules` | application/json | Every rule, with its metadata |
+| `nox://dashboard` | text/html | HTML dashboard of the last scan |
+| `nox://project/{project}/findings` | application/json | Findings of one project |
+| `nox://project/{project}/sarif` | application/json | SARIF 2.1.0 report of one project |
+| `nox://project/{project}/sbom/cdx` | application/json | CycloneDX SBOM of one project |
+| `nox://project/{project}/sbom/spdx` | application/json | SPDX SBOM of one project |
+| `nox://project/{project}/ai-inventory` | application/json | AI component inventory of one project |
+| `nox://project/{project}/dashboard` | text/html | HTML dashboard of one project |
+
+In the per-project URIs, `{project}` is the URL-encoded absolute path of a
+directory the server has scanned.
+
+Both tables are checked against the running server by
+`server/docs_surface_test.go`, so they cannot fall behind it.
 
 Output is truncated at 1 MB. Workspace paths are allowlisted.
 
 Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
 `idempotentHint`, `openWorldHint`). Most tools are read-only. The exceptions are explicit: `baseline_add` /
 `baseline_add_many` write the baseline file, and `plugin_install` runs new code
-on the operator's machine and requires `confirmed: true`, which the MCP host must
-collect from a human.
+on the operator's machine. All three refuse without `confirmed: true`, which the
+MCP host must collect from a human; the baseline tools also refuse without a
+`reason`, and record it on the entry together with `"source": "mcp"`. A refusal
+is returned with `isError` set, as every tool failure is.
 
 **No ACTIVE capability is exposed over MCP.** `nox attack run` / `replay` /
 `regress` and `nox confirm` send attack payloads at a network target, and they

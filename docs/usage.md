@@ -2209,7 +2209,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Run Nox security scan
-        uses: nox-hq/nox@24c7f00916ad15e99b6c44cdda8e55f05b869e43 # v0.4.2
+        uses: nox-hq/nox@7ad45c0ab5057b1533087cb1c5054848974f08b2 # v1.65.0
         with:
           path: '.'
           format: sarif
@@ -2249,7 +2249,7 @@ outranks the findings verdict, and reports are written before it, so the job
 still uploads its SARIF:
 
 ```yaml
-      - uses: nox-hq/nox@v1
+      - uses: nox-hq/nox@7ad45c0ab5057b1533087cb1c5054848974f08b2 # v1.65.0
         with:
           format: sarif
           fail-on-degraded: 'true'
@@ -2268,7 +2268,7 @@ still uploads its SARIF:
 
 ```yaml
       - name: Run Nox security scan
-        uses: nox-hq/nox@24c7f00916ad15e99b6c44cdda8e55f05b869e43 # v0.4.2
+        uses: nox-hq/nox@7ad45c0ab5057b1533087cb1c5054848974f08b2 # v1.65.0
         with:
           format: all
           output: reports
@@ -2291,7 +2291,7 @@ still uploads its SARIF:
 
 ```yaml
       - name: Run Nox security scan
-        uses: nox-hq/nox@24c7f00916ad15e99b6c44cdda8e55f05b869e43 # v0.4.2
+        uses: nox-hq/nox@7ad45c0ab5057b1533087cb1c5054848974f08b2 # v1.65.0
         with:
           fail-on-findings: 'false'
 ```
@@ -2311,10 +2311,13 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
-          go-version: '1.25'
+          go-version: '1.27'
 
       - name: Install nox
-        run: go install github.com/nox-hq/nox/cli@latest
+        # Go names the binary after its package directory ("cli").
+        run: |
+          go install github.com/nox-hq/nox/cli@latest
+          mv "$(go env GOPATH)/bin/cli" "$(go env GOPATH)/bin/nox"
 
       - name: Run security scan
         run: nox scan . --format sarif,json --output results/
@@ -2379,8 +2382,9 @@ waivers, gating) lives in
 ### Generic CI
 
 ```bash
-# Install
+# Install (Go names the binary after its package directory, "cli")
 go install github.com/nox-hq/nox/cli@latest
+mv "$(go env GOPATH)/bin/cli" "$(go env GOPATH)/bin/nox"
 
 # Scan (exit code 1 if findings detected)
 nox scan . --format all --output results/ -q
@@ -2410,32 +2414,59 @@ nox serve --allowed-paths /path/to/project
 
 | Tool | Description | Input |
 |------|-------------|-------|
-| `scan` | Scan a directory | `path` (absolute path, must be under an allowed root — the working directory unless `--allowed-paths` widens it); optional `only`, `skip` (lists of [scopes](#scopes)) |
+| `scan` | Scan a directory | `path` (absolute path, must be under an allowed root — the working directory unless `--allowed-paths` widens it); optional `only`, `skip` (lists of [scopes](#scopes)); `previous` (a findings.json from an earlier run, to report what changed) |
+| `summary` | Counts for the last scan by severity, confidence and rule family, with dependency and AI-component totals. The place to start | (none) |
+| `analysis_capabilities` | What this installation can establish, and what the last scan actually established, per analysis capability. A capability that was available and answered nothing was not asked | (none) |
+| `list_findings` | List findings with filters | `severity`, `rule`, `file`, `include_suppressed`, `limit` (default: 50, max: 500), `offset` |
 | `get_findings` | Get findings from last scan | `format` (`json` or `sarif`, default: `json`) |
-| `get_sbom` | Get SBOM from last scan (an error if that scan left out `deps`) | `format` (`cdx` or `spdx`, default: `cdx`) |
 | `get_finding_detail` | Get enriched detail for a finding | `finding_id` (required), `context_lines` (default: 5) |
-| `list_findings` | List findings with filters | `severity`, `rule`, `file`, `limit` (default: 50) |
-| `baseline_status` | Show baseline statistics | `path` (absolute path to project root) |
-| `baseline_add` | Add a finding to the baseline | `path`, `fingerprint` (required), `reason` |
+| `get_finding_by_fingerprint` | Look up one finding by fingerprint and report its status (new, baselined, suppressed, VEX) | `fingerprint` (full, or its first 12 characters) |
+| `why` | Explain a finding: what was observed, what supports it, what argues against it, what was not evaluated, the impact and what to do. Derived from the scan, not written by a model | `fingerprint` |
+| `fix_plan` | Plan the fixes for the last scan: each issue as safe to apply, needs review or needs information, plus the dependency upgrades. Changes nothing; a person applies it with `nox fix apply` | `path`, `include_major` |
 | `advisories` | Decide what to do about the dependency advisories in the last scan, as `nox advisories` does (new vs. a previous run, relevance, what the policy permits). Never opens a pull request or merges | `previous` (findings.json of the last run), `policy` (`report`, `prepare`, `remediate`) |
-| `plugin.list` | List registered plugins | (none) |
-| `plugin.call_tool` | Invoke a plugin tool | `tool`, `input` (object), `workspace_root` |
+| `get_sbom` | Get SBOM from last scan (an error if that scan left out `deps`) | `format` (`cdx` or `spdx`, default: `cdx`) |
+| `diff` | Scan only the files changed between two git refs | `path`, `base`, `head`, `offline` |
+| `rules` | List every rule with its ID, description, severity, CWE and remediation | (none) |
+| `baseline_status` | Show baseline statistics | `path` (absolute path to project root) |
+| `baseline_add` | Add a finding to the baseline, which stops nox reporting it | `path`, `fingerprint`, `reason`, `confirmed: true` (all required); `owner` |
+| `baseline_add_many` | Add several findings to the baseline in one call | `path`, `fingerprints`, `reason`, `confirmed: true` (all required); `owner` |
+| `vex_status` | Load a VEX document and summarise its statuses | `path` |
+| `protect_status` | Report whether the nox pre-commit hook is installed in a repository | `path` |
+| `annotate` | Build a GitHub pull request review payload from the last scan's findings. Builds it; does not post it | (none) |
+| `badge` | Render the last scan's security grade as an SVG badge | `label` |
+| `dashboard` | Render the last scan as a standalone HTML dashboard | `path` |
+| `agent_graph` | Render which tools each detected agent can call | `format` (`mermaid` or `dot`, default: `mermaid`) |
+| `data_sensitivity_report` | Summarise the PII and sensitive-data findings (`DATA-*` rules) of the last scan | (none) |
+| `threat_model` | Assemble a threat model from the last scan: elements, data flows, trust boundaries and a STRIDE table with the evidence for each entry | `previous` |
+| `compliance_iso27001` | Map the last scan's evidence to ISO/IEC 27001:2022 Annex A controls: what the scan shows, what it cannot show, and the organisational evidence still needed | (none) |
+| `attack_plan` | Build exploit hypotheses from the last scan. Offline: contacts no target and executes nothing | `path` |
+| `plugin_install` | Install a plugin from a configured registry: fetches the binary, verifies its digest, registers it | `name`, `confirmed: true` (required); `version` |
+| `version` | Report the nox version, commit and build date | (none) |
 
 Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
 `idempotentHint`, `openWorldHint`), so a client can decide what to ask a person
 about without calling it. Almost all are **read-only** and closed-world;
-`scan`, `diff` and `plugin.call_tool` are read-only but open-world (they may
-look up advisories on the network). The exceptions: `baseline_add` and
+`scan` and `diff` are read-only but open-world (they may look up advisories on
+the network). The exceptions: `baseline_add` and
 `baseline_add_many` write the baseline file (additive, idempotent, not
 destructive), and `plugin_install` fetches and registers code that runs on your
-machine (open-world, destructive, requires `confirmed: true`). Output is
-truncated at **1 MB**.
+machine (open-world, destructive). Output is truncated at **1 MB**.
+
+The annotations are advice to the client. What the server itself enforces:
+
+- `plugin_install`, `baseline_add` and `baseline_add_many` refuse without
+  `confirmed: true`. The MCP host is expected to collect that from a person
+  before forwarding the call.
+- The two baseline tools also refuse without a `reason`. The entry they write
+  records it, the optional `owner`, and `"source": "mcp"`, so a reviewer reading
+  `.nox/baseline.json` can tell a suppression an agent asked for from one typed
+  at a terminal.
+- A tool that fails or refuses returns its message with `isError` set.
 
 Requests are rate-limited in two tiers, so a runaway or steered agent cannot
 turn the host into a scanning farm. Every request shares a ceiling of 20 per
 second (burst 50). The tools whose cost scales with the workspace — `scan`,
-`diff`, `plugin.call_tool`, `plugin_install` — additionally share 1 per second
-(burst 3). Reading results back is never charged against the scan budget. A
+`diff`, `plugin_install` — additionally share 1 per second (burst 3). Reading results back is never charged against the scan budget. A
 refused call returns JSON-RPC error `-32003` (rate limited); wait and retry.
 
 ### Resources
@@ -2447,6 +2478,20 @@ refused call returns JSON-RPC error `-32003` (rate limited); wait and retry.
 | `nox://sbom/cdx` | `application/json` | CycloneDX SBOM |
 | `nox://sbom/spdx` | `application/json` | SPDX SBOM |
 | `nox://ai-inventory` | `application/json` | AI component inventory |
+| `nox://rules` | `application/json` | Every rule, with its metadata |
+| `nox://dashboard` | `text/html` | HTML dashboard of the last scan |
+| `nox://project/{project}/findings` | `application/json` | Findings of one project |
+| `nox://project/{project}/sarif` | `application/json` | SARIF 2.1.0 of one project |
+| `nox://project/{project}/sbom/cdx` | `application/json` | CycloneDX SBOM of one project |
+| `nox://project/{project}/sbom/spdx` | `application/json` | SPDX SBOM of one project |
+| `nox://project/{project}/ai-inventory` | `application/json` | AI component inventory of one project |
+| `nox://project/{project}/dashboard` | `text/html` | HTML dashboard of one project |
+
+In the per-project URIs, `{project}` is the URL-encoded absolute path of a
+directory the server has scanned.
+
+`nox serve` does not load plugins, so `plugin.list` and `plugin.call_tool`
+(described in [the extension design](extension.md)) are not among its tools.
 
 ### Claude Desktop
 

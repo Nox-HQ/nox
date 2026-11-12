@@ -149,3 +149,49 @@ func TestLoadRejectsNonHTTPURLs(t *testing.T) {
 		t.Error("no verifier must be rejected")
 	}
 }
+
+// The caller is told about each request Load makes, and about none when the
+// cache answers or the load is offline. A request that got a 404 was still made.
+func TestLoadReportsTheRequestsItMakes(t *testing.T) {
+	body, verify := serviceFeed(t)
+	var hits atomic.Int32
+	srv := feedServer(t, 200, body, &hits)
+	var requested []string
+	opts := Options{
+		URL: srv.URL + "/v1/feeds/mcp", CacheDir: t.TempDir(), TTL: time.Hour, Verify: verify,
+		OnRequest: func(u string) { requested = append(requested, u) },
+	}
+
+	if _, err := Load(context.Background(), opts); err != nil {
+		t.Fatalf("first load: %v", err)
+	}
+	if len(requested) != 1 || requested[0] != opts.URL {
+		t.Fatalf("first load reported %q, want the one request to %s", requested, opts.URL)
+	}
+
+	requested = nil
+	if _, err := Load(context.Background(), opts); err != nil {
+		t.Fatalf("second load: %v", err)
+	}
+	opts.Offline = true
+	if _, err := Load(context.Background(), opts); err != nil {
+		t.Fatalf("offline load: %v", err)
+	}
+	if len(requested) != 0 {
+		t.Errorf("the cache answered twice, yet %q was reported as requested", requested)
+	}
+
+	missing := feedServer(t, http.StatusNotFound, nil, &hits)
+	requested = nil
+	_, err := Load(context.Background(), Options{
+		URL: missing.URL + "/v1/feeds/mcp", CacheDir: t.TempDir(), TTL: time.Hour, Verify: verify,
+		OnRequest: func(u string) { requested = append(requested, u) },
+	})
+	var np *NotPublishedError
+	if !errors.As(err, &np) {
+		t.Fatalf("err = %v, want NotPublishedError", err)
+	}
+	if len(requested) != 1 {
+		t.Errorf("an unpublished feed reported %q, want the request reported once", requested)
+	}
+}

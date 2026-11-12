@@ -147,6 +147,29 @@ func TestUndeterminedIsNotNo(t *testing.T) {
 	}
 }
 
+// The answer is prose. A rung's identifier is how the finding's metadata names
+// a step; printing it leaves the reader to guess what symbol_used means.
+func TestApplicabilityAnswerUsesNoRungIdentifier(t *testing.T) {
+	for _, outcome := range []string{"not_impacting", "undetermined", "impacting"} {
+		in := baseInputs()
+		in.Finding.Metadata = map[string]string{
+			"applicability":            outcome,
+			"applicability_reached":    "affected_version",
+			"applicability_stopped_at": "symbol_used",
+			"applicability_because":    "unsupported",
+		}
+		got := explain.Explain(in).AffectsThisApplication
+		for _, id := range []string{"affected_version", "symbol_used", "call_reachable"} {
+			if strings.Contains(got, id) {
+				t.Errorf("%s: %q prints the identifier %q", outcome, got, id)
+			}
+		}
+		if !strings.Contains(got, "affected range") {
+			t.Errorf("%s: %q does not say what was established", outcome, got)
+		}
+	}
+}
+
 // TestWhatWasNotEvaluatedSeparatesALimitFromAGap. "Nobody built the thing that
 // would look" and "the thing that looks did not run here" send a reader to
 // different places, and collapsing them wastes the answer.

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 func runTestGit(t *testing.T, dir string, args ...string) {
@@ -20,7 +22,7 @@ func runTestGit(t *testing.T, dir string, args ...string) {
 	}
 }
 
-const changeTestOldKey = "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n" // nox:ignore SEC-001 -- test fixture
+var changeTestOldKey = "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 
 const changeTestNewKey = "AWS_KEY=AKIAV4NHT8QWE6YCBU2S\n" // nox:ignore SEC-001 -- test fixture
 

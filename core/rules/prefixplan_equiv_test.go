@@ -2,6 +2,7 @@ package rules_test
 
 import (
 	"bytes"
+	"hash/fnv"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -61,7 +62,7 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 	if extra := os.Getenv("NOX_PREFIX_EQUIV_CORPUS"); extra != "" {
 		roots = append(roots, extra)
 	}
-	files, matched, seen := 0, 0, 0
+	files, matched := 0, 0
 	for _, root := range roots {
 		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -84,12 +85,11 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 			if err != nil || strings.IndexByte(string(content[:min(len(content), 8000)]), 0) >= 0 {
 				return nil
 			}
-			seen++
 			// Under -race the detector multiplies the cost of the full-scan
 			// reference by ~10 and finds nothing here: the property is about
-			// matching, not concurrency. Check a fixed tenth of the files so
-			// CI stays inside its timeout; every other run checks them all.
-			if raceEnabled && seen%10 != 0 {
+			// matching, not concurrency. Check a sample so CI stays inside its
+			// timeout; every other run checks every file.
+			if raceEnabled && !inRaceSample(p, len(content)) {
 				return nil
 			}
 			files++
@@ -127,6 +127,28 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 	if matched == 0 {
 		t.Fatal("no rule matched any file; the equivalence was never exercised")
 	}
+}
+
+// raceSampleMaxBytes bounds a file checked under -race. The largest files
+// under the walked roots are rule tables of several hundred kilobytes; one of
+// them costs more under the race detector than the rest of the sample.
+const raceSampleMaxBytes = 64 << 10
+
+// inRaceSample chooses the files checked under -race: a tenth of them, picked
+// by each file's own path, and none above raceSampleMaxBytes.
+//
+// It used to take every tenth file in walk order. Which files that is depends
+// on how many sort ahead of them, so adding a file anywhere moved the sample:
+// eight new files in one pull request moved it onto secrets/rules.go (448 KB),
+// and core/rules went from under three minutes to past CI's ten-minute
+// timeout on macOS. Picked by path, a file is in or out whatever else exists.
+func inRaceSample(path string, size int) bool {
+	if size > raceSampleMaxBytes {
+		return false
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(filepath.ToSlash(path)))
+	return h.Sum32()%10 == 0
 }
 
 func containsAny(content []byte, keywords [][]byte) bool {

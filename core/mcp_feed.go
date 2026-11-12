@@ -43,7 +43,7 @@ const maxAdvisoryIDs = 5
 // is not available, cannot be verified or cannot be fetched becomes a
 // degradation that says the servers were NOT checked, because an empty result
 // must not read as "no advisories".
-func runMCPFeedPass(ctx context.Context, target string, cfg *ScanConfig, opts ScanOptions, artifacts []discovery.Artifact, allFindings *findings.FindingSet, deg *degrade.Degradations) { //nolint:gocritic // mirrors RunScanContext
+func runMCPFeedPass(ctx context.Context, target string, cfg *ScanConfig, opts ScanOptions, artifacts []discovery.Artifact, allFindings *findings.FindingSet, deg *degrade.Degradations, requests *feedRequests) { //nolint:gocritic // mirrors RunScanContext
 	fc := cfg.Scan.MCPFeed
 	if fc.Disabled {
 		return
@@ -52,12 +52,9 @@ func runMCPFeedPass(ctx context.Context, target string, cfg *ScanConfig, opts Sc
 	if len(servers) == 0 {
 		return
 	}
-	if cfg.Scan.OSV.Disabled {
-		deg.AddAdvisory(degradeMCPFeed,
-			fmt.Sprintf("%d MCP server package(s) were not checked against the MCP advisory feed: network lookups are disabled (scan.osv.disabled)", len(servers)),
-			"known advisories for these packages are not reported; this is not \"no advisories\"")
-		return
-	}
+	// Every way of keeping the scan off the network keeps this pass off it too.
+	// The verified copy a previous scan cached is still read.
+	noNetwork := opts.Offline || opts.DisableOSV || cfg.Scan.OSV.Disabled
 	feedURL := fc.ResolvedURL(cfg.Scan.Intelligence)
 	if feedURL == "" {
 		deg.AddAdvisory(degradeMCPFeed,
@@ -86,9 +83,9 @@ func runMCPFeedPass(ctx context.Context, target string, cfg *ScanConfig, opts Sc
 		cacheDir = filepath.Join(scanRootDir(target), cacheDir)
 	}
 
-	loaded, err := mcpfeed.Load(ctx, mcpfeed.Options{URL: feedURL, CacheDir: cacheDir, TTL: refresh, Offline: opts.Offline, Verify: verify})
+	loaded, err := mcpfeed.Load(ctx, mcpfeed.Options{URL: feedURL, CacheDir: cacheDir, TTL: refresh, Offline: noNetwork, Verify: verify, OnRequest: requests.note})
 	if err != nil {
-		recordMCPFeedFailure(ctx, deg, key, feedURL, len(servers), opts.Offline, err)
+		recordMCPFeedFailure(ctx, deg, key, feedURL, len(servers), opts.Offline, noNetwork, err)
 		return
 	}
 	if loaded.RefreshErr != nil {
@@ -107,18 +104,22 @@ func runMCPFeedPass(ctx context.Context, target string, cfg *ScanConfig, opts Sc
 // was not checked and why. A service that has not published a feed is not an
 // outage and not the operator's to fix, so it does not fail a build; anything
 // else (a feed that does not verify, an unreachable service with no cache) does.
-func recordMCPFeedFailure(ctx context.Context, deg *degrade.Degradations, key feedKey, feedURL string, servers int, offline bool, err error) {
+func recordMCPFeedFailure(ctx context.Context, deg *degrade.Degradations, key feedKey, feedURL string, servers int, offline, noNetwork bool, err error) {
 	impact := "MCP server packages were not checked against the advisory feed; an empty result is not \"no advisories\""
 	var np *mcpfeed.NotPublishedError
 	switch {
 	case errors.As(err, &np):
 		deg.AddAdvisory(degradeMCPFeed,
 			fmt.Sprintf("the MCP advisory feed is not available from %s: %v", feedURL, err), impact)
-	case offline:
+	case noNetwork:
+		why := "network lookups are disabled"
+		if offline {
+			why = "the scan is offline"
+		}
 		deg.AddAdvisory(degradeMCPFeed,
-			fmt.Sprintf("%d MCP server package(s) were not checked: the scan is offline and no verified copy of the MCP advisory feed is cached (%v)", servers, err), impact)
+			fmt.Sprintf("%d MCP server package(s) were not checked: %s and no verified copy of the MCP advisory feed is cached (%v)", servers, why, err), impact)
 	default:
-		deg.Add(degradeMCPFeed, fmt.Sprintf("the MCP advisory feed %s could not be used: %s", feedURL, explainFeedFailure(ctx, key, feedURL, offline, err)), impact)
+		deg.Add(degradeMCPFeed, fmt.Sprintf("the MCP advisory feed %s could not be used: %s", feedURL, explainFeedFailure(ctx, key, feedURL, false, err)), impact)
 	}
 }
 

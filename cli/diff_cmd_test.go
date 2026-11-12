@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 func TestRunDiff_NonGitRepo(t *testing.T) {
@@ -99,7 +101,7 @@ func TestRunDiff_WithChangedFiles(t *testing.T) {
 	}
 
 	// Create a new file with a finding.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n" // nox:ignore SEC-001 -- test fixture
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n" // nox:ignore SEC-001 -- test fixture
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -160,7 +162,7 @@ func TestRunDiff_JSONOutput(t *testing.T) {
 	}
 
 	// Add file with finding.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n" // nox:ignore SEC-001 -- test fixture
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n" // nox:ignore SEC-001 -- test fixture
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}

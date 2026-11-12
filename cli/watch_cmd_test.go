@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/nox-hq/nox/internal/testkey"
 	"github.com/nox-hq/nox/internal/testlink"
 )
 
@@ -151,7 +152,7 @@ func TestPrintScanResults_WithFindings(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create a file with a secret.
-	content := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	content := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(content), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}

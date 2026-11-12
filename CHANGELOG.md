@@ -7,8 +7,129 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Fixes from an audit of 1.65.0 as a user meets it (#1066).
+
+What an audit of 1.65.0 found in the findings themselves (#1067): ratings and
+wording that claimed more than the scan knew.
+
+### Changed
+
+- A mistyped `--format`, `--severity-threshold` or `--min-confidence` (and
+  `output.format` in `.nox.yaml`) is an error, exit 2, before the scan runs.
+  `--format sarfi` used to exit 0 and write no report; `--severity-threshold
+  hihg` matched no severity, so a scan with a staged secret exited 0; an
+  unknown `--min-confidence` applied no filter. A CI job or Action input
+  with such a typo was green and is now red. `html`, a working format, is
+  listed in the help text and the shell completions.
+- The MCP tools `baseline_add` and `baseline_add_many` refuse without a
+  non-blank `reason` and `confirmed: true`. They stop nox reporting a
+  finding and used to do it for any caller that asked. The entry records
+  the reason, an optional `owner`, and `"source": "mcp"`, a new optional
+  field on baseline entries that older versions ignore.
+- An MCP tool that refuses sets `isError`. Twelve tools reported a failure
+  as the text "Error: ..." in a successful result, so a client branching on
+  `isError` read a refused `plugin_install` or a `baseline_add` that wrote
+  nothing as success.
+- A scan names every host it contacts. Besides the dependency lookup, a
+  `[network]` line is printed for a base-image pull (registry, token
+  service and storage host), for Go modules the go command had to fetch
+  (the module cache is asked first, with `GOPROXY=off`), and for the signed
+  slopsquat and MCP advisory feeds. A request a cache answered prints
+  nothing. A project with no dependency used to request the slopsquat feed
+  and say nothing about the network.
+- `--offline`, `--no-osv` and `scan.osv.disabled` keep every feed off the
+  network and still read a verified cached copy, as `docs/intelligence.md`
+  says. `--no-osv` used to fetch the MCP advisory feed, `scan.osv.disabled`
+  ignored a cached one, and a slopsquat feed named by URL in
+  `scan.slop.feed` was fetched under both.
+
+- A vendor's published example key is reported at info, as documentation.
+  `AKIAIOSFODNN7EXAMPLE` and its secret key from AWS's documentation and
+  Stripe's sample `sk_test_` key were reported as high or critical
+  credentials to rotate. A finding whose whole matched value is one of
+  eight such values now says whose documentation it comes from and carries
+  `value_class: published_example` and the rule's own rating as
+  `rule_severity`. It no longer fails a scan that has no policy and no
+  longer meets a severity threshold, as a dependency vulnerability shown
+  not to impact the build has not since 1.58.0. A key that only contains
+  `EXAMPLE`, or starts with a published value, keeps its rating.
+- A test-mode key is reported at medium, as a test-mode key. A Stripe
+  `sk_test_` or `rk_test_`, Duffel `duffel_test_`, Shippo `shippo_test_`
+  or Lob `test_` key was rated like the live key, critical or high. It is
+  still a secret in the repository: it still fails a scan with no policy
+  and the fix plan still says to rotate it, but it no longer meets
+  `--severity-threshold high`. The finding carries `value_class: test_mode`
+  and `rule_severity`. A class only ever lowers a rating.
+- A dependency finding's message says what was established in words. It
+  used to end in the applicability ladder's identifiers ("established as
+  far as "affected_version"; symbol_used was not established"), in SARIF,
+  pull request comments, `nox explain` and the CycloneDX analysis detail.
+  The metadata keys and values are unchanged, and so is every fingerprint:
+  a dependency finding's identity is still computed over the 1.65.0
+  wording, so baselines, waivers and VEX statements keep matching.
+
 ### Fixed
 
+- `nox install-hook` printed "Hook will fail on findings of severity:
+  critical,high" and installed a hook that blocked only critical: a staged
+  high-severity secret was committed. The threshold is the least severe
+  severity listed. The hook also blocked without saying why (the scan's exit
+  ended the script before the explanation), left `findings.json` and
+  `ai.inventory.json` in the repository after every commit, and treated a
+  `--bin` path with a space in it as "not found", letting every commit
+  through. `install-hook` and `protect install` now write the same script.
+- A staged scan that fails names the findings that fail it (severity, rule,
+  `file:line` and the rule's message, never the matched text), on stderr and
+  under `--quiet` too. A hook's refusal used to state no reason.
+- The pre-commit framework hook (`.pre-commit-hooks.yaml`) writes its reports
+  to a temporary directory instead of the repository being committed to.
+- Go advisories are no longer narrowed when the build could not be loaded.
+  With a module neither cached nor fetchable, `go list -deps -e` exits 0 and
+  prints a partial package list, which was read as the whole link set: an
+  advisory for a package reached only through the missing module became
+  "not linked" and dropped to info. Such a build is now unknown and the
+  findings keep their severity.
+- `--help` on a command group (`baseline`, `protect`, `plugin`, `registry`,
+  `intel`, `vex`, `completion`, `uri`, `doctor`) prints usage and exits 0.
+  It was "unknown subcommand: --help", exit 2, and `nox doctor --help` ran
+  the doctor. `nox --help` lists `replay`, `why`, `intel`, `verify-secrets`
+  and `variants`, which it omitted.
+- A release installed with `go install github.com/nox-hq/nox/cli@<version>`
+  reports that version instead of "nox dev (commit: none, built: unknown)".
+  A build from a checkout reports its commit, `+dirty` with uncommitted
+  changes.
+- Documentation that described a different product: the MCP tool and
+  resource tables (README counted 10 tools and 5 resources; `nox serve`
+  registers 28 and 13, and never serves `plugin.list` or
+  `plugin.call_tool`), the Action pins in every example (v0.4.2, v1.5.0 and
+  `@v1`; now the v1.65.0 commit), the `go install` instructions (the binary
+  is named `cli`; they now rename it), the README's sample output, and the
+  statement that the scan engine makes no network request. Tests hold the
+  MCP tables to the registered surface and the pins to the release nox runs
+  on itself.
+
+- A sample Google service-account file was reported as a critical leaked
+  key. SEC-008 matches the line that says a JSON document is a
+  service-account file; the credential is the document's `private_key`.
+  When that field holds a value too short to be a key (`"..."`, a template
+  variable, the PEM armour with the body left out), the finding is
+  withdrawn and the reason recorded. A document with a key in it, and any
+  document nox cannot read to its closing brace, is reported as before.
+- The assessment printed "(highest severity: )" for a dependency whose
+  advisories are all info, spelled a Go upgrade target without the `v` the
+  installed version has (`v0.58.0 to 0.58.1-…`), and did not say when
+  every advisory on the line was shown not to impact the build.
+- One credential that two rules report is one issue in the assessment. A
+  Lob key (SEC-070 and SEC-262), an AWS access key (SEC-001 and SEC-508)
+  and a PEM key (SEC-004 and SEC-299) were listed twice at the same file
+  and line and counted as two issues. The title names both rules. The
+  findings and their count are unchanged.
+- The fix plan told the reader to rotate "the exposed value" for a rule
+  that reports an identifier or a public key (an S3 URL at info), and
+  printed "Imported from Gitleaks: <id>" as the thing to supply for 186
+  rules, which `nox explain` also showed as the remediation. Each now
+  says what to do.
+- A distribution advisory with no summary left ":  —" in the message.
 - **GitHub Code Scanning now rates each alert at its finding's severity.**
   GitHub reads an alert's rating only from the rule it points at, so a finding
   nox had re-rated — a reachability downgrade, a `severity_override`, a VULN-001

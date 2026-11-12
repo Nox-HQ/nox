@@ -8,6 +8,7 @@ import (
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/baseline"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 func TestRunBaseline_NoArgs(t *testing.T) {
@@ -26,7 +27,7 @@ func TestRunBaseline_UnknownSubcommand(t *testing.T) {
 
 func TestRunBaseline_Init(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte("AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte("AWS_KEY="+testkey.AWSAccessKeyID()+"\n"), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
 	blPath := filepath.Join(dir, "bl.json")
@@ -56,7 +57,7 @@ func TestRunBaseline_Write(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create a file with a secret to get findings.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -86,7 +87,7 @@ func TestRunBaseline_WriteDefaultPath(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create a file with a finding.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -139,7 +140,7 @@ func TestRunBaseline_Update(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create initial finding.
-	secret1 := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret1 := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config1.env"), []byte(secret1), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -183,7 +184,7 @@ func TestRunBaseline_UpdateDefaultPath(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create initial baseline.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -236,7 +237,7 @@ func TestRunBaseline_Show(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create findings and baseline.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -306,7 +307,7 @@ func TestRunBaselineAdd_PreservesEntries(t *testing.T) {
 	}
 
 	// Add a real finding so the scan turns something up.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -411,7 +412,7 @@ func TestRunBaselineDiff_ReportsAddsAndPrunes(t *testing.T) {
 
 	// Add a fresh finding so the scan turns something up.
 	if err := os.WriteFile(filepath.Join(dir, "config.env"),
-		[]byte("AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"), 0o644); err != nil {
+		[]byte("AWS_KEY="+testkey.AWSAccessKeyID()+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -429,7 +430,7 @@ func TestRunBaselineDiff_ReportsAddsAndPrunes(t *testing.T) {
 func TestRunBaseline_Migrate(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "config.env"),
-		[]byte("AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"), 0o644); err != nil {
+		[]byte("AWS_KEY="+testkey.AWSAccessKeyID()+"\n"), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
 	blPath := filepath.Join(dir, "bl.json")

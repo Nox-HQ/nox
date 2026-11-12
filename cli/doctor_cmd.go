@@ -13,7 +13,10 @@ import (
 // runDoctor reports on the local environment so an operator can
 // self-diagnose missing prerequisites, broken plugin state, and
 // configuration drift before opening an issue.
-func runDoctor(_ []string) int {
+func runDoctor(args []string) int {
+	if len(args) > 0 && isHelpArg(args[0]) {
+		return printGroupHelp("Usage: nox doctor\n\nReports the environment nox runs in, installed plugins and their state, and whether .nox.yaml is sane.")
+	}
 	fmt.Printf("nox doctor\n")
 	fmt.Printf("  version:        %s\n", version)
 	fmt.Printf("  commit:         %s\n", commit)
