@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 // Flag-efficacy guards for `nox scan`.
@@ -203,7 +205,7 @@ func TestScanFlagInventoryMatchesRegistrations(t *testing.T) {
 func TestScanSeverityThresholdFiltersFindings(t *testing.T) {
 	dir := t.TempDir()
 	// A high-severity secret and a low-severity finding source.
-	writeScanFixture(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeScanFixture(t, dir, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 
 	all := scanFindingCount(t, dir, nil)
 	if all == 0 {

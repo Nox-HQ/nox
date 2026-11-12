@@ -63,6 +63,12 @@ var refutationCases = []refutationCase{
 		content:    "package p\n\n// \"bot_token\" pops a password input, \"imap_password\" pops an app-password wizard.\nfunc F() {}\n",
 		wantReason: "within a comment region",
 	},
+	{
+		name:       "service-account document without a key",
+		file:       "sa.template.json",
+		content:    "{\n  \"type\": \"" + "service_account\",\n  \"private_key\": \"...\"\n}\n",
+		wantReason: "carries no key",
+	},
 }
 
 // isBareProviderPrefix is the sixth drop in the loop and is deliberately absent

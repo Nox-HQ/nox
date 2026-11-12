@@ -308,7 +308,7 @@ func versionStep(a *fix.UpgradeAction) string {
 	if from == "" {
 		from = "installed"
 	}
-	return from + " -> " + a.To
+	return from + " -> " + fix.SpelledLike(a.From, a.To)
 }
 
 func classifyNoFix(it *Item, is *assess.Issue) {
@@ -427,24 +427,49 @@ func classifyPatch(it *Item, is *assess.Issue, in Input, reader *fileReader) {
 // rule's own entry, the taint class, then the rule family's missing piece
 // joined to the rule's remediation guidance.
 func needsFor(is *assess.Issue, rs *rules.RuleSet) string {
+	if is.ValueClass == findings.ValueClassPublishedExample {
+		return needsPublishedExample
+	}
 	if n, ok := needsByRule[is.RuleID]; ok {
 		return n
 	}
 	if n, ok := needsByClass[is.VulnClass]; ok {
 		return n
 	}
-	missing := needsByFamily[catalog.Family(is.RuleID).Key]
+	family := catalog.Family(is.RuleID).Key
+	missing := needsByFamily[family]
 	if missing == "" {
 		missing = "Whether this is deliberate: the code alone does not say, and nox does not guess intent."
 	}
 	if rs != nil {
-		if r, ok := rs.ByID(is.RuleID); ok && strings.TrimSpace(r.Remediation) != "" {
-			return missing + " To supply it: " + strings.TrimSpace(r.Remediation)
+		if r, ok := rs.ByID(is.RuleID); ok {
+			if family == "secrets" && r.Severity == findings.SeverityInfo {
+				missing = needsNoCredential
+			}
+			if guidance := strings.TrimSpace(r.Remediation); guidance != "" {
+				return missing + " To supply it: " + guidance
+			}
 		}
 	}
 	return missing + " To supply it: open the flagged location and run nox explain " + is.RuleID +
 		" for what the rule looks for."
 }
+
+// needsNoCredential is what nox is missing for a rule in the secrets family
+// that reports something other than a credential: a resource identifier, a
+// public key. Every such rule is declared at info severity. The family's own
+// sentence tells the reader to treat the value as compromised and rotate it,
+// which is work that does not exist when nothing secret was exposed.
+const needsNoCredential = "A decision about whether this value belongs in the file. " +
+	"It is not a credential, so nothing was exposed and there is nothing to rotate."
+
+// needsPublishedExample is what nox is missing for a value its vendor prints in
+// documentation. The rule that matched is a credential rule, and its guidance
+// (rotate, treat as compromised) describes a leak that did not happen.
+const needsPublishedExample = "A decision about whether the example stays in the file. " +
+	"The vendor publishes this value in its documentation and it authenticates nothing, " +
+	"so nothing was exposed and there is nothing to rotate. " +
+	"To stop it being reported, replace it with a placeholder such as <your-key>, or add it to the baseline."
 
 // needsByFamily is what nox is missing for a rule that has no entry of its own,
 // by rule family. Each states the information, not the edit.

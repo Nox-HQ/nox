@@ -28,6 +28,7 @@ import (
 
 	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/adjudicate"
+	"github.com/nox-hq/nox/core/applicability"
 	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/catalog"
 	"github.com/nox-hq/nox/core/findings"
@@ -316,8 +317,8 @@ func potentialImpact(f findings.Finding, rule catalog.RuleMeta) string {
 // the application being fine.
 func affectsThisApplication(f findings.Finding) string {
 	outcome := f.Metadata["applicability"]
-	reached := f.Metadata["applicability_reached"]
-	stopped := f.Metadata["applicability_stopped_at"]
+	reached := applicability.Rung(f.Metadata["applicability_reached"])
+	stopped := applicability.Rung(f.Metadata["applicability_stopped_at"])
 	because := f.Metadata["applicability_because"]
 
 	// The reachability chain, when the dependency analyzer answered at some
@@ -352,15 +353,33 @@ func affectsThisApplication(f findings.Finding) string {
 		}
 		return "Applicability was not assessed for this finding."
 	case "not_impacting":
-		return fmt.Sprintf("The argument reached %s and then stopped: %s. On that path it does "+
-			"not impact this application. Nothing here rules out another path.", reached, because)
+		return fmt.Sprintf("It was established that %s, and that %s%s. On that path it does "+
+			"not impact this application. Nothing here rules out another path.",
+			reached.Holds(), stopped.DoesNotHold(), parenthetical(because))
 	case "undetermined":
-		return fmt.Sprintf("The argument got as far as %s and could not go further, because %s "+
-			"could not be established (%s). Whether it affects this application is unknown, "+
-			"which is not the same as no.", reached, stopped, because)
+		return fmt.Sprintf("It was established that %s. %s could not be established%s. "+
+			"Whether it affects this application is unknown, which is not the same as no.",
+			reached.Holds(), sentenceCase(stopped.Question()), parenthetical(because))
 	default:
-		return fmt.Sprintf("Applicability reached %s.", reached)
+		return fmt.Sprintf("It was established that %s.", reached.Holds())
 	}
+}
+
+// parenthetical renders a recorded applicability reason in brackets, or
+// nothing when none was recorded. A conclusive state adds nothing to the
+// sentence that already states the conclusion.
+func parenthetical(because string) string {
+	if because == "" || capability.State(because).Conclusive() {
+		return ""
+	}
+	return " (" + applicability.Reason(because) + ")"
+}
+
+func sentenceCase(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // nextEvidence names the cheapest open question something on this installation

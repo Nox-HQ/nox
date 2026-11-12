@@ -1029,9 +1029,11 @@ func validateThresholds(severity, confidence string) error {
 }
 
 // gatingFindings returns the findings that make a scan exit 1. Without a
-// policy that is every active finding except a dependency vulnerability nox
-// decided is not impacting (#1012). With one, the policy decides the exit code
-// and this returns the active findings it was given when it failed.
+// policy that is every active finding except the two nox itself established are
+// not a problem here: a dependency vulnerability that is not impacting (#1012),
+// and a vendor's published example value, which is documentation and not a
+// credential. With one, the policy decides the exit code and this returns the
+// active findings it was given when it failed.
 func gatingFindings(result *policy.Result, active []findings.Finding) []findings.Finding {
 	if result != nil {
 		if result.ExitCode == 0 {

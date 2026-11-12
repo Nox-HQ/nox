@@ -654,6 +654,14 @@ func raiseOnJSListedSymbol(v applicability.Verdict, meta map[string]string, src 
 // Go call-path wording: a reference is not a path from an entry point.
 func sourceReferenceSentence(meta map[string]string) string {
 	return fmt.Sprintf("project source references %s (%s), an export the analysis of the fix lists as changed; "+
+		"it was not established whether execution reaches it, nor %s",
+		meta["affected_symbol_reached"], meta["affected_symbol_site"], applicability.AttackerReachable.Question())
+}
+
+// sourceReferenceIdentity is the same statement as nox 1.65.0 worded it, which
+// is what the finding's fingerprint is computed over (see vulnText). Frozen.
+func sourceReferenceIdentity(meta map[string]string) string {
+	return fmt.Sprintf("project source references %s (%s), an export the analysis of the fix lists as changed; "+
 		"whether execution reaches it was not established, and neither was %q",
 		meta["affected_symbol_reached"], meta["affected_symbol_site"], applicability.AttackerReachable)
 }

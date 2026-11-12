@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 func TestRun_VersionFlag(t *testing.T) {
@@ -72,7 +74,7 @@ func TestRun_ScanDirWithFindings(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create a file with a secret.
-	content := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	content := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(content), 0o644); err != nil {
 		t.Fatalf("writing temp file: %v", err)
 	}
@@ -81,6 +83,39 @@ func TestRun_ScanDirWithFindings(t *testing.T) {
 	code := run([]string{"--quiet", "--output", outDir, "scan", dir})
 	if code != 1 {
 		t.Fatalf("expected exit code 1 for findings, got %d", code)
+	}
+}
+
+// AKIAIOSFODNN7EXAMPLE is the access key ID in AWS's own documentation. A
+// README that quotes it has leaked nothing, so a scan with no policy reports it
+// and exits 0. The same line with a key nobody published still fails.
+func TestRun_ScanPublishedExampleAloneDoesNotFail(t *testing.T) {
+	tests := []struct {
+		name string
+		key  string
+		want int
+	}{
+		{"published example", "AKIAIOSFODNN7EXAMPLE", 0},
+		{"same shape, not published", testkey.AWSAccessKeyID(), 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte("AWS_KEY="+tc.key+"\n"), 0o644); err != nil {
+				t.Fatalf("writing temp file: %v", err)
+			}
+			outDir := filepath.Join(dir, "output")
+			if code := run([]string{"--quiet", "--output", outDir, "scan", dir}); code != tc.want {
+				t.Errorf("exit code = %d, want %d", code, tc.want)
+			}
+			data, err := os.ReadFile(filepath.Join(outDir, "findings.json"))
+			if err != nil {
+				t.Fatalf("reading findings.json: %v", err)
+			}
+			if !strings.Contains(string(data), `"RuleID": "SEC-001"`) && !strings.Contains(string(data), `"RuleID":"SEC-001"`) {
+				t.Errorf("findings.json has no SEC-001 finding; the value must be reported either way")
+			}
+		})
 	}
 }
 
@@ -195,7 +230,7 @@ func TestExtractInterspersedArgs(t *testing.T) {
 func TestRun_ScanInterspersedFlags(t *testing.T) {
 	dir := t.TempDir()
 
-	content := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	content := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(content), 0o644); err != nil {
 		t.Fatalf("writing temp file: %v", err)
 	}
@@ -331,7 +366,7 @@ func TestRun_ScanStagedFlag(t *testing.T) {
 	git("config", "user.name", "Test User")
 
 	// Create a file with a finding.
-	content := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	content := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(content), 0o644); err != nil {
 		t.Fatalf("writing temp file: %v", err)
 	}
@@ -369,7 +404,7 @@ func TestRun_ScanSeverityThreshold(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create a file with a high-severity finding (AWS key is "high", not "critical").
-	content := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	content := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(content), 0o644); err != nil {
 		t.Fatalf("writing temp file: %v", err)
 	}
@@ -461,7 +496,7 @@ func TestRun_ScanSPDXFormat(t *testing.T) {
 func TestRun_ScanQuietFlag(t *testing.T) {
 	dir := t.TempDir()
 
-	content := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	content := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(content), 0o644); err != nil {
 		t.Fatalf("writing temp file: %v", err)
 	}
@@ -558,7 +593,7 @@ func TestRun_ScanWithNoxYAML(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create file with a finding.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -622,7 +657,7 @@ func TestRun_ScanWithPolicy(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create file with finding.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 // diffGit runs git in dir with a hermetic identity and fails the test on error.
@@ -42,7 +44,7 @@ func TestRunDiff_IsADeltaOverTwoCommits(t *testing.T) {
 	dir := t.TempDir()
 	diffGit(t, dir, "init", "-b", "main")
 
-	const keyOld = "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n" // nox:ignore SEC-001 -- test fixture
+	keyOld := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 
 	const keyGone = "AWS_KEY=AKIAJ5ZQ7XM2K9PLRD3A\n" // nox:ignore SEC-001 -- test fixture
 
@@ -100,7 +102,7 @@ func TestRunDiff_IsADeltaOverTwoCommits(t *testing.T) {
 func TestRunDiff_NothingNewExitsZero(t *testing.T) {
 	dir := t.TempDir()
 	diffGit(t, dir, "init", "-b", "main")
-	const key = "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n" // nox:ignore SEC-001 -- test fixture
+	key := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	writeAll(t, dir, map[string]string{"kept.env": key})
 	diffGit(t, dir, "add", ".")
 	diffGit(t, dir, "commit", "-m", "base")
@@ -124,7 +126,7 @@ func TestRunDiff_NothingNewExitsZero(t *testing.T) {
 // part of the assessment that follows; without --previous nothing is added.
 func TestScanPrevious_LeadsWithTheChange(t *testing.T) {
 	dir := t.TempDir()
-	const keyOld = "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n" // nox:ignore SEC-001 -- test fixture
+	keyOld := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 
 	const keyNew = "AWS_KEY=AKIAV4NHT8QWE6YCBU2S\n" // nox:ignore SEC-001 -- test fixture
 	writeAll(t, dir, map[string]string{"old.env": keyOld})

@@ -6,6 +6,7 @@ import (
 
 	"github.com/nox-hq/nox/core/assess"
 	"github.com/nox-hq/nox/core/catalog"
+	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
 )
 
@@ -64,6 +65,87 @@ func TestNoFixNeedsNameTheReason(t *testing.T) {
 		classifyNoFix(&it, &is)
 		if !strings.Contains(it.Needs, c.want) {
 			t.Errorf("%s: %q lacks %q", c.name, it.Needs, c.want)
+		}
+	}
+}
+
+// A rule in the secrets family that reports a resource identifier or a public
+// key is not reporting a credential: nothing was exposed, so telling the reader
+// to treat the value as compromised and rotate it sends them to do work that
+// does not exist.
+func TestNeedsDoesNotRotateWhatIsNotACredential(t *testing.T) {
+	rs := BuiltinRules()
+	checked := 0
+	for _, r := range rs.Rules() {
+		if catalog.Family(r.ID).Key != "secrets" || r.Severity != findings.SeverityInfo {
+			continue
+		}
+		checked++
+		id := r.ID
+		n := needsFor(&assess.Issue{RuleID: id}, rs)
+		for _, wrong := range []string{"compromised", "replacement secret", "rotate it at its provider"} {
+			if strings.Contains(n, wrong) {
+				t.Errorf("%s reports no credential, yet its needs say %q: %q", id, wrong, n)
+			}
+		}
+		if !strings.Contains(n, "To supply it") {
+			t.Errorf("%s: needs has no way to supply it: %q", id, n)
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no info-severity secrets rule was checked; SEC-372 is one")
+	}
+	// A credential rule keeps the instruction.
+	if n := needsFor(&assess.Issue{RuleID: "SEC-001"}, rs); !strings.Contains(n, "compromised") {
+		t.Errorf("SEC-001 reports a credential; its needs must say to treat it as compromised: %q", n)
+	}
+}
+
+// What follows "To supply it:" is guidance. A note about where a rule's
+// pattern came from is not, and no rule may print one there.
+func TestNeedsCarryGuidanceNotProvenance(t *testing.T) {
+	rs := BuiltinRules()
+	for _, r := range catalog.Rules() {
+		n := needsFor(&assess.Issue{RuleID: r.ID}, rs)
+		if strings.Contains(n, "Imported from") {
+			t.Errorf("%s: needs print the rule's provenance as guidance: %q", r.ID, n)
+		}
+	}
+}
+
+// A vendor's published example is public by design. The rule that matched it is
+// a credential rule at high or critical severity, so the plan used to tell the
+// reader to treat documentation as compromised and rotate it.
+func TestNeedsDoesNotRotateAPublishedExample(t *testing.T) {
+	rs := BuiltinRules()
+	for _, id := range []string{"SEC-001", "SEC-002", "SEC-030", "SEC-508"} {
+		n := needsFor(&assess.Issue{RuleID: id, ValueClass: findings.ValueClassPublishedExample}, rs)
+		for _, wrong := range []string{"compromised", "replacement secret", "Rotate", "rotate it"} {
+			if strings.Contains(n, wrong) {
+				t.Errorf("%s on a published example says %q: %q", id, wrong, n)
+			}
+		}
+		if !strings.Contains(n, "nothing to rotate") {
+			t.Errorf("%s on a published example does not say there is nothing to rotate: %q", id, n)
+		}
+		// The same rule on any other value still asks for the rotation.
+		if other := needsFor(&assess.Issue{RuleID: id}, rs); !strings.Contains(other, "compromised") {
+			t.Errorf("%s on a real value no longer says it is compromised: %q", id, other)
+		}
+	}
+}
+
+// A test-mode key is a real secret. Only the published example is told there
+// is nothing to rotate; a key to a vendor's test environment is still replaced.
+func TestNeedsStillRotateATestModeKey(t *testing.T) {
+	rs := BuiltinRules()
+	for _, id := range []string{"SEC-030", "SEC-070", "SEC-262", "SEC-338"} {
+		n := needsFor(&assess.Issue{RuleID: id, ValueClass: findings.ValueClassTestMode}, rs)
+		if strings.Contains(n, "nothing to rotate") {
+			t.Errorf("%s on a test-mode key says there is nothing to rotate: %q", id, n)
+		}
+		if !strings.Contains(n, "compromised") {
+			t.Errorf("%s on a test-mode key does not say to treat it as compromised: %q", id, n)
 		}
 	}
 }

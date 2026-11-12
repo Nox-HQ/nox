@@ -38,6 +38,18 @@ func TestJSListedSymbolReferencedRaisesRelevance(t *testing.T) {
 	if !strings.Contains(sourceReferenceSentence(meta), "not established") {
 		t.Error("the printed sentence must say what was not established")
 	}
+	if strings.Contains(sourceReferenceSentence(meta), "attacker_reachable") {
+		t.Errorf("the printed sentence names a rung by its identifier: %q", sourceReferenceSentence(meta))
+	}
+	// What the fingerprint is computed over is the sentence as 1.65.0 worded it.
+	const released = `project source references nodemailer/lib/addressparser.parseAddresses (app.js:1), an export the analysis of the fix lists as changed; whether execution reaches it was not established, and neither was "attacker_reachable"`
+	pinned := map[string]string{
+		"affected_symbol_reached": "nodemailer/lib/addressparser.parseAddresses",
+		"affected_symbol_site":    "app.js:1",
+	}
+	if got := sourceReferenceIdentity(pinned); got != released {
+		t.Errorf("sourceReferenceIdentity =\n  %s\nwant the 1.65.0 sentence\n  %s", got, released)
+	}
 }
 
 // THE rule: nothing that is not a positive reference may change the verdict.

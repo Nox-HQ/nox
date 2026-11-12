@@ -1,10 +1,10 @@
 package sbom
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/nox-hq/nox/core/analyzers/deps"
+	"github.com/nox-hq/nox/core/applicability"
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -44,7 +44,7 @@ func (r *CycloneDXReporter) WithFindings(fs []findings.Finding) *CycloneDXReport
 		a := &CDXAnalysis{
 			State:         "not_affected",
 			Justification: justificationFor[stopped],
-			Detail:        fmt.Sprintf("nox: decided not impacting; the %s step was refuted", stopped),
+			Detail:        "nox: decided not impacting; " + applicability.Rung(stopped).DoesNotHold(),
 		}
 		if scope := m["reach_scope"]; scope != "" {
 			a.Detail += " (" + scope + ")"

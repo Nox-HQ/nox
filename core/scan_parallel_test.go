@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 // TestParallelVsSequentialDeterministic verifies that parallel and sequential
@@ -18,7 +19,7 @@ func TestParallelVsSequentialDeterministic(t *testing.T) {
 
 	// Write a Go file with a hardcoded secret and a config file with IaC patterns.
 	writeFile(t, filepath.Join(dir, "main.go"), `package main
-const token = "AKIAIOSFODNN7EXAMPLE" // nox:test
+const token = "`+testkey.AWSAccessKeyID()+`" // nox:test
 func main() {}
 `)
 	writeFile(t, filepath.Join(dir, "deploy.tf"), `resource "aws_s3_bucket" "data" {
@@ -55,7 +56,7 @@ func TestParallelScanProducesFindings(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "secret.txt"), `AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`)
+	writeFile(t, filepath.Join(dir, "secret.txt"), `AWS_SECRET_ACCESS_KEY=`+testkey.AWSSecretAccessKey())
 
 	result, err := RunScanWithOptions(dir, ScanOptions{})
 	if err != nil {
@@ -184,7 +185,7 @@ func TestParallelScanPolicyResult(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "secret.txt"), `AKIAIOSFODNN7EXAMPLE`)
+	writeFile(t, filepath.Join(dir, "secret.txt"), testkey.AWSAccessKeyID())
 	writeFile(t, filepath.Join(dir, ".nox.yaml"), `policy:
   fail_on: critical
 `)

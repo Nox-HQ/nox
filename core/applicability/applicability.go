@@ -155,29 +155,36 @@ func (v Verdict) Describe() string {
 	switch v.Outcome {
 	case NotImpacting:
 		return fmt.Sprintf("present, but not currently impacting this application: %s",
-			refutedAt(v.StoppedAt))
+			v.StoppedAt.DoesNotHold())
 	case Impacting:
 		// Names the rung and the witness length rather than declaring the
 		// finding exploitable. CallReachable means a path exists; whether an
 		// attacker can take it is the rung above, and this sentence must not
 		// be readable as having climbed it.
 		return fmt.Sprintf("%s, reached through %d call(s) from an entry point. "+
-			"That a path exists is not that an attacker can take it — "+
-			"%q was not established.",
-			reachedAt(v.Reached), len(v.Path), AttackerReachable)
+			"That a path exists is not that an attacker can take it: "+
+			"%s was not established.",
+			v.Reached.Holds(), len(v.Path), AttackerReachable.Question())
 	default:
 		if v.StoppedAt == "" {
-			return fmt.Sprintf("established as far as %q", v.Reached)
+			return v.Reached.Holds()
 		}
-		return fmt.Sprintf("established as far as %q; %s was not established (%s)",
-			v.Reached, v.StoppedAt, v.Because.Describe())
+		return fmt.Sprintf("%s; %s was not established (%s)",
+			v.Reached.Holds(), v.StoppedAt.Question(), v.Because.Describe())
 	}
 }
 
-// reachedAt explains what a positively established rung means, in the same
-// register refutedAt uses for the other direction.
-func reachedAt(r Rung) string {
+// Holds says what an established rung means, in a developer's terms. The
+// three sentences below are a finding's message, read in SARIF and in a pull
+// request comment by someone who has never seen the ladder, so none of them
+// prints a rung's identifier: that is this package's name for a step, and it
+// stays in the finding's metadata, where a program reads it.
+func (r Rung) Holds() string {
 	switch r {
+	case Present:
+		return "the dependency is in this build"
+	case AffectedVersion:
+		return "the resolved version is in the advisory's affected range"
 	case SymbolUsed:
 		return "the affected package is linked by this build"
 	case CallReachable:
@@ -185,24 +192,55 @@ func reachedAt(r Rung) string {
 	case AttackerReachable:
 		return "an attacker can cause the affected code to run"
 	default:
-		return fmt.Sprintf("%q holds", r)
+		return "nothing about how this advisory applies was established"
 	}
 }
 
-// refutedAt explains what a refuted rung means in a developer's terms.
-func refutedAt(r Rung) string {
+// DoesNotHold says what a refuted rung means.
+func (r Rung) DoesNotHold() string {
 	switch r {
+	case Present:
+		return "the dependency is not in this build"
+	case AffectedVersion:
+		return "the resolved version is outside the advisory's affected range"
 	case SymbolUsed:
 		return "the affected package is not linked by this build"
 	case CallReachable:
 		return "no call path reaches the affected code"
 	case AttackerReachable:
 		return "the affected code is not reachable from attacker-controlled input"
-	case AffectedVersion:
-		return "the resolved version is outside the advisory's affected range"
 	default:
 		return "an applicability requirement was established not to hold"
 	}
+}
+
+// Question names a rung as the thing still open, to be followed by "was not
+// established" or "was refuted".
+func (r Rung) Question() string {
+	switch r {
+	case Present:
+		return "whether the dependency is in this build"
+	case AffectedVersion:
+		return "whether the resolved version is in the advisory's affected range"
+	case SymbolUsed:
+		return "whether this build links the affected package"
+	case CallReachable:
+		return "whether a call path reaches the affected code"
+	case AttackerReachable:
+		return "whether an attacker can cause the affected code to run"
+	default:
+		return "whether this advisory applies"
+	}
+}
+
+// Reason renders a recorded reason for a person. A verdict stores the
+// evaluation state as its identifier (unsupported, timed_out); anything else
+// is already a sentence and is returned as written.
+func Reason(recorded string) string {
+	if st := capability.State(recorded); st.Valid() {
+		return st.Describe()
+	}
+	return recorded
 }
 
 // Undeterminable builds a verdict for a climb that stopped on an absence.

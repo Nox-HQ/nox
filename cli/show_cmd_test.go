@@ -10,6 +10,7 @@ import (
 
 	"github.com/nox-hq/nox/core/detail"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 func TestRunShow_NoFindings(t *testing.T) {
@@ -31,7 +32,7 @@ func TestRunShow_JSONOutput(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create file with finding and scan it.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -77,7 +78,7 @@ func TestRunShow_SeverityFilter(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create file with finding and scan it.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -126,7 +127,7 @@ func TestRunShow_RuleFilter(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create file with finding and scan it.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -175,7 +176,7 @@ func TestRunShow_FileFilter(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create files with findings and scan them.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -227,7 +228,7 @@ func TestRunShow_FromFile(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create file with finding and scan it.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -280,7 +281,7 @@ func TestRunShow_ContextLines(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create file with finding and scan it.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}
@@ -322,7 +323,7 @@ func TestRunShow_MultipleSeverities(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create file with finding and scan it.
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "config.env"), []byte(secret), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)
 	}

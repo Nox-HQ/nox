@@ -1,6 +1,9 @@
 package deps
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -52,4 +55,15 @@ func gateOnlyFixable(meta map[string]string, pkg Package, sev findings.Severity,
 	meta["original_severity"] = string(sev)
 	meta["severity_source"] = "no_fix_available"
 	return findings.SeverityInfo, message + " [no fix released yet for the image's package: recorded at info, not gating]"
+}
+
+// headline opens a dependency finding's message: what it is, which package,
+// and the advisory's own summary. Distribution advisories often have none, and
+// the message says so instead of leaving a colon in front of nothing.
+func headline(lead, name, version, summary string) string {
+	subject := fmt.Sprintf("%s in %s@%s", lead, name, version)
+	if summary = strings.TrimSpace(summary); summary == "" {
+		return subject + " (the advisory carries no summary)"
+	}
+	return subject + ": " + summary
 }

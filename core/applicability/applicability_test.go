@@ -72,14 +72,62 @@ func TestUndeterminedSaysWhy(t *testing.T) {
 	v := applicability.Undeterminable(applicability.SymbolUsed,
 		applicability.CallReachable, capability.Unsupported)
 	got := v.Describe()
-	if !strings.Contains(got, string(applicability.SymbolUsed)) {
+	if !strings.Contains(got, "linked by this build") {
 		t.Errorf("%q does not say how far the climb got", got)
 	}
-	if !strings.Contains(got, string(applicability.CallReachable)) {
+	if !strings.Contains(got, "whether a call path reaches the affected code") {
 		t.Errorf("%q does not say where it stopped", got)
 	}
 	if !strings.Contains(got, "cannot apply") && !strings.Contains(got, "unsupported") {
 		t.Errorf("%q does not say why it stopped", got)
+	}
+}
+
+// The sentence is a finding's message: it is printed in SARIF, in a pull
+// request comment and in the terminal, to someone who has never seen the
+// ladder. A rung's identifier (symbol_used) is this package's name for a step,
+// not a description of it, and it stays in the finding's metadata, where a
+// program reads it.
+func TestDescribeUsesNoRungIdentifier(t *testing.T) {
+	rungs := applicability.Ladder()
+	var verdicts []applicability.Verdict
+	for i, reached := range rungs {
+		verdicts = append(verdicts,
+			applicability.Verdict{Reached: reached, Outcome: applicability.Undetermined},
+			applicability.Established(reached, []string{"main", "f"}))
+		for _, stopped := range rungs[i+1:] {
+			verdicts = append(verdicts,
+				applicability.Undeterminable(reached, stopped, capability.Unsupported),
+				applicability.Refuted(reached, stopped, capability.Negative, nil))
+		}
+	}
+	for _, v := range verdicts {
+		got := v.Describe()
+		for _, r := range rungs {
+			if strings.Contains(got, string(r)) && strings.Contains(string(r), "_") {
+				t.Errorf("Describe(%+v) = %q, which prints the identifier %q", v, got, r)
+			}
+		}
+		if strings.Contains(got, `"`) {
+			t.Errorf("Describe(%+v) = %q quotes an identifier instead of saying what it means", v, got)
+		}
+	}
+}
+
+// Every rung has words for each of the three things said about it. A rung
+// added without them would print as its identifier.
+func TestEveryRungHasWords(t *testing.T) {
+	for _, r := range applicability.Ladder() {
+		for name, got := range map[string]string{
+			"Holds": r.Holds(), "DoesNotHold": r.DoesNotHold(), "Question": r.Question(),
+		} {
+			if got == "" || strings.Contains(got, string(r)) && strings.Contains(string(r), "_") {
+				t.Errorf("%s.%s() = %q", r, name, got)
+			}
+		}
+		if !strings.HasPrefix(r.Question(), "whether ") {
+			t.Errorf("%s.Question() = %q, want a clause starting with whether", r, r.Question())
+		}
 	}
 }
 
