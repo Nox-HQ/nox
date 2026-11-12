@@ -887,10 +887,11 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 
 		case "sarif":
 			path := filepath.Join(outputDir, "results.sarif")
+			// Describes the rules its results use, as the MCP report does. The
+			// whole catalog (1,500+ descriptors, about 2 MB) was bytes every
+			// Code Scanning upload carried and nothing read: a descriptor is
+			// looked at only through a result that points at it.
 			r := result.SARIFReporter(version)
-			// The CLI writes to a file, not to a response budget, so it can
-			// afford the full rule catalog the MCP surface cannot.
-			r.Rules = result.Rules
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
