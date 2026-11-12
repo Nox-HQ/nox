@@ -67,7 +67,9 @@ func TestGenerate_LocationLessFindingDoesNotEmitEmptyURI(t *testing.T) {
 
 	byRule := map[string]int{}
 	for _, r := range doc.Runs[0].Results {
-		byRule[r.RuleID] = len(r.Locations)
+		// The rule set is empty, so each result is named by its severity.
+		rule, _, _ := strings.Cut(r.RuleID, "/")
+		byRule[rule] = len(r.Locations)
 		for _, l := range r.Locations {
 			if l.PhysicalLocation.ArtifactLocation.URI == "" {
 				t.Errorf("%s emitted a location with an empty uri", r.RuleID)

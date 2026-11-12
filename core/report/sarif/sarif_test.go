@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -185,6 +186,7 @@ func TestFindingsMapToCorrectSARIFLevels(t *testing.T) {
 
 func TestResultsHaveCorrectLevels(t *testing.T) {
 	r := NewReporter("0.1.0", nil)
+	r.Declared = sampleRuleSet()
 	fs := sampleFindingSet()
 
 	data, err := r.Generate(fs)
@@ -217,6 +219,7 @@ func TestResultsHaveCorrectLevels(t *testing.T) {
 
 func TestLocationsContainCorrectFileAndPosition(t *testing.T) {
 	r := NewReporter("0.1.0", nil)
+	r.Declared = sampleRuleSet()
 	fs := sampleFindingSet()
 
 	data, err := r.Generate(fs)
@@ -478,6 +481,7 @@ func TestRuleCatalogOmitsHelpWhenNoRemediation(t *testing.T) {
 
 func TestRuleCatalogFromFindingsWhenNoRuleSet(t *testing.T) {
 	r := NewReporter("0.1.0", nil)
+	r.Declared = sampleRuleSet()
 	fs := sampleFindingSet()
 
 	data, err := r.Generate(fs)
@@ -501,38 +505,32 @@ func TestRuleCatalogFromFindingsWhenNoRuleSet(t *testing.T) {
 	}
 }
 
+// One descriptor per rule and severity. Two findings of a rule nox declares
+// nothing about, at the same severity, share one; a third at another severity
+// gets its own, because GitHub can rate a descriptor at one severity only.
 func TestRuleCatalogFromFindings_DedupesRuleIDs(t *testing.T) {
 	r := NewReporter("0.1.0", nil)
 	fs := findings.NewFindingSet()
-
-	fs.Add(findings.Finding{
-		ID:       "f-1",
-		RuleID:   "rule-dup",
-		Severity: findings.SeverityHigh,
-		Message:  "first message",
-		Location: findings.Location{FilePath: "a.go", StartLine: 1, EndLine: 1},
-	})
-	fs.Add(findings.Finding{
-		ID:       "f-2",
-		RuleID:   "rule-dup",
-		Severity: findings.SeverityLow,
-		Message:  "second message",
-		Location: findings.Location{FilePath: "b.go", StartLine: 2, EndLine: 2},
-	})
+	for i, sev := range []findings.Severity{findings.SeverityHigh, findings.SeverityHigh, findings.SeverityLow} {
+		fs.Add(findings.Finding{
+			RuleID:   "rule-dup",
+			Severity: sev,
+			Message:  "message",
+			Location: findings.Location{FilePath: string(rune('a'+i)) + ".go", StartLine: 1, EndLine: 1},
+		})
+	}
 
 	data, err := r.Generate(fs)
 	if err != nil {
 		t.Fatalf("Generate returned error: %v", err)
 	}
-
-	report := mustUnmarshal(t, data)
-	driver := report.Runs[0].Tool.Driver
-
-	if len(driver.Rules) != 1 {
-		t.Fatalf("expected 1 unique rule in catalog, got %d", len(driver.Rules))
+	driver := mustUnmarshal(t, data).Runs[0].Tool.Driver
+	var ids []string
+	for _, d := range driver.Rules {
+		ids = append(ids, d.ID)
 	}
-	if driver.Rules[0].ID != "rule-dup" {
-		t.Fatalf("expected rule ID 'rule-dup', got %q", driver.Rules[0].ID)
+	if len(ids) != 2 || ids[0] != "rule-dup/high" || ids[1] != "rule-dup/low" {
+		t.Fatalf("catalog = %v, want [rule-dup/high rule-dup/low]", ids)
 	}
 }
 
@@ -628,6 +626,7 @@ func TestGenerateIsDeterministic(t *testing.T) {
 
 func TestGenerateSortsFindingsDeterministically(t *testing.T) {
 	r := NewReporter("0.1.0", nil)
+	r.Declared = sampleRuleSet()
 	fs := sampleFindingSet()
 
 	data, err := r.Generate(fs)
@@ -715,6 +714,7 @@ func TestSeverityToLevelUnknownSeverity(t *testing.T) {
 
 func TestResultMessageMatchesFindingMessage(t *testing.T) {
 	r := NewReporter("0.1.0", nil)
+	r.Declared = sampleRuleSet()
 	fs := sampleFindingSet()
 
 	data, err := r.Generate(fs)
@@ -824,6 +824,8 @@ func TestSARIF_EmitsSecuritySeverity(t *testing.T) {
 	for _, r := range ruleDescs {
 		rm := r.(map[string]any)
 		id, _ := rm["id"].(string)
+		// Nothing declares these rules, so each is named by its severity.
+		id, _, _ = strings.Cut(id, "/")
 		if props, ok := rm["properties"].(map[string]any); ok {
 			if ss, ok := props["security-severity"].(string); ok {
 				got[id] = ss
