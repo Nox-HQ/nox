@@ -12,6 +12,22 @@ Fixes from an audit of 1.65.0 as a user meets it (#1066).
 What an audit of 1.65.0 found in the findings themselves (#1067): ratings and
 wording that claimed more than the scan knew.
 
+### Added
+
+- `nox serve --plugins` lets an agent call installed plugins through MCP
+  (`plugin.list`, `plugin.call_tool`). Both tools existed in the server, but
+  `nox serve` never attached a plugin host, so they were never offered. The
+  flag is off by default, since a call starts a plugin process. Each plugin
+  passes the checks a scan applies (binary digest, track safety profile, the
+  `plugin_policy` in the workspace's `.nox.yaml`). A plugin that fails one is
+  named on stderr and the rest are hosted.
+- `plugin.call_tool` confines the root a plugin reads. It checked
+  `workspace_root` only when given and never `input.workspace_root`, where
+  plugins read their root, so a call could aim a plugin outside the allowed
+  roots. The root now comes from either place, must agree where both are
+  given, defaults to the first allowed root and is checked before the plugin
+  runs.
+
 ### Changed
 
 - A mistyped `--format`, `--severity-threshold` or `--min-confidence` (and

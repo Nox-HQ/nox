@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -1055,6 +1056,8 @@ func runServe(args []string) int {
 	serveFS := flag.NewFlagSet("serve", flag.ContinueOnError)
 	var allowedPaths string
 	serveFS.StringVar(&allowedPaths, "allowed-paths", "", "comma-separated workspace roots the server may scan (default: the working directory)")
+	var hostPlugins bool
+	serveFS.BoolVar(&hostPlugins, "plugins", false, "host installed plugins, adding the plugin.list and plugin.call_tool tools (trust policy from the first root's .nox.yaml)")
 
 	if err := serveFS.Parse(args); err != nil {
 		return 2
@@ -1066,7 +1069,22 @@ func runServe(args []string) int {
 		return 2
 	}
 
-	srv := server.New(version, paths)
+	host, warnings, err := servePluginHost(context.Background(), hostPlugins, paths[0])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
+	}
+	// stdout carries the MCP protocol; anything for the operator goes to stderr.
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "[plugin warn] %s\n", w)
+	}
+	var opts []server.Option
+	if host != nil {
+		defer func() { _ = host.Close() }()
+		opts = append(opts, server.WithPluginHost(host))
+	}
+
+	srv := server.New(version, paths, opts...)
 	if err := srv.Serve(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: MCP server failed: %v\n", err)
 		return 2
