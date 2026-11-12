@@ -185,7 +185,7 @@ func mcpDrift(args []string) int {
 	var timeout time.Duration
 	fs.StringVar(&baselinePath, "baseline", "", "baseline file path (default: .nox/mcp-baseline.json)")
 	fs.StringVar(&target, "target", ".", "project root for the default baseline path")
-	fs.StringVar(&outputDir, "output", ".", "directory for findings.json / results.sarif")
+	fs.StringVar(&outputDir, "output", defaultReportDir, "directory for findings.json / results.sarif")
 	fs.DurationVar(&timeout, "timeout", 15*time.Second, "per-request timeout")
 	if err := parseFlagsAnywhere(fs, ourArgs); err != nil {
 		return 2
@@ -236,7 +236,7 @@ func mcpDrift(args []string) int {
 	}
 	fsSet.Deduplicate()
 
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := ensureReportDir(outputDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: creating output directory: %v\n", err)
 		return 2
 	}

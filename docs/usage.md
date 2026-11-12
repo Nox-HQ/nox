@@ -62,7 +62,7 @@ nox scan <path> [flags]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--format` | `json` | Output formats: `json`, `sarif`, `cdx`, `spdx`, `all` (comma-separated) |
-| `--output` | `.` | Output directory for report files |
+| `--output` | `.nox/reports` | Output directory for report files. The default directory carries its own `.gitignore`, so reports stay out of git; a directory you name is left as it is |
 | `--quiet`, `-q` | `false` | Suppress all output except errors |
 | `--verbose`, `-v` | `false` | Enable verbose output |
 | `--only` | all scopes | Scan only these scopes, comma-separated (see [Scopes](#scopes)) |
@@ -71,7 +71,7 @@ nox scan <path> [flags]
 **Examples:**
 
 ```bash
-# Basic scan, writes findings.json to current directory
+# Basic scan, writes findings.json to .nox/reports/ (which git ignores)
 nox scan .
 
 # Generate SARIF for GitHub Code Scanning
@@ -526,7 +526,7 @@ nox annotate [flags]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--input` | `findings.json` | Path to findings.json |
+| `--input` | `.nox/reports/findings.json` | Path to findings.json (`./findings.json` from an older scan is still read) |
 | `--pr` | (auto) | PR number (auto-detected from `GITHUB_REF`) |
 | `--repo` | (auto) | Repository owner/name (auto-detected from `GITHUB_REPOSITORY`) |
 | `--summary` | `false` | Also post a comment counting every finding in the report by severity |

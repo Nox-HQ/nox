@@ -104,8 +104,8 @@ func runAttackPlan(args []string) int {
 		output      string
 		asJSON      bool
 	)
-	fs.StringVar(&findingsIn, "findings", "findings.json", "findings.json from a prior nox scan")
-	fs.StringVar(&inventoryIn, "inventory", "ai.inventory.json", "ai.inventory.json from a prior nox scan")
+	fs.StringVar(&findingsIn, "findings", scanReportPath(".", "findings.json"), "findings.json from a prior nox scan")
+	fs.StringVar(&inventoryIn, "inventory", scanReportPath(".", "ai.inventory.json"), "ai.inventory.json from a prior nox scan")
 	fs.StringVar(&evidenceIn, "evidence", "", "the evidence artifact a scan was asked to keep; carries what that scan established onto each hypothesis")
 	fs.StringVar(&output, "output", defaultPlanPath, "write the plan here")
 	fs.BoolVar(&asJSON, "json", false, "print the plan as JSON instead of a summary")

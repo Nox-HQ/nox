@@ -39,7 +39,7 @@ func runVexInit(args []string) int {
 		product    string
 		force      bool
 	)
-	fs.StringVar(&inputPath, "input", "findings.json", "path to findings.json from a previous scan")
+	fs.StringVar(&inputPath, "input", scanReportPath(".", "findings.json"), "path to findings.json from a previous scan")
 	fs.StringVar(&outputPath, "output", "vex.json", "destination path for the generated stub")
 	fs.StringVar(&product, "product", "", "product identifier to embed in each statement: a package URL "+
 		"(pkg:npm/foo@1.2.3, pkg:golang/example.com/m@v1.2.3) or, for a container, its digest "+
