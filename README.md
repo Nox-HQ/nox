@@ -683,6 +683,7 @@ Cache Commands:
 
 Serve Flags:
   --allowed-paths string   Comma-separated list of allowed workspace paths
+  --plugins                Host installed plugins (plugin.list, plugin.call_tool)
 
 Exit Codes:
   0   No findings (or policy pass)
@@ -874,6 +875,7 @@ cannot talk it into scanning `$HOME`:
 ```bash
 nox serve                                    # the working directory
 nox serve --allowed-paths /path/to/project   # or name the roots
+nox serve --plugins                          # also let the agent call installed plugins
 ```
 
 ### Tools

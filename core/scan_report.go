@@ -87,10 +87,10 @@ func stageAccountingFor(r *ScanResult) []report.StageCount {
 // capability matrix, derived once by core/report so the two artifacts state the
 // same thing.
 //
-// It deliberately does NOT set Rules. A full rule catalog is 1,500+ descriptors,
-// and the MCP surface serves SARIF under a response budget that a catalog that
-// size would blow past — so whether to embed the catalog is the caller's
-// size-and-audience decision, the same class as Prioritize. Capability coverage
+// It deliberately does NOT set Rules. A full rule catalog is 1,500+ descriptors
+// (about 2 MB) that no reader looks at without a result pointing at one, so
+// every surface — the MCP response and the CLI's results.sarif alike — lists
+// only the descriptors its results use. Capability coverage
 // is not: it is a property of the result, it is small, and a surface that omits
 // it publishes a scan that looks like it asked every question.
 func (r *ScanResult) SARIFReporter(version string) *sarif.Reporter {
@@ -101,8 +101,7 @@ func (r *ScanResult) SARIFReporter(version string) *sarif.Reporter {
 	rep.Capabilities = report.CapabilitiesFrom(r.Capabilities, r.Coverage)
 	rep.CompetenceProfiles = r.CompetenceProfiles
 	// Not embedded, but consulted: which descriptor a finding is reported under
-	// depends on its rule's declared severity, and the CLI (which embeds the
-	// catalog) and MCP (which does not) must name the same finding the same way.
+	// depends on its rule's declared severity.
 	rep.Declared = r.Rules
 	if sc := r.Scope.report(); sc != nil {
 		rep.NotScanned = sc.NotScanned

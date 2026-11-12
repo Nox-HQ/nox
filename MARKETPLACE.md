@@ -1,8 +1,10 @@
 # Nox Security Scanner — GitHub Marketplace listing copy
 
-Paste these blocks into the marketplace listing form when publishing
-v0.8.1 from the release page (Edit release → "Publish this Action to
-the GitHub Marketplace" → fill the form).
+Paste these blocks into the marketplace listing form when publishing a
+release from its release page (Edit release → "Publish this Action to the
+GitHub Marketplace" → fill the form). Nothing here names a release number
+except the Action pin in the example workflow, which `cli/docs_pins_test.go`
+keeps on the release nox runs itself.
 
 ---
 
@@ -20,55 +22,52 @@ The security scanner that understands your AI app — open-source, deterministic
 
 `Code review`
 
-## Description (~350 words)
+## Description (~300 words)
 
-Nox is the open-source security scanner purpose-built for teams shipping
-LLM features. It catches what every other scanner misses — prompt
-injection at the call site, embedding leakage when secrets reach
-vector stores, agent over-privilege, MCP server hardening, cross-file
-AI taint — alongside the boring stuff: 160 secret detectors, 369 IaC
-rules, dependency CVEs with reachability filtering, and 12 PII
-patterns. **717 rules total**, deterministic, offline.
+Nox is an open-source security scanner for teams shipping LLM features. It
+checks what AI applications add — prompt injection at the call site, secrets
+reaching vector stores, over-privileged agent tools, MCP server hardening,
+cross-file AI taint — alongside secrets, infrastructure as code, containers
+and dependency vulnerabilities. More than 1,500 rules, one binary,
+deterministic output.
 
-**This Action** wraps `nox scan` with first-class GitHub integration:
+**This Action** wraps `nox scan` for GitHub:
 
-- Uploads SARIF 2.1.0 to GitHub Code Scanning
-- Posts inline PR review comments on findings
-- Honours severity thresholds and OpenVEX waivers
-- Differential scan via `--changed-since` for fast PR feedback
-- Caches the nox binary install across runs
+- Writes SARIF 2.1.0 for GitHub Code Scanning (upload it with
+  `github/codeql-action/upload-sarif`)
+- Annotates the pull request with findings, and optionally posts one summary
+  comment
+- Fails the job on a severity threshold you choose; honours OpenVEX
+  statements and the baseline
+- Scans only what changed with `changed-since`, for fast pull request feedback
+- `offline: true` makes the scan's zero-network guarantee explicit
 
 **What sets Nox apart:**
 
-- **AI-native rule families.** AI-PI (prompt injection), AI-EMB
-  (embedding leakage), AI-AGENT (over-privileged agent tools),
-  MCP-001..008 (MCP server hardening), TAINT-AI (cross-file AI taint).
-  No commercial scanner ships these as a cohesive family today.
-- **Cosign-signed plugin marketplace.** 19 official plugins, every
-  release verified via Sigstore keyless OIDC. Default trust policy
-  fails closed on unsigned drops.
-- **Manifest-driven plugins.** Pin plugins in `.nox.yaml` like
-  dependencies in `package.json`. Anyone cloning your repo gets the
-  same verified scanners on first run.
-- **No SaaS. No telemetry. No source upload.** Scans run entirely on
-  the runner; OSV vulnerability lookups gated behind a single flag.
-- **AIBOM v2.0.** Polyglot AI component inventory across Python, Go,
-  TypeScript, Java, Rust, C# — every model invocation, auth env var,
-  and endpoint in one document.
-- **MCP-native.** Built-in MCP server lets Claude / Cursor / Continue
-  query scan results read-only.
+- **AI-native rule families.** Prompt injection, embedding leakage,
+  agent over-privilege, MCP hardening and cross-file AI taint, mapped to the
+  OWASP LLM, MCP and Agentic Top 10 lists.
+- **Your code stays on the runner.** Online, a scan sends only the
+  dependency list (ecosystem, package, version) to its advisory source,
+  verified against OSV.dev; every other request prints a `[network]` line
+  saying where it went and how to turn it off. `offline: true` makes none.
+- **Signed plugins.** Official plugins verify through Sigstore keyless
+  signing; the default trust policy refuses unsigned
+  third-party plugins.
+- **AI inventory.** One document naming every model invocation, auth
+  environment variable and endpoint across Python, Go, TypeScript, Java,
+  Rust and C#.
+- **MCP-native.** A built-in MCP server lets coding agents query scan
+  results.
 
-Apache 2.0. Single binary. One pass for SAST, SCA, IaC, secrets, AI,
-and containers.
-
-Compare vs Snyk, Semgrep, Trivy at https://nox-hq.dev/compare/snyk
-and friends.
+Apache 2.0. One pass for secrets, AI, IaC, containers and dependencies, with
+SARIF, CycloneDX and SPDX output.
 
 ## Inputs (filled automatically from action.yml)
 
-The marketplace UI auto-renders inputs from `action.yml`. Verify the
-defaults read sensibly: `path: .`, `format: sarif`,
-`severity-threshold: high`, `annotate: true`.
+The marketplace UI renders inputs from `action.yml`. Check the defaults read
+sensibly: `path: .`, `format: sarif`, `output: nox-results`,
+`annotate: true`, `fail-on-findings: true`.
 
 ## Featured icon and colour
 
@@ -98,7 +97,7 @@ jobs:
   nox:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: nox-hq/nox@7ad45c0ab5057b1533087cb1c5054848974f08b2 # v1.65.0
         with:
           path: '.'
@@ -106,7 +105,8 @@ jobs:
           severity-threshold: high
           annotate: 'true'
           changed-since: ${{ github.base_ref && format('origin/{0}', github.base_ref) || '' }}
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        if: always()
         with:
           sarif_file: nox-results/results.sarif
 ```
@@ -120,14 +120,11 @@ sbom, sarif, cosign, sigstore, supply-chain, owasp-llm, aibom
 
 ## Pre-listing checklist
 
-- [ ] All 9 dependabot PRs merged (or at least the security-relevant ones)
-- [ ] `vex.json` shipped to waive false-positive code-scanning alerts
-  in `core/analyzers/ai/aibom_polyglot.go` and `examples/`
-- [ ] `server/server.go` SEC-506 + SEC-574 fixed or VEX-justified
-- [ ] Secret scanning enabled on `Nox-HQ/nox` (Settings → Code security
-  → Secret scanning → Enable)
-- [ ] `v0.8.1` release page reviewed, "Set as latest" checked
-- [ ] Release notes mention: GitHub Action listed on Marketplace
+- [ ] The release's own workflow run is green, and its checksums and cosign
+  signature verify
+- [ ] The example workflow above pins that release (`go test ./cli -run
+  TestDocumentedActionPinIsTheReleaseNoxRunsItself` passes)
+- [ ] The release notes say the Action is listed on the Marketplace
 
 After publishing the listing, edit the README hero block to add a
 "Available on the GitHub Marketplace" badge:
