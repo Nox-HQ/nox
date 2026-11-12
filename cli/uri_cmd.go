@@ -29,6 +29,8 @@ func runURI(args []string) int {
 	}
 
 	switch args[0] {
+	case "-h", "-help", "--help", "help":
+		return printGroupHelp("Usage: nox uri <uri> | register | unregister")
 	case "register":
 		return runURIRegister(args[1:])
 	case "unregister":

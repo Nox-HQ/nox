@@ -13,9 +13,11 @@ import (
 	"github.com/nox-hq/nox/core/findings"
 )
 
+const baselineUsage = "Usage: nox baseline <init|write|update|add|diff|show|migrate> [path]"
+
 func runBaseline(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: nox baseline <init|write|update|add|diff|show|migrate> [path]")
+		fmt.Fprintln(os.Stderr, baselineUsage)
 		return 2
 	}
 
@@ -23,6 +25,8 @@ func runBaseline(args []string) int {
 	remaining := args[1:]
 
 	switch subcommand {
+	case "-h", "-help", "--help", "help":
+		return printGroupHelp(baselineUsage)
 	case "init":
 		return baselineInit(remaining)
 	case "write":
@@ -39,7 +43,7 @@ func runBaseline(args []string) int {
 		return baselineMigrate(remaining)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown baseline subcommand: %s\n", subcommand)
-		fmt.Fprintln(os.Stderr, "Usage: nox baseline <init|write|update|add|diff|show|migrate> [path]")
+		fmt.Fprintln(os.Stderr, baselineUsage)
 		return 2
 	}
 }

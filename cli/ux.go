@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
+	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/catalog"
-
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -47,4 +48,48 @@ func familySummary(items []findings.Finding) string {
 		parts = append(parts, fmt.Sprintf("%s:%d", p.family, p.count))
 	}
 	return strings.Join(parts, ", ")
+}
+
+// stagedFindingsLimit bounds the list a failed staged scan prints, so a commit
+// that stages a vendored tree is answered with a screen and not a scrollback.
+const stagedFindingsLimit = 10
+
+// printStagedFindings names the findings that failed a staged scan: severity,
+// rule, location and the rule's message, never the matched text. Most severe
+// first, then by location, so the same index prints the same list.
+func printStagedFindings(w io.Writer, gating []findings.Finding, verbose bool) {
+	if len(gating) == 0 {
+		return
+	}
+	items := append([]findings.Finding(nil), gating...)
+	sort.SliceStable(items, func(i, j int) bool {
+		a, b := items[i], items[j]
+		if a.Severity != b.Severity {
+			// "a meets threshold b" is "a is at least as severe as b".
+			return nox.SeverityMeetsThreshold(a.Severity, b.Severity)
+		}
+		if a.Location.FilePath != b.Location.FilePath {
+			return a.Location.FilePath < b.Location.FilePath
+		}
+		if a.Location.StartLine != b.Location.StartLine {
+			return a.Location.StartLine < b.Location.StartLine
+		}
+		return a.RuleID < b.RuleID
+	})
+	noun := "findings"
+	if len(items) == 1 {
+		noun = "finding"
+	}
+	_, _ = fmt.Fprintf(w, "[staged] %d %s in staged files:\n", len(items), noun)
+	shown := items
+	if !verbose && len(shown) > stagedFindingsLimit {
+		shown = shown[:stagedFindingsLimit]
+	}
+	for i := range shown {
+		f := &shown[i]
+		_, _ = fmt.Fprintf(w, "  %-8s %s  %s:%d  %s\n", f.Severity, f.RuleID, f.Location.FilePath, f.Location.StartLine, f.Message)
+	}
+	if rest := len(items) - len(shown); rest > 0 {
+		_, _ = fmt.Fprintf(w, "  and %d more: --verbose lists them all\n", rest)
+	}
 }

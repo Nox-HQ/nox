@@ -22,7 +22,7 @@ jobs:
 
       - name: Run Nox
         id: nox
-        uses: nox-hq/nox@774d22ac2c0b83692802729163f848c7596d2460 # v1.14.0
+        uses: nox-hq/nox@7ad45c0ab5057b1533087cb1c5054848974f08b2 # v1.65.0
         with:
           path: .
           format: sarif

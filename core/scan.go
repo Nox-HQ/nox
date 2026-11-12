@@ -116,6 +116,12 @@ type ScanResult struct {
 	// ask, and a comparison with a scan that did must not read that as a change.
 	AdvisoryLookupSkipped bool
 
+	// FeedsRequested is the URL of every signed feed this scan asked the
+	// network for (the slopsquat feed, the MCP advisory feed), sorted. A feed
+	// the local cache answered is not in it; a request that went unanswered
+	// is, because it still left the machine. Nil when no request was made.
+	FeedsRequested []string
+
 	// Capabilities is what this installation can establish at all, and
 	// Coverage is what each capability actually concluded about each subject.
 	//
@@ -548,6 +554,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// distinguished from "did not look". Created before discovery, which
 	// records the files it deliberately did not read.
 	degradations := &degrade.Degradations{}
+	feedsRequested := &feedRequests{}
 
 	// Stage 1: Discover artifacts.
 	artifacts, err := discoverArtifacts(target, cfg, opts, degradations)
@@ -705,7 +712,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// signed feed by default, or from the feed .nox.yaml names. A misconfigured
 	// or tampered feed fails closed — the predictive dimension stays off and the
 	// failure is recorded as a visible degradation.
-	slopOpts := resolveSlopFeed(ctx, target, cfg, opts, degradations)
+	slopOpts := resolveSlopFeed(ctx, target, cfg, opts, degradations, feedsRequested)
 	slopAnalyzer := slop.NewAnalyzer(slopOpts...)
 	slopAnalyzer.RecordReasoningTo(reasons)
 	cryptoAnalyzer := weakcrypto.NewAnalyzer()
@@ -1099,7 +1106,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		runMCPRelationalPass(ctx, target, artifacts, allFindings, degradations)
 		// Advisories for the registry packages those servers launch, from the
 		// signed MCP feed, when it can be checked (docs/mcp-advisory-feed.md).
-		runMCPFeedPass(ctx, target, cfg, opts, artifacts, allFindings, degradations)
+		runMCPFeedPass(ctx, target, cfg, opts, artifacts, allFindings, degradations, feedsRequested)
 	}
 
 	// Stage 3: Refine findings — apply rule config, generated/noise filters,
@@ -1184,6 +1191,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		SASTProfile:        cfg.Scan.SAST.ResolvedProfile(),
 	}
 	res.AdvisoryLookupSkipped = !vulnLookupEnabled
+	res.FeedsRequested = feedsRequested.list()
 	return res, nil
 }
 
@@ -1201,7 +1209,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 // dimension and records a degradation rather than trusting the feed. When
 // offline is set, a URL feed never touches the network — it is served from the
 // verified cache or the load fails closed.
-func loadSlopFeed(ctx context.Context, target string, cfg SlopConfig, offline bool) (*slopfeed.Loaded, error) {
+func loadSlopFeed(ctx context.Context, target string, cfg SlopConfig, offline bool, requests *feedRequests) (*slopfeed.Loaded, error) {
 	opts := slopfeed.VerifyOptions{RequireSignature: cfg.RequireSignature}
 	if cfg.SignatureKeyPath != "" {
 		keyPath := cfg.SignatureKeyPath
@@ -1251,6 +1259,8 @@ func loadSlopFeed(ctx context.Context, target string, cfg SlopConfig, offline bo
 			TTL:      ttl,
 			Offline:  offline,
 			Verify:   opts,
+
+			OnRequest: requests.note,
 		})
 	}
 
