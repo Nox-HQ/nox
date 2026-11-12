@@ -2609,13 +2609,13 @@ func builtinSecretRules() []*rules.Rule {
 		},
 
 		{
-			id: "SEC-260", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			id: "SEC-260", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)[\w.-]{0,50}?(?:linked[_-]?in)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[\x60'"\s=]{0,5}([a-z0-9]{14})(?:[\x60'"\s;]|\\[nr]|$)`,
-			description: "Found a LinkedIn Client ID, risking unauthorized access to LinkedIn integrations and professional data exposure.",
-			cwe:         "CWE-798", keywords: []string{"linkedin", "linked_in", "linked-in"},
+			description: "LinkedIn Client ID (application identifier, not a credential)",
+			cwe:         "CWE-547", keywords: []string{"linkedin", "linked_in", "linked-in"},
 			// Pattern imported from Gitleaks: linkedin-client-id.
-			remediation: "Rotate the exposed credential immediately",
-			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			remediation: "Not a credential: nothing to rotate. A client ID names an application and is sent in the clear when a user signs in; it authenticates nothing without its client secret, which is reported separately when present. Move it to configuration if it differs between environments.",
+			references:  []string{"https://cwe.mitre.org/data/definitions/547.html"},
 		},
 
 		{
@@ -2649,13 +2649,13 @@ func builtinSecretRules() []*rules.Rule {
 		},
 
 		{
-			id: "SEC-264", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			id: "SEC-264", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)[\w.-]{0,50}?(?:looker)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[\x60'"\s=]{0,5}([a-z0-9]{20})(?:[\x60'"\s;]|\\[nr]|$)`,
-			description: "Found a Looker Client ID, risking unauthorized access to a Looker account and exposing sensitive data.",
-			cwe:         "CWE-798", keywords: []string{"looker"},
+			description: "Looker Client ID (API identifier, not a credential)",
+			cwe:         "CWE-547", keywords: []string{"looker"},
 			// Pattern imported from Gitleaks: looker-client-id.
-			remediation: "Rotate the exposed credential immediately",
-			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			remediation: "Not a credential: nothing to rotate. A Looker API client ID names the API key; it authenticates nothing without its client secret, which is reported separately when present.",
+			references:  []string{"https://cwe.mitre.org/data/definitions/547.html"},
 		},
 
 		{
@@ -2749,13 +2749,13 @@ func builtinSecretRules() []*rules.Rule {
 		},
 
 		{
-			id: "SEC-274", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			id: "SEC-274", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)[\w.-]{0,50}?(?:message[_-]?bird)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[\x60'"\s=]{0,5}([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[\x60'"\s;]|\\[nr]|$)`,
-			description: "Discovered a MessageBird client ID, potentially compromising API integrations and sensitive communication data.",
-			cwe:         "CWE-798", keywords: []string{"messagebird", "message-bird", "message_bird"},
+			description: "MessageBird client ID (identifier, not a credential)",
+			cwe:         "CWE-547", keywords: []string{"messagebird", "message-bird", "message_bird"},
 			// Pattern imported from Gitleaks: messagebird-client-id.
-			remediation: "Rotate the exposed credential immediately",
-			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			remediation: "Not a credential: nothing to rotate. A client ID names the integration; it authenticates nothing without the access key that goes with it, which is reported separately when present.",
+			references:  []string{"https://cwe.mitre.org/data/definitions/547.html"},
 		},
 
 		{
@@ -2919,13 +2919,13 @@ func builtinSecretRules() []*rules.Rule {
 		},
 
 		{
-			id: "SEC-292", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			id: "SEC-292", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)[\w.-]{0,50}?(?:plaid)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[\x60'"\s=]{0,5}([a-z0-9]{24})(?:[\x60'"\s;]|\\[nr]|$)`,
-			description: "Uncovered a Plaid Client ID, which could lead to unauthorized financial service integrations and data breaches.",
-			cwe:         "CWE-798", keywords: []string{"plaid"},
+			description: "Plaid Client ID (application identifier, not a credential)",
+			cwe:         "CWE-547", keywords: []string{"plaid"},
 			// Pattern imported from Gitleaks: plaid-client-id.
-			remediation: "Rotate the exposed credential immediately",
-			references:  []string{"https://cwe.mitre.org/data/definitions/798.html"},
+			remediation: "Not a credential: nothing to rotate. A Plaid client ID names your team's application; it authenticates nothing without its secret, which is reported separately when present.",
+			references:  []string{"https://cwe.mitre.org/data/definitions/547.html"},
 		},
 
 		{
@@ -3577,7 +3577,7 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-374", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `storage\.googleapis\.com/[^\s]+`, description: "Google Cloud Storage URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"gcs"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-375", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `blob\.core\.windows\.net/[^\s]+`, description: "Azure Blob Storage URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"azure_blob"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-377", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `key-[A-Za-z0-9]{32}`, description: "Detected Mailgun API key", cwe: "CWE-798", keywords: []string{"mailgun"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-379", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `AC[a-z0-9]{32}`, description: "Detected Twilio Account SID", cwe: "CWE-798", keywords: []string{"twilio_sid"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-379", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `AC[a-z0-9]{32}`, description: "Twilio Account SID (account identifier, not a credential)", cwe: "CWE-547", keywords: []string{"twilio_sid"}, remediation: "Not a credential: nothing to rotate. An Account SID names the account and is the username half of Twilio's basic auth; the Auth Token or API key secret that goes with it is what must stay secret, and is reported separately when present.", references: []string{"https://cwe.mitre.org/data/definitions/547.html"}},
 		{id: "SEC-380", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-z0-9]{16}`, description: "Detected Nexmo API key", cwe: "CWE-798", keywords: []string{"nexmo"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-381", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `plaid[_-]?key[_-]?[^\s]{20,40}`, description: "Detected Plaid API key", cwe: "CWE-798", keywords: []string{"plaid"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-382", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `sq0csp-[A-Za-z0-9_-]{43}`, description: "Detected Square API key", cwe: "CWE-798", keywords: []string{"square"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -3621,7 +3621,7 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-418", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `projects/[a-z][a-z0-9-]{4,28}[a-z0-9]/(?:locations|zones)/[a-z0-9-]+/clusters/[a-z0-9][a-z0-9-]*`, description: "GKE cluster resource name (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"gke"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-419", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `/subscriptions/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`, description: "Azure subscription ID in a resource path (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"azure_sub"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-420", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `/tenants/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`, description: "Azure tenant ID in a resource path (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"azure_tenant"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-421", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`, description: "Detected Azure Client ID", cwe: "CWE-798", keywords: []string{"azure_client"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-421", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`, description: "Azure Client ID (application identifier, not a credential)", cwe: "CWE-547", keywords: []string{"azure_client"}, remediation: "Not a credential: nothing to rotate. A client ID names an application and is sent in the clear when a user signs in; it authenticates nothing without its client secret, which is reported separately when present. Move it to configuration if it differs between environments.", references: []string{"https://cwe.mitre.org/data/definitions/547.html"}},
 		{id: "SEC-422", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `vault\.azure\.net`, description: "Azure Key Vault URL (resource identifier, not a credential)", cwe: "CWE-1051", keywords: []string{"azure_keyvault"}, remediation: "Not a credential: nothing to rotate. A hard-coded resource identifier ties this code to one environment; move it to configuration if it should vary. A credential embedded in a URL is reported separately (SEC-085).", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-423", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `ya29\.[0-9A-Za-z_-]{20,}`, description: "Detected Google OAuth access token", cwe: "CWE-798", keywords: []string{"ya29."}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-424", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `EAACEdEose0cBA[0-9A-Za-z]{20,}`, description: "Detected Facebook access token", cwe: "CWE-798", keywords: []string{"eaacedeose0cba"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
@@ -3794,8 +3794,8 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-553", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{20,32}`, description: "Detected Paystack API Key", cwe: "CWE-798", keywords: []string{"paystack"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-555", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[A-Z0-9]{16,32}`, description: "Detected Braintree Merchant ID", cwe: "CWE-798", keywords: []string{"braintree_merchant"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-556", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)mobicents[_-]?secret[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Mobicents secret", cwe: "CWE-798", keywords: []string{"mobicents"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-557", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)twilio[_-]?account[_-]?sid[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Twilio account sid", cwe: "CWE-798", keywords: []string{"twilio"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-559", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-z0-9]{32}`, description: "Detected Plaid Client ID", cwe: "CWE-798", keywords: []string{"plaid_client"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-557", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `(?i)twilio[_-]?account[_-]?sid[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Twilio Account SID (account identifier, not a credential)", cwe: "CWE-547", keywords: []string{"twilio"}, remediation: "Not a credential: nothing to rotate. An Account SID names the account and is the username half of Twilio's basic auth; the Auth Token or API key secret that goes with it is what must stay secret, and is reported separately when present.", references: []string{"https://cwe.mitre.org/data/definitions/547.html"}},
+		{id: "SEC-559", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `[a-z0-9]{32}`, description: "Plaid Client ID (application identifier, not a credential)", cwe: "CWE-547", keywords: []string{"plaid_client"}, remediation: "Not a credential: nothing to rotate. A Plaid client ID names your team's application; it authenticates nothing without its secret, which is reported separately when present.", references: []string{"https://cwe.mitre.org/data/definitions/547.html"}},
 		{id: "SEC-560", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-z0-9]{24}`, description: "Detected Plaid Secret", cwe: "CWE-798", keywords: []string{"plaid_secret"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-561", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `[a-zA-Z0-9]{32}`, description: "Detected ClearBank API Key", cwe: "CWE-798", keywords: []string{"clearbank"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		// SEC-562 matched `live_` + 32 characters and was named for Checkout.com.
@@ -4058,7 +4058,7 @@ func builtinSecretRules() []*rules.Rule {
 		{id: "SEC-753", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)pingidentity[_-]?api[_-]?key[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Pingidentity api key", cwe: "CWE-798", keywords: []string{"pingidentity"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-754", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)onelogin[_-]?api[_-]?token[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Onelogin api token", cwe: "CWE-798", keywords: []string{"onelogin"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-755", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)azure[_-]?ad[_-]?client[_-]?secret[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Azure ad client secret", cwe: "CWE-798", keywords: []string{"azure_ad"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
-		{id: "SEC-756", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)google[_-]?oauth[_-]?client[_-]?id[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Google oauth client id", cwe: "CWE-798", keywords: []string{"google_oauth"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
+		{id: "SEC-756", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium, pattern: `(?i)google[_-]?oauth[_-]?client[_-]?id[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Google OAuth client ID (public identifier, not a credential)", cwe: "CWE-547", keywords: []string{"google_oauth"}, remediation: "Not a credential: nothing to rotate. A client ID names an application and is sent in the clear when a user signs in; it authenticates nothing without its client secret, which is reported separately when present. Move it to configuration if it differs between environments.", references: []string{"https://cwe.mitre.org/data/definitions/547.html"}},
 		{id: "SEC-757", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)facebook[_-]?oauth[_-]?app[_-]?secret[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Facebook oauth app secret", cwe: "CWE-798", keywords: []string{"facebook_oauth"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-758", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)twitter[_-]?oauth[_-]?client[_-]?secret[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Twitter oauth client secret", cwe: "CWE-798", keywords: []string{"twitter_oauth"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},
 		{id: "SEC-759", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium, pattern: `(?i)github[_-]?oauth[_-]?app[_-]?secret[ \t]*[=:][ \t]*["']?[A-Za-z0-9_\-]{16,}`, description: "Detected Github oauth app secret", cwe: "CWE-798", keywords: []string{"github_oauth"}, remediation: "Rotate the exposed credential immediately", references: []string{"https://cwe.mitre.org/data/definitions/798.html"}},

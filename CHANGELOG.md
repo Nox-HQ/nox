@@ -60,6 +60,14 @@ wording that claimed more than the scan knew.
   and the fix plan still says to rotate it, but it no longer meets
   `--severity-threshold high`. The finding carries `value_class: test_mode`
   and `rule_severity`. A class only ever lowers a rating.
+- A client ID or account SID is reported at info, as an identifier. Nine
+  rules (SEC-260, SEC-264, SEC-274, SEC-292, SEC-379, SEC-421, SEC-557,
+  SEC-559, SEC-756: LinkedIn, Looker, MessageBird, Plaid, Twilio, Azure and
+  Google OAuth) claimed a hard-coded credential at high severity and told the
+  reader to rotate it; on a real repository a LinkedIn client ID and a Twilio
+  Account SID in `.env.example` led the assessment. They now say "not a
+  credential", cite CWE-547 instead of CWE-798, and name the secret that does
+  matter. Matches and fingerprints are unchanged.
 - A dependency finding's message says what was established in words. It
   used to end in the applicability ladder's identifiers ("established as
   far as "affected_version"; symbol_used was not established"), in SARIF,
@@ -67,6 +75,12 @@ wording that claimed more than the scan knew.
   The metadata keys and values are unchanged, and so is every fingerprint:
   a dependency finding's identity is still computed over the 1.65.0
   wording, so baselines, waivers and VEX statements keep matching.
+
+- `results.sarif` from `nox scan` describes only the rules its results point
+  at, as the MCP report already did. It embedded the whole catalog: 1,503
+  descriptors, 1.97 MB for a scan with six results, which every Code Scanning
+  upload carried and nothing read. Alert identity is unchanged: a result
+  points at the same descriptor id as before.
 
 ### Fixed
 
