@@ -122,7 +122,7 @@ go test ./core/... -run TestName
 golangci-lint run
 
 # Run the CLI
-go run ./cli/main.go scan .
+go run ./cmd/nox scan .
 ```
 
 ## AI Security Scanning (First-Class Feature)

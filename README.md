@@ -141,9 +141,7 @@ brew install nox
 ### Go
 
 ```bash
-go install github.com/nox-hq/nox/cli@latest
-# Go names a binary after its package directory, so this one is called "cli".
-mv "$(go env GOPATH)/bin/cli" "$(go env GOPATH)/bin/nox"
+go install github.com/nox-hq/nox/cmd/nox@latest
 ```
 
 With `GOBIN` set, the binary is there instead of `$(go env GOPATH)/bin`. A build

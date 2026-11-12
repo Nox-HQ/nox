@@ -25,7 +25,7 @@ commands:
   # cannot run clean against its own tree, the tree is what needs fixing.
   # .nox.yaml already carries the exclusions this repository has argued its way
   # to, including the deliberately-vulnerable fixture corpora.
-  self-scan: "go run ./cli scan . -severity-threshold high"
+  self-scan: "go run ./cmd/nox scan . -severity-threshold high"
   # The pre-commit secret check, run by nox rather than warden's built-in
   # `credentials` step.
   #
@@ -40,7 +40,7 @@ commands:
   # keeps it to the index, which measured at 0.36s — well inside a pre-commit
   # budget (0.45s measured). Nothing is weakened: pre-push still runs self-scan across the whole
   # tree at the same threshold.
-  secrets: "go run ./cli scan . -staged -severity-threshold high"
+  secrets: "go run ./cmd/nox scan . -staged -severity-threshold high"
 steps:
   # A secret check at pre-commit is the one whose absence is irreversible: a
   # pushed secret is a leaked secret whatever happens next.

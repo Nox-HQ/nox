@@ -1,5 +1,7 @@
-// Package main is the entry point for the nox CLI.
-package main
+// Package cli is the nox command line: argument parsing, output handling and
+// every subcommand. The binary's entry point is cmd/nox, which hands it the
+// build identity and the arguments.
+package cli
 
 import (
 	"flag"
@@ -8,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"slices"
 	"strings"
 
@@ -27,7 +30,23 @@ var (
 	date    = "unknown"
 )
 
-func main() {
+// Build identifies the binary: the version, commit and date a release build
+// stamps into cmd/nox with -ldflags. A build that stamps nothing (go install,
+// go build) leaves them at their defaults, and Main reads what the go command
+// recorded instead.
+type Build struct {
+	Version, Commit, Date string
+}
+
+// Main runs the nox command line with args and returns its exit code.
+func Main(b Build, args []string) int {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		info = nil
+	}
+	s := stampFromBuildInfo(buildStamp{b.Version, b.Commit, b.Date}, info)
+	version, commit, date = s.version, s.commit, s.date
+
 	// Route slog to stderr at warn level. Nothing configured a handler before,
 	// so every slog.Warn the pipeline emits about degraded checks — including
 	// the OSV degradation warning added specifically to prevent silent failure
@@ -41,7 +60,7 @@ func main() {
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
 
-	os.Exit(run(os.Args[1:]))
+	return run(args)
 }
 
 // extractInterspersedArgs reorders args so that known top-level flags come

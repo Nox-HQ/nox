@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"regexp"
@@ -20,20 +20,12 @@ var (
 	pseudoVersionRE = regexp.MustCompile(`(^|[.-])\d{14}-[0-9a-f]{12}$`)
 )
 
-func init() {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		info = nil
-	}
-	s := stampFromBuildInfo(buildStamp{version, commit, date}, info)
-	version, commit, date = s.version, s.commit, s.date
-}
-
 // stampFromBuildInfo fills the placeholders of a build that was not stamped
-// with -ldflags from what the go command recorded in the binary.
+// with -ldflags from what the go command recorded in the binary. Main calls it
+// with the stamp cmd/nox received.
 //
-// `go install github.com/nox-hq/nox/cli@v1.65.0` records the module version and
-// nothing else, so such a build reports its release and leaves commit and date
+// `go install github.com/nox-hq/nox/cmd/nox@v1.66.0` records the module version
+// and nothing else, so such a build reports its release and leaves commit and date
 // unknown. A build from a checkout records the commit but is not a release:
 // its version is one the go command made up, so it stays "dev", and a commit
 // built with uncommitted changes says so. The date is left alone: the go

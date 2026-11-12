@@ -47,7 +47,7 @@ jobs:
           cache: true
 
       - name: Build candidate
-        run: go build -o /tmp/nox-candidate ./cli
+        run: go build -o /tmp/nox-candidate ./cmd/nox
 
       - name: Fetch last released nox as the baseline
         env:

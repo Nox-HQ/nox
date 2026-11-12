@@ -11,7 +11,7 @@ before:
 builds:
   - id: nox
     binary: nox
-    main: ./cli
+    main: ./cmd/nox
     env:
       - CGO_ENABLED=0
     goos:

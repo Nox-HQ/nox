@@ -54,7 +54,7 @@ jobs:
         # The release's SBOMs are written by nox itself (release.yml).
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
-          go build -trimpath -o "$RUNNER_TEMP/bin/nox" ./cli
+          go build -trimpath -o "$RUNNER_TEMP/bin/nox" ./cmd/nox
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
