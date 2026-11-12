@@ -251,6 +251,7 @@ type BenchReport struct {
 	RulePrevalence map[string]*RulePrevalence `json:"rule_prevalence,omitempty"`
 }
 
+// ProjectSummary is one scanned project in a `nox bench` report.
 type ProjectSummary struct {
 	Path string `json:"path"`
 	// Repo, Ref and Commit identify WHAT was scanned. Path alone is a temp
@@ -286,6 +287,7 @@ type ProjectSummary struct {
 	DeclaredProvenance []bench.DeclaredSource `json:"declared_provenance,omitempty"`
 }
 
+// FailedProject is a project `nox bench` could not scan, and why.
 type FailedProject struct {
 	Path  string `json:"path"`
 	Error string `json:"error"`
