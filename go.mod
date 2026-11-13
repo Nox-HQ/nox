@@ -1,6 +1,6 @@
 module github.com/nox-hq/nox
 
-go 1.27.3
+go 1.27.4
 
 // v1.38.0 was tagged, and recorded by the Go checksum database, but never
 // released: its release was cancelled before publishing when verification found

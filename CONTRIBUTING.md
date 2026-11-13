@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Nox. This guide covers how to set
 
 ### Prerequisites
 
-- Go 1.27.3 or later (the version in `go.mod`)
+- Go 1.27.4 or later (the version in `go.mod`)
 - [golangci-lint](https://golangci-lint.run/usage/install/)
 - [buf](https://buf.build/docs/installation) (only if working on protobuf definitions)
 
