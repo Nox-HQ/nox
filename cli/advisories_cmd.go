@@ -41,7 +41,7 @@ treated as possibly affecting it. Only an advisory shown not to affect the
 build is held at report, and the reason is printed either way.
 
 Flags:
-  --input             findings.json to read (default "findings.json")
+  --input             findings.json to read (default .nox/reports/findings.json, or ./findings.json from an older scan)
   --root              directory holding .nox.yaml (default ".")
   --previous          findings.json from the last scheduled run
   --policy            override the .nox.yaml policy (report, prepare, remediate)
@@ -59,7 +59,7 @@ Exit codes:
 
 func runAdvisories(args []string) int {
 	fs := flag.NewFlagSet("advisories", flag.ContinueOnError)
-	input := fs.String("input", "findings.json", "findings.json to read")
+	input := fs.String("input", scanReportPath(".", "findings.json"), "findings.json to read")
 	root := fs.String("root", ".", "directory holding .nox.yaml")
 	previous := fs.String("previous", "", "findings.json from the last scheduled run")
 	policyFlag := fs.String("policy", "", "override the .nox.yaml policy")

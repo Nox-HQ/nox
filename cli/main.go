@@ -396,7 +396,7 @@ func resolveOutputDir(flagValue, configValue string) string {
 	if configValue != "" {
 		return configValue
 	}
-	return "."
+	return defaultReportDir
 }
 
 // stagedScanOptions adapts the scan options for a --staged run.
@@ -443,7 +443,7 @@ func absAgainst(root, p string) string {
 // the source.
 const (
 	usageFormat  = "output formats: json,sarif,cdx,spdx,html,all (comma-separated) (default \"json\")"
-	usageOutput  = "output directory for report files (default \".\")"
+	usageOutput  = "output directory for report files (default \".nox/reports\", which nox keeps out of git)"
 	usageRules   = "path to custom rules YAML file or directory"
 	usageQuiet   = "suppress all output except errors"
 	usageQuietSh = "suppress all output except errors (shorthand)"
@@ -865,7 +865,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	// it configured was not in force.
 
 	// Generate reports.
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := ensureReportDir(outputDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: creating output directory: %v\n", err)
 		return 2
 	}

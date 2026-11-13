@@ -30,6 +30,20 @@ wording that claimed more than the scan knew.
 
 ### Changed
 
+- **Reports go to `.nox/reports/`, not the working directory.** `nox scan .`
+  used to write `findings.json`, `results.sarif`, the SBOMs and the AI
+  inventory next to the code, five untracked files one `git add .` from being
+  committed. nox puts a `.gitignore` in the new directory, so git never lists
+  the reports and your own `.gitignore` is untouched. Commands that read a
+  report (`fix`, `fix plan`, `vex`, `annotate`, `advisories`, `ci-gate`,
+  `verify-secrets`, `attack`, `confirm`, `agent-graph`, `model`, `compliance`)
+  look there first and still read a `./findings.json` from an older scan.
+  `nox mcp drift` writes there too. `--output` and `output.directory` work as
+  before, and the GitHub Action passes its own `--output`, so it is
+  unaffected. **Breaking for scripts** that run `nox scan .` and then read
+  `./findings.json`: read `.nox/reports/findings.json`, or pass `--output .`
+  to keep the old place. Delete reports an older scan left in the tree;
+  until you do, a scan skips them and names them in a `[degraded]` line.
 - A mistyped `--format`, `--severity-threshold` or `--min-confidence` (and
   `output.format` in `.nox.yaml`) is an error, exit 2, before the scan runs.
   `--format sarfi` used to exit 0 and write no report; `--severity-threshold
