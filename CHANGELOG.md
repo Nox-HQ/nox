@@ -123,6 +123,9 @@ wording that claimed more than the scan knew.
 
 ### Fixed
 
+- Built with Go 1.27.4. Go 1.27.3 has GO-2026-6859, a crash in the HTTP/1
+  server when a request body limit races with header reads. Building from
+  source needs Go 1.27.4 or later.
 - `nox install-hook` printed "Hook will fail on findings of severity:
   critical,high" and installed a hook that blocked only critical: a staged
   high-severity secret was committed. The threshold is the least severe
