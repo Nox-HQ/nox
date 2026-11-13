@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.66.0] - 2026-11-13
+
 Fixes from an audit of 1.65.0 as a user meets it (#1066).
 
 What an audit of 1.65.0 found in the findings themselves (#1067): ratings and
