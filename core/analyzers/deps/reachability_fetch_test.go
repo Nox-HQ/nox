@@ -99,7 +99,7 @@ func moduleNeedingDep(t *testing.T, proxy string) string {
 	}
 	cmd := exec.Command("go", "mod", "download", fetchDepModule)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOPROXY="+proxy, "GOMODCACHE="+moduleCache(t), "GOFLAGS=-mod=mod", "GOSUMDB=off")
+	cmd.Env = append(os.Environ(), "GOPROXY="+proxy, "GOMODCACHE="+moduleCache(t), "GOFLAGS=-mod=mod", "GOSUMDB=off", "GOTOOLCHAIN=local")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go mod download: %v\n%s", err, out)
 	}
@@ -118,6 +118,10 @@ func fetchTestEnv(t *testing.T, proxy string) {
 	t.Setenv("GOPROXY", proxy)
 	t.Setenv("GOSUMDB", "off")
 	t.Setenv("GOFLAGS", "")
+	// The proxy serves only the fixture module, so a toolchain switch (a
+	// GOTOOLCHAIN default in the developer's go env naming another release)
+	// would fail to download from it. The fixtures need only go 1.22.
+	t.Setenv("GOTOOLCHAIN", "local")
 }
 
 // With a dependency's module neither cached nor fetchable, `go list -deps -e`
