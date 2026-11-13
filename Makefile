@@ -1,7 +1,7 @@
 .PHONY: build test lint run clean proto-lint proto-generate proto-breaking cover cover-html hooks verify docker
 
 BINARY := nox
-CLI_PKG := ./cli
+CLI_PKG := ./cmd/nox
 
 build:
 	go build -o $(BINARY) $(CLI_PKG)

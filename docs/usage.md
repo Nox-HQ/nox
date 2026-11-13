@@ -2330,10 +2330,7 @@ jobs:
           go-version: '1.27'
 
       - name: Install nox
-        # Go names the binary after its package directory ("cli").
-        run: |
-          go install github.com/nox-hq/nox/cli@latest
-          mv "$(go env GOPATH)/bin/cli" "$(go env GOPATH)/bin/nox"
+        run: go install github.com/nox-hq/nox/cmd/nox@latest
 
       - name: Run security scan
         run: nox scan . --format sarif,json --output results/
@@ -2398,9 +2395,8 @@ waivers, gating) lives in
 ### Generic CI
 
 ```bash
-# Install (Go names the binary after its package directory, "cli")
-go install github.com/nox-hq/nox/cli@latest
-mv "$(go env GOPATH)/bin/cli" "$(go env GOPATH)/bin/nox"
+# Install
+go install github.com/nox-hq/nox/cmd/nox@latest
 
 # Scan (exit code 1 if findings detected)
 nox scan . --format all --output results/ -q

@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -92,11 +92,12 @@ func runDoctor(args []string) int {
 // to compare against.
 var semverRE = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
-// ciNoxVersionRE matches `go install github.com/nox-hq/nox/cli@vX.Y.Z`
-// or `nox-hq/nox@vX.Y.Z` references commonly used in CI workflows.
+// ciNoxVersionRE matches `go install github.com/nox-hq/nox/cmd/nox@vX.Y.Z`,
+// the `.../cli@vX.Y.Z` path releases before cmd/nox used, and the
+// `nox-hq/nox@vX.Y.Z` Action references commonly used in CI workflows.
 // Captures the bare version (no `v` prefix) so it compares directly
 // against stripVPrefix(localVersion).
-var ciNoxVersionRE = regexp.MustCompile(`nox-hq/nox(?:/cli)?@v?(\d+\.\d+\.\d+)`)
+var ciNoxVersionRE = regexp.MustCompile(`nox-hq/nox(?:/cli|/cmd/nox)?@v?(\d+\.\d+\.\d+)`)
 
 // repoRoot resolves the enclosing git repository root via
 // `git rev-parse --show-toplevel` so `nox doctor` invoked from a
@@ -175,7 +176,7 @@ func reportCIVersionDrift(rRoot, localVersion string) {
 	}
 	if canCompare && !allMatch {
 		fmt.Printf("  ! CI and local versions differ — fingerprints / findings may diverge\n")
-		fmt.Printf("    bump CI to v%s, or `go install github.com/nox-hq/nox/cli@v%s` locally\n", localBare, pinned[0].version)
+		fmt.Printf("    bump CI to v%s, or install nox v%s locally\n", localBare, pinned[0].version)
 	}
 }
 

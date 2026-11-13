@@ -17,7 +17,7 @@ taken with those releases actually installed.
 ## Reproducing
 
 ```bash
-go build -o /tmp/nox ./cli
+go build -o /tmp/nox ./cmd/nox
 for d in testdata/precision-*; do /tmp/nox bench --precision "$d" --json; done
 ```
 

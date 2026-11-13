@@ -12,7 +12,7 @@ the historical record.
 ## Reproducing
 
 ```bash
-go build -o /tmp/nox ./cli
+go build -o /tmp/nox ./cmd/nox
 for d in testdata/precision-corpus testdata/precision-suite testdata/precision-suite-*; do
   /tmp/nox bench --precision "$d" --json
 done

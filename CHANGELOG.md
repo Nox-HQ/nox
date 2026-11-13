@@ -67,6 +67,15 @@ wording that claimed more than the scan knew.
   slopsquat and MCP advisory feeds. A request a cache answered prints
   nothing. A project with no dependency used to request the slopsquat feed
   and say nothing about the network.
+- **Install with `go install github.com/nox-hq/nox/cmd/nox@latest`.** The
+  binary is named `nox`. The old path, `github.com/nox-hq/nox/cli`, named it
+  `cli` after its directory and needed a rename; from this release `cli` is
+  the package the command line lives in, not a program, so `go install` of
+  that path fails with "not a main package" — releases up to 1.65.0 still
+  install from it. Builds from source use `./cmd/nox` (`go build ./cmd/nox`,
+  `go run ./cmd/nox scan .`); release binaries, Homebrew and the Docker image
+  are unchanged.
+
 - `--offline`, `--no-osv` and `scan.osv.disabled` keep every feed off the
   network and still read a verified cached copy, as `docs/intelligence.md`
   says. `--no-osv` used to fetch the MCP advisory feed, `scan.osv.disabled`

@@ -35,7 +35,7 @@ jobs:
       - name: Build nox for the release SBOMs
         run: |
           mkdir -p "$RUNNER_TEMP/bin"
-          go build -trimpath -ldflags "-X main.version=${GITHUB_REF_NAME#v}" -o "$RUNNER_TEMP/bin/nox" ./cli
+          go build -trimpath -ldflags "-X main.version=${GITHUB_REF_NAME#v}" -o "$RUNNER_TEMP/bin/nox" ./cmd/nox
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       # The delta ledger's lifecycle belongs to the release that moves the
@@ -107,7 +107,7 @@ jobs:
       - name: Smoke-test the built binary
         run: |
           set -euo pipefail
-          go build -o /tmp/nox-smoke ./cli
+          go build -o /tmp/nox-smoke ./cmd/nox
           work="$(mktemp -d)"
           # Results and the VEX document live OUTSIDE the fixture. With
           # `-output "$work/out"` the second scan ingests the first scan's own
