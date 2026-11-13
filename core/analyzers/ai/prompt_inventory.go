@@ -4,6 +4,7 @@ import (
 	"regexp"
 
 	"github.com/nox-hq/nox/core/lexctx"
+	"github.com/nox-hq/nox/core/rules"
 )
 
 // PromptTemplate represents a prompt template discovered in the codebase.
@@ -33,18 +34,31 @@ func truncatePromptContent(s string) string {
 	return s[:promptContentMaxLen] + "...[truncated]"
 }
 
+// The prompt patterns are compiled once, and those that open with literals
+// are matched through the rule engine's literal-prefix plan: they are
+// case-insensitive, so regexp cannot skip ahead to their literal and read
+// every byte of every AI-flavoured source file (#736).
+var (
+	promptSystemRe      = rules.MustCompilePlanned(`(?i)(system_prompt|system_message|system_instructions|SYSTEM_PROMPT)\s*[:=]\s*(?:['"]|f['"]|""")((?:[^'"\\]|\\.)*)`)
+	promptTemplateRe    = rules.MustCompilePlanned(`(?i)(ChatPromptTemplate|PromptTemplate|SystemMessagePromptTemplate)\s*\.\s*from_\w+\s*\(`)
+	promptRoleContentRe = rules.MustCompilePlanned(`(?i)["']role["']\s*:\s*["'](system|user|assistant)["']\s*,\s*["']content["']\s*:\s*["']((?:[^"'\\]|\\.)*)`)
+	promptRoleRe        = rules.MustCompilePlanned(`(?i)["']role["']\s*:\s*["'](system|user|assistant)["']`)
+	// Match {variable_name} patterns (but not {{escaped}}).
+	templateVariableRe = regexp.MustCompile(`\{([a-zA-Z_][a-zA-Z0-9_]*)\}`)
+)
+
 // extractPromptTemplates scans file content for prompt template patterns.
 // It now captures (a) the prompt content text where extractable, and
 // (b) the source line number of each match so AIBOM consumers can audit
 // the exact prompt that ships with the application.
 func extractPromptTemplates(path string, content []byte) []PromptTemplate {
 	var templates []PromptTemplate
-	text := string(content)
 	fileName := baseName(path)
 
 	// .prompt and .prompt.md files are templates themselves — content
 	// is the entire file, truncated.
 	if hasSuffix(fileName, ".prompt") || hasSuffix(fileName, ".prompt.md") {
+		text := string(content)
 		tmpl := PromptTemplate{
 			Name:      fileName,
 			Type:      "file",
@@ -59,8 +73,7 @@ func extractPromptTemplates(path string, content []byte) []PromptTemplate {
 
 	// Detect system_prompt / system_message assignments. Capture the
 	// quoted body so AIBOM carries the actual instruction text.
-	systemRe := regexp.MustCompile(`(?i)(system_prompt|system_message|system_instructions|SYSTEM_PROMPT)\s*[:=]\s*(?:['"]|f['"]|""")((?:[^'"\\]|\\.)*)`)
-	for _, m := range systemRe.FindAllSubmatchIndex(content, -1) {
+	for _, m := range promptSystemRe.FindAllSubmatchIndex(content) {
 		if len(m) < 6 {
 			continue
 		}
@@ -77,8 +90,7 @@ func extractPromptTemplates(path string, content []byte) []PromptTemplate {
 	}
 
 	// Detect prompt template definitions (ChatPromptTemplate, PromptTemplate).
-	templateRe := regexp.MustCompile(`(?i)(ChatPromptTemplate|PromptTemplate|SystemMessagePromptTemplate)\s*\.\s*from_\w+\s*\(`)
-	for _, m := range templateRe.FindAllSubmatchIndex(content, -1) {
+	for _, m := range promptTemplateRe.FindAllSubmatchIndex(content) {
 		if len(m) < 4 {
 			continue
 		}
@@ -93,8 +105,7 @@ func extractPromptTemplates(path string, content []byte) []PromptTemplate {
 	// Detect role-based messages with inline content
 	// ({"role": "system", "content": "..."}). Capture the content
 	// string when present.
-	roleContentRe := regexp.MustCompile(`(?i)["']role["']\s*:\s*["'](system|user|assistant)["']\s*,\s*["']content["']\s*:\s*["']((?:[^"'\\]|\\.)*)`)
-	for _, m := range roleContentRe.FindAllSubmatchIndex(content, -1) {
+	for _, m := range promptRoleContentRe.FindAllSubmatchIndex(content) {
 		if len(m) < 6 {
 			continue
 		}
@@ -112,8 +123,7 @@ func extractPromptTemplates(path string, content []byte) []PromptTemplate {
 
 	// Bare role markers without inline content (multi-line message
 	// objects).
-	roleRe := regexp.MustCompile(`(?i)["']role["']\s*:\s*["'](system|user|assistant)["']`)
-	for _, m := range roleRe.FindAllSubmatchIndex(content, -1) {
+	for _, m := range promptRoleRe.FindAllSubmatchIndex(content) {
 		if len(m) < 4 {
 			continue
 		}
@@ -129,11 +139,9 @@ func extractPromptTemplates(path string, content []byte) []PromptTemplate {
 }
 
 func extractTemplateVariables(text string) []string {
-	// Match {variable_name} patterns (but not {{escaped}})
-	re := regexp.MustCompile(`\{([a-zA-Z_][a-zA-Z0-9_]*)\}`)
 	seen := make(map[string]bool)
 	var vars []string
-	for _, m := range re.FindAllStringSubmatch(text, -1) {
+	for _, m := range templateVariableRe.FindAllStringSubmatch(text, -1) {
 		name := m[1]
 		if !seen[name] && !isCommonBrace(name) {
 			seen[name] = true

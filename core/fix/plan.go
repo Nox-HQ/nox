@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/npmtree"
+	"github.com/nox-hq/nox/core/pypipin"
 )
 
 // fixRuleID is the finding rule that carries dependency-upgrade metadata.
@@ -77,25 +79,78 @@ type UpgradeAction struct {
 // generic form shown in a plan. The CLI applier may run a directory-aware
 // variant (npm in the manifest's directory); this is the canonical display and
 // the exact command the MCP fix_plan tool surfaces.
-func (a UpgradeAction) Command() string {
-	v := strings.TrimPrefix(a.To, "v")
+func (a UpgradeAction) Command() string { return UpgradeCommand(a.Ecosystem, a.Package, a.To) }
+
+// CommandIn is the command for this upgrade in the project at root. For npm it
+// is what nox fix apply runs there (core/npmtree): the workspace's package
+// manager, and `npm update` for a package package.json does not list; empty
+// when the lockfile shows a parent's range holds the package below the fix.
+// For pypi it is the pin edit in the file the finding names, or empty when the
+// fix is manual (core/pypipin). Without a root, or for other ecosystems, it is
+// Command.
+func (a UpgradeAction) CommandIn(root string) string {
+	if root == "" {
+		return a.Command()
+	}
 	switch a.Ecosystem {
-	case "go":
-		return "go get " + a.Package + "@v" + v
 	case "npm":
-		return "npm install " + a.Package + "@" + v
+		return npmtree.AdviceFor(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.To).Command
 	case "pypi":
-		return "pip install '" + a.Package + ">=" + v + "'"
-	case "rubygems":
-		return "bundle update " + a.Package + " --conservative"
-	case "cargo":
-		return "cargo update -p " + a.Package + " --precise " + v
-	case "composer":
-		return "composer update " + a.Package
-	case "nuget":
-		return "dotnet add package " + a.Package + " --version " + v
+		return pypipin.AdviceFor(filepath.Join(root, a.Manifest), a.Package, a.From, a.To).Command
+	}
+	return a.Command()
+}
+
+// UpgradeCommand is the command that moves pkg to version, as a shell line:
+// for every ecosystem nox fix drives, exactly what apply runs (Invocation).
+// npm is the exception only without a workspace to read; CommandIn reads it.
+// Findings, plans and the MCP server all print from here.
+func UpgradeCommand(ecosystem, pkg, version string) string {
+	v := strings.TrimPrefix(version, "v")
+	switch ecosystem {
+	case "npm":
+		return "npm install " + pkg + "@" + v
+	case "maven", "gradle":
+		return "upgrade " + pkg + " to " + v + " in your build file"
+	case "pypi":
+		// What apply does, without the file to name: CommandIn names it, or
+		// says the fix is manual.
+		return "set " + pkg + "==" + v + " in its requirements file"
+	}
+	if tool, args, ok := Invocation(ecosystem, pkg, version); ok {
+		return tool + " " + strings.Join(args, " ")
 	}
 	return ""
+}
+
+// Invocation is the command nox fix apply runs to move pkg to version, for
+// every ecosystem but npm (whose command depends on the workspace:
+// core/npmtree.Command) and pypi (a pin edit in the file the finding names,
+// or manual: core/pypipin), which run no command. Each form is chosen so that applying a fix resolves
+// and records versions without running any dependency's code.
+func Invocation(ecosystem, pkg, version string) (tool string, args []string, ok bool) {
+	v := strings.TrimPrefix(version, "v")
+	switch ecosystem {
+	case "go":
+		return "go", []string{"get", pkg + "@v" + v}, true
+	case "cargo":
+		// Resolves and rewrites Cargo.lock; no crate is built, so no build.rs.
+		return "cargo", []string{"update", "-p", pkg, "--precise", v}, true
+	case "rubygems":
+		// Not `bundle update`, which installs the gems and so compiles native
+		// extensions (extconf.rb is arbitrary Ruby). `bundle lock` resolves
+		// and rewrites Gemfile.lock only, within the Gemfile's constraint.
+		return "bundle", []string{"lock", "--update", pkg, "--conservative"}, true
+	case "composer":
+		// Scripts (post-update-cmd and friends) and plugins are code the
+		// project or its dependencies supply, and both run during an update.
+		return "composer", []string{"update", pkg, "--with-dependencies", "--no-scripts", "--no-plugins"}, true
+	case "nuget":
+		// Rewrites the PackageReference and stops: restore pulls MSBuild
+		// props and targets out of the new package, which are executed.
+		return "dotnet", []string{"add", "package", pkg, "--version", v, "--no-restore"}, true
+	}
+	return "", nil, false
 }
 
 // Options control planning.
@@ -151,6 +206,13 @@ type Plan struct {
 //     downgrades, no sideways moves, no stable-to-prerelease jumps.
 //  4. Hold back a major-boundary bump unless IncludeMajor.
 func PlanUpgrades(items []findings.Finding, opts Options) Plan {
+	return PlanUpgradesContext(context.Background(), items, opts)
+}
+
+// PlanUpgradesContext is PlanUpgrades bounded by ctx. A target the Checker has
+// not confirmed when ctx ends is planned from the findings alone and marked
+// Unverified, so a caller that cannot wait gets an honest plan, not a hang.
+func PlanUpgradesContext(ctx context.Context, items []findings.Finding, opts Options) Plan {
 	var plan Plan
 
 	type candidate struct {
@@ -199,6 +261,15 @@ func PlanUpgrades(items []findings.Finding, opts Options) Plan {
 		c.findings = append(c.findings, i)
 	}
 
+	var queries []targetQuery
+	for _, key := range order {
+		c := byPkg[key]
+		if target := BestFix(c.fixes); target != "" && IsUpgrade(c.from, target) {
+			queries = append(queries, targetQuery{ecosystem: c.ecosystem, pkg: c.pkg, from: c.from, initial: target})
+		}
+	}
+	resolved := resolveTargets(ctx, opts.Checker, queries)
+
 	for _, key := range order {
 		c := byPkg[key]
 		target := BestFix(c.fixes)
@@ -207,7 +278,7 @@ func PlanUpgrades(items []findings.Finding, opts Options) Plan {
 			plan.Unplanned = append(plan.Unplanned, c.findings...)
 			continue
 		}
-		res := resolveTarget(context.Background(), opts.Checker, c.ecosystem, c.pkg, c.from, target)
+		res := resolved[targetQuery{ecosystem: c.ecosystem, pkg: c.pkg, from: c.from, initial: target}]
 		target = res.Target
 		action := UpgradeAction{
 			RuleID:     c.ruleID,

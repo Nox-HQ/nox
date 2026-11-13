@@ -2,6 +2,7 @@ package findings
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -1396,5 +1397,71 @@ func TestSeverityLadder(t *testing.T) {
 	// An unrecognized severity is unchanged either way.
 	if Severity("weird").Upgraded() != "weird" || Severity("weird").Downgraded() != "weird" {
 		t.Error("unknown severity must pass through the ladder unchanged")
+	}
+}
+
+// Intelligence's advisory priority orders findings that tie on severity,
+// reachability and confidence, highest first; findings without one keep their
+// location order among themselves, and a priority never lifts a finding over a
+// higher severity.
+func TestSortByPriorityUsesAdvisoryPriorityAsATiebreak(t *testing.T) {
+	mk := func(file, score string, sev Severity) Finding {
+		f := Finding{RuleID: "R", Severity: sev, Confidence: ConfidenceHigh, Location: Location{FilePath: file, StartLine: 1}, Metadata: map[string]string{}}
+		if score != "" {
+			f.Metadata["priority_score"] = score
+		}
+		return f
+	}
+	fs := NewFindingSet()
+	for _, f := range []Finding{
+		mk("a.lock", "0.0005", SeverityHigh),
+		mk("b.lock", "", SeverityHigh),
+		mk("c.lock", "1.42", SeverityHigh),
+		mk("d.lock", "", SeverityHigh),
+		mk("e.lock", "1.99", SeverityMedium),
+		mk("f.lock", "not-a-number", SeverityHigh),
+	} {
+		fs.Add(f)
+	}
+	fs.SortByPriority()
+	var order []string
+	for _, f := range fs.Findings() {
+		order = append(order, f.Location.FilePath)
+	}
+	want := []string{"c.lock", "a.lock", "b.lock", "d.lock", "f.lock", "e.lock"}
+	if strings.Join(order, " ") != strings.Join(want, " ") {
+		t.Errorf("order = %v, want %v", order, want)
+	}
+}
+
+// Within one severity: a decided-impacting dependency finding first, a decided
+// not-impacting one last, and in between the undecided ordered by whether the
+// project imports the module before NOX Intelligence's advisory priority. The
+// reachability plugin's own key still ranks a non-dependency finding.
+func TestSortByPriorityRanksApplicabilityThenImportsThenAdvisory(t *testing.T) {
+	mk := func(file string, meta map[string]string) Finding {
+		return Finding{RuleID: "R", Severity: SeverityHigh, Confidence: ConfidenceHigh,
+			Location: Location{FilePath: file, StartLine: 1}, Metadata: meta}
+	}
+	fs := NewFindingSet()
+	for _, f := range []Finding{
+		mk("a-refuted", map[string]string{"applicability": "not_impacting", "priority_score": "9"}),
+		mk("b-not-imported", map[string]string{"applicability": "undetermined", "dependency_imported": "false", "priority_score": "5"}),
+		mk("c-unknown", map[string]string{"applicability": "undetermined", "priority_score": "3"}),
+		mk("d-imported", map[string]string{"applicability": "undetermined", "dependency_imported": "true", "priority_score": "0.01"}),
+		mk("e-impacting", map[string]string{"applicability": "impacting"}),
+		mk("f-plugin-reachable", map[string]string{"reachable": "true"}),
+		mk("g-imported-hot", map[string]string{"applicability": "undetermined", "dependency_imported": "true", "priority_score": "2"}),
+	} {
+		fs.Add(f)
+	}
+	fs.SortByPriority()
+	var order []string
+	for _, f := range fs.Findings() {
+		order = append(order, f.Location.FilePath)
+	}
+	want := "e-impacting f-plugin-reachable g-imported-hot d-imported c-unknown b-not-imported a-refuted"
+	if got := strings.Join(order, " "); got != want {
+		t.Errorf("order =\n  %s\nwant\n  %s", got, want)
 	}
 }

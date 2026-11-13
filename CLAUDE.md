@@ -17,7 +17,11 @@ Key design constraints:
 Four top-level packages with strict dependency direction (`core` depends on nothing, others depend on `core`):
 
 ```
-/core       — scan engine (no CLI, no network)
+/core       — scan engine (no CLI; a scan's network use is advisory and signed-feed
+              lookups, image pulls and Go module fetches, each named on a
+              [network] line and none made under --offline; contributing
+              observations is opt-in; core/attack and core/confirm contact a
+              target only with --authorize)
 /cli        — argument parsing, output handling
 /server     — MCP server (stdio, sandboxed, rate-limited)
 /ai-assist  — optional LLM-based explanations (separate module, no side effects)
@@ -54,7 +58,7 @@ Four top-level packages with strict dependency direction (`core` depends on noth
 ### Evidence Spine
 
 The evidence model lives in `github.com/nox-hq/nox-core/evidence`, a separate
-module pinned here at `v0.11.2` — not in this repository. It is the foundation
+module pinned here at `v0.18.0` — not in this repository. It is the foundation
 under dynamic exploit validation, and the model the intelligence service shares
 with the CLI; it sits in its own module precisely so neither side depends on the
 other. It owns the exploitability lifecycle (POTENTIAL, PLAUSIBLE, PREVENTED,
@@ -118,7 +122,7 @@ go test ./core/... -run TestName
 golangci-lint run
 
 # Run the CLI
-go run ./cli/main.go scan .
+go run ./cmd/nox scan .
 ```
 
 ## AI Security Scanning (First-Class Feature)

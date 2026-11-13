@@ -79,21 +79,47 @@ func EvaluateWithSubject(content []byte, resourceTypes, propertyPaths []string, 
 	if len(resourceTypes) == 0 || len(propertyPaths) == 0 {
 		return Verdict{Reason: "rule carries no structural descriptor"}
 	}
+	return Load(content).EvaluateWithSubject(resourceTypes, propertyPaths, requireAll, subjectMinInt)
+}
 
+// Document is content parsed once, so that every structural rule evaluated
+// against one file shares a single parse. Evaluation only reads it.
+type Document struct {
+	all []Resource
+	// reason says why the structural path is unavailable; empty when all
+	// holds resources.
+	reason string
+}
+
+// Load parses content for evaluation. It never fails: content that does not
+// parse, or models no schema this package knows, yields a Document whose
+// every verdict is undecided, with the reason.
+func Load(content []byte) *Document {
 	docs, err := Parse(content)
 	if err != nil {
-		return Verdict{Reason: fmt.Sprintf("not parseable as YAML or JSON: %v", err)}
+		return &Document{reason: fmt.Sprintf("not parseable as YAML or JSON: %v", err)}
 	}
-
 	all := Resources(docs)
 	if len(all) == 0 {
 		// The bytes parsed but no schema this package understands was found.
 		// That is ignorance, not absence, and it must read as such.
-		return Verdict{Reason: "no CloudFormation, Kubernetes or ARM resources in the document"}
+		return &Document{reason: "no CloudFormation, Kubernetes or ARM resources in the document"}
+	}
+	return &Document{all: all}
+}
+
+// EvaluateWithSubject is the package function of that name, over a parsed
+// Document.
+func (d *Document) EvaluateWithSubject(resourceTypes, propertyPaths []string, requireAll bool, subjectMinInt map[string]int) Verdict {
+	if len(resourceTypes) == 0 || len(propertyPaths) == 0 {
+		return Verdict{Reason: "rule carries no structural descriptor"}
+	}
+	if d.reason != "" {
+		return Verdict{Reason: d.reason}
 	}
 
 	v := Verdict{Decided: true}
-	for _, r := range OfTypes(all, resourceTypes) {
+	for _, r := range OfTypes(d.all, resourceTypes) {
 		if !subjectQualifies(r, subjectMinInt) {
 			continue
 		}

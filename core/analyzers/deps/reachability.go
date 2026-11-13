@@ -5,10 +5,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,7 +58,12 @@ func goAffectedImports(vuln *osvVuln, module string) []string {
 // repo's own files cannot see that. Getting it wrong in that direction would
 // silently hide real vulnerabilities, so when the toolchain cannot answer,
 // this reports ok=false and callers keep the finding.
-func goImportedPackages(ctx context.Context, dir string) (map[string]struct{}, bool) {
+//
+// fetchedVia is where the go command was allowed to fetch missing modules
+// from (see goProxySources), and empty when the module cache answered or the
+// environment forbids the network. It is set whether or not the fetch gave a
+// whole build: it records a request made, not a result.
+func goImportedPackages(ctx context.Context, dir string) (pkgs map[string]struct{}, ok bool, fetchedVia []string) {
 	// A directory with no go.mod is not a module, and `go list -deps -e ./...`
 	// does NOT say so: it exits 0 and prints the standard library's dependency
 	// closure. Ninety-one packages, none of them the caller's, and no error.
@@ -77,16 +84,47 @@ func goImportedPackages(ctx context.Context, dir string) (map[string]struct{}, b
 	if _, err := os.Stat(filepath.Join(dir, "go.mod")); err != nil {
 		slog.DebugContext(ctx, "no go.mod; the linked package set is unknown rather than empty",
 			"dir", dir)
-		return nil, false
+		return nil, false, nil
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, goListTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "go", "list", "-deps", "-e", "-f", "{{.ImportPath}}", "./...")
+	// From the module cache alone first. Most scans run where the project has
+	// been built, the cache answers, and nothing is requested from anywhere.
+	if pkgs, ok := goListLinked(ctx, dir, "GOPROXY=off"); ok {
+		return pkgs, true, nil
+	}
+	// The cache could not answer. The go command may fetch what is missing the
+	// way `go build` would, through whatever GOPROXY this environment names;
+	// that is a request the scan makes, so the caller is told where it went.
+	sources := goProxySources(goEnv(ctx, dir, "GOPROXY"))
+	if len(sources) == 0 {
+		return nil, false, nil
+	}
+	pkgs, ok = goListLinked(ctx, dir)
+	return pkgs, ok, sources
+}
+
+// incompleteMark is appended to a package `go list` could not load in full.
+const incompleteMark = "\t!incomplete"
+
+// goListLinked asks the go command for every package the module in dir links.
+// It reports ok=false unless the go command loaded the whole build.
+//
+// `go list -e` exits 0 when a package cannot be loaded: it prints the package
+// and carries on. With a dependency's module neither cached nor fetchable, the
+// output is the direct import and nothing that module imports in turn — a
+// short list with no error. Returned as the link set, it made every advisory
+// for a package reached only through the missing module "not linked", and the
+// finding dropped to info. Incomplete is the go command's own word for a
+// package that, or a dependency of which, did not load.
+func goListLinked(ctx context.Context, dir string, env ...string) (map[string]struct{}, bool) {
+	cmd := exec.CommandContext(ctx, "go", "list", "-deps", "-e",
+		"-f", "{{.ImportPath}}{{if .Incomplete}}"+incompleteMark+"{{end}}", "./...")
 	cmd.Dir = dir
 	// Never mutate the module files of the repository under scan.
-	cmd.Env = append(cmd.Environ(), "GOFLAGS=-mod=readonly")
+	cmd.Env = append(append(cmd.Environ(), "GOFLAGS=-mod=readonly"), env...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -101,7 +139,13 @@ func goImportedPackages(ctx context.Context, dir string) (map[string]struct{}, b
 	pkgs := make(map[string]struct{})
 	scanner := newLineScanner(&stdout)
 	for scanner.Scan() {
-		p := strings.TrimSpace(scanner.Text())
+		line := strings.TrimRight(scanner.Text(), " \r\n")
+		if p, incomplete := strings.CutSuffix(line, incompleteMark); incomplete {
+			slog.DebugContext(ctx, "go list could not load the whole build; the linked package set is unknown",
+				"dir", dir, "package", p)
+			return nil, false
+		}
+		p := strings.TrimSpace(line)
 		// With -e, `go list` outside a module echoes the unresolved pattern
 		// itself (e.g. "./...") and still exits 0. Those are not packages, and
 		// accepting them would make an empty directory look like a resolved
@@ -115,6 +159,47 @@ func goImportedPackages(ctx context.Context, dir string) (map[string]struct{}, b
 		return nil, false
 	}
 	return pkgs, true
+}
+
+// goEnv returns one `go env` value for the module in dir, or "" when the go
+// command could not say.
+func goEnv(ctx context.Context, dir, name string) string {
+	cmd := exec.CommandContext(ctx, "go", "env", name)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// goProxySources names where a GOPROXY value lets the go command fetch from,
+// in order: each proxy as scheme and host, and "direct" for the modules' own
+// source hosts. It is empty when the value forbids the network. A proxy URL
+// can carry a password or a token in its userinfo or path, and this ends up in
+// scan output, so neither is kept.
+func goProxySources(goproxy string) []string {
+	var out []string
+	for _, entry := range strings.FieldsFunc(goproxy, func(r rune) bool { return r == ',' || r == '|' }) {
+		entry = strings.TrimSpace(entry)
+		switch entry {
+		case "", "off":
+			continue
+		case "direct":
+			out = append(out, entry)
+			continue
+		}
+		u, err := url.Parse(entry)
+		if err != nil {
+			continue
+		}
+		if u.Host == "" {
+			out = append(out, entry) // file:///path
+			continue
+		}
+		out = append(out, u.Scheme+"://"+u.Host)
+	}
+	return out
 }
 
 // goVulnReachable reports whether an advisory's affected packages are actually
@@ -274,10 +359,34 @@ func (s *sourceImports) get() *depimports.Index {
 		if err != nil {
 			continue
 		}
-		ix.Add(p, content)
+		name := p
+		if strings.HasSuffix(p, ".go") && s.rel[p] != "" {
+			// Go source is filtered by where it sits in the project (tests,
+			// vendor/, testdata/), which the absolute path cannot say: a
+			// project checked out under a directory named testdata would
+			// lose every file.
+			name = s.rel[p]
+		}
+		ix.Add(name, content)
 	}
 	s.index = ix
 	return ix
+}
+
+// addImportedMetadata records whether this project's own non-test Go source
+// imports the module (dependency_imported: true or false), when any Go source
+// was read. It establishes no rung and changes no verdict: the linked set
+// decides those. It orders findings nothing decided. Measured on 500 Go
+// repositories (nox-intelligence docs/design/learning-loop.md): among decided
+// findings, 7.6% of those whose module the project imports were impacting,
+// against 0.4% of the rest, and as an order it scored average precision 0.170
+// where nox_priority scored 0.021 (base rate 0.020).
+func addImportedMetadata(meta map[string]string, src *sourceImports, module string) {
+	ix := src.get()
+	if !ix.Known("go") {
+		return // no Go source read: the question was never put
+	}
+	meta["dependency_imported"] = strconv.FormatBool(ix.ImportsModule(module))
 }
 
 // importApplicability answers the SymbolUsed rung for the ecosystems whose
@@ -544,6 +653,14 @@ func raiseOnJSListedSymbol(v applicability.Verdict, meta map[string]string, src 
 // sourceReferenceSentence states a JavaScript symbol hit without borrowing the
 // Go call-path wording: a reference is not a path from an entry point.
 func sourceReferenceSentence(meta map[string]string) string {
+	return fmt.Sprintf("project source references %s (%s), an export the analysis of the fix lists as changed; "+
+		"it was not established whether execution reaches it, nor %s",
+		meta["affected_symbol_reached"], meta["affected_symbol_site"], applicability.AttackerReachable.Question())
+}
+
+// sourceReferenceIdentity is the same statement as nox 1.65.0 worded it, which
+// is what the finding's fingerprint is computed over (see vulnText). Frozen.
+func sourceReferenceIdentity(meta map[string]string) string {
 	return fmt.Sprintf("project source references %s (%s), an export the analysis of the fix lists as changed; "+
 		"whether execution reaches it was not established, and neither was %q",
 		meta["affected_symbol_reached"], meta["affected_symbol_site"], applicability.AttackerReachable)

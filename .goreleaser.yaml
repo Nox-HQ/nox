@@ -11,7 +11,7 @@ before:
 builds:
   - id: nox
     binary: nox
-    main: ./cli
+    main: ./cmd/nox
     env:
       - CGO_ENABLED=0
     goos:
@@ -28,6 +28,26 @@ builds:
       - -X main.date={{.Date}}
     flags:
       - -trimpath
+
+# Sign and notarize the darwin binaries with Apple's Developer ID, through
+# quill (cross-platform, so the Linux runner does it). Off until the signing
+# secrets exist: a release without them builds exactly as before.
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids:
+        - nox
+      sign:
+        certificate: "{{.Env.MACOS_SIGN_P12}}"
+        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
+      notarize:
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
+        key: "{{.Env.MACOS_NOTARY_KEY}}"
+        # Wait, so a rejected submission fails the release instead of
+        # shipping a binary Gatekeeper will refuse. 20m is Apple's cap.
+        wait: true
+        timeout: 20m
 
 archives:
   - id: nox-archive
@@ -117,15 +137,22 @@ homebrew_casks:
     homepage: "https://github.com/nox-hq/nox"
     description: "Language-agnostic security scanner with first-class AI application security"
     license: "Apache-2.0"
-    # The macOS binaries are not Apple-notarized, so Gatekeeper would refuse to
-    # run them ("nox is damaged and cannot be opened"). Strip the quarantine bit
-    # after install, as GoReleaser's cask guide prescribes for un-notarized builds.
+    # The darwin binaries are signed with the Developer ID and notarized when
+    # MACOS_SIGN_P12 is set (the notarize block above), and Gatekeeper then
+    # accepts them as installed, quarantine and all (macOS signing check,
+    # run 42089842854: "source=Notarized Developer ID"). Only a release built
+    # without the signing secrets ships binaries Gatekeeper refuses ("nox is
+    # damaged and cannot be opened"); for that one the cask strips the
+    # quarantine bit, as GoReleaser's cask guide prescribes for un-notarized
+    # builds. One switch decides both, so they cannot disagree.
     hooks:
       post:
         install_steps: |
+          {{- if not (isEnvSet "MACOS_SIGN_P12") }}
           on_macos do
             run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/nox"]
           end
+          {{- end }}
     # "auto" already skips prereleases/snapshots. SKIP_BREW additionally skips
     # when the release workflow found TAP_GITHUB_TOKEN cannot reach the tap, so
     # an expired packaging credential cannot fail the release and take cosign
@@ -133,10 +160,21 @@ homebrew_casks:
     # variable is unset.
     skip_upload: '{{ if eq (envOrDefault "SKIP_BREW" "") "true" }}true{{ else }}auto{{ end }}'
 
+# Each archive's SBOM is written by nox itself (`nox sbom`), built from this
+# release's commit by release.yml. Until v1.58.0 this section named no command,
+# so GoReleaser ran its default, syft. nox reads the archive offline and the Go
+# binary inside from its embedded build info; SOURCE_DATE_EPOCH pins the
+# document's creation time to the commit, so the SBOM is reproducible.
 sboms:
   - artifacts: archive
     ids:
       - nox-archive
+    cmd: nox
+    args: ["sbom", "$artifact", "-output", "$document"]
+    documents:
+      - "{{ .ArtifactName }}.sbom.json"
+    env:
+      - SOURCE_DATE_EPOCH={{ .CommitTimestamp }}
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"

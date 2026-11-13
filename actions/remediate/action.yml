@@ -93,7 +93,7 @@ runs:
       # Pinned by commit SHA, not the floating @v1 tag: IAC-013 is nox's own
       # rule, and an action that remediates supply-chain risk must not itself
       # consume a mutable ref.
-      uses: nox-hq/nox@49d67c3d69c5302b1ed9e71dd12dc3470764fcbb # v1.55.1
+      uses: nox-hq/nox@8983bb0c789c5b9d711442ebfd141e0789af248a # v1.66.0
       with:
         path: ${{ inputs.path }}
         format: ${{ inputs.scan-format }}
@@ -161,7 +161,7 @@ runs:
     - name: Open pull request
       id: pr
       if: steps.plan.outputs.has-updates == 'true' && inputs.apply == 'true' && inputs.open-pr == 'true'
-      uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+      uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
       with:
         token: ${{ inputs.github-token }}
         branch: ${{ inputs.pr-branch-prefix }}/${{ github.run_id }}

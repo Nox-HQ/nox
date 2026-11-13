@@ -82,3 +82,29 @@ func TestARuleBuiltOutsideAddStillFilters(t *testing.T) {
 		t.Errorf("the keyword gate did not apply to a rule built outside Add: %d findings", len(none))
 	}
 }
+
+// TestPrefilterFallsBackWhereThePassCannotAnswer. The pre-filter asks whether
+// a keyword occurs in the lower-cased file. bytes.ToLower turns a Kelvin sign
+// into k, so a Kelvin-sign "Key" holds the keyword "key", and a non-ASCII
+// keyword is lowered by Unicode rules; the one-pass index compares ASCII. A
+// rule skipped in either case loses its findings without a word.
+func TestPrefilterFallsBackWhereThePassCannotAnswer(t *testing.T) {
+	for _, tc := range []struct{ name, keyword, pattern, content string }{
+		{"Kelvin sign", "key", "KEY=[0-9]+", "KEY=12345\n"},
+		{"dotted capital I", "id", "İD=[0-9]+", "İD=12345\n"},
+		{"non-ASCII keyword", "ölfeld", "ÖLFELD=[0-9]+", "ÖLFELD=12345\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rs := NewRuleSet()
+			rs.Add(&Rule{ID: "T-3", MatcherType: "regex", Pattern: tc.pattern,
+				Keywords: []string{tc.keyword}, Severity: "high"})
+			got, err := NewEngine(rs).ScanFile("a.txt", []byte(tc.content))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 1 {
+				t.Errorf("%d findings, want 1: the pre-filter skipped a rule whose keyword the lower-cased file holds", len(got))
+			}
+		})
+	}
+}

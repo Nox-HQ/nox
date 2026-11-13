@@ -1,18 +1,24 @@
-// Package main is the entry point for the nox CLI.
-package main
+// Package cli is the nox command line: argument parsing, output handling and
+// every subcommand. The binary's entry point is cmd/nox, which hands it the
+// build identity and the arguments.
+package cli
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime/debug"
+	"slices"
 	"strings"
 
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/hypothesize"
+	"github.com/nox-hq/nox/core/policy"
 	"github.com/nox-hq/nox/core/replay"
 	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/report/sbom"
@@ -25,7 +31,23 @@ var (
 	date    = "unknown"
 )
 
-func main() {
+// Build identifies the binary: the version, commit and date a release build
+// stamps into cmd/nox with -ldflags. A build that stamps nothing (go install,
+// go build) leaves them at their defaults, and Main reads what the go command
+// recorded instead.
+type Build struct {
+	Version, Commit, Date string
+}
+
+// Main runs the nox command line with args and returns its exit code.
+func Main(b Build, args []string) int {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		info = nil
+	}
+	s := stampFromBuildInfo(buildStamp{b.Version, b.Commit, b.Date}, info)
+	version, commit, date = s.version, s.commit, s.date
+
 	// Route slog to stderr at warn level. Nothing configured a handler before,
 	// so every slog.Warn the pipeline emits about degraded checks — including
 	// the OSV degradation warning added specifically to prevent silent failure
@@ -39,7 +61,7 @@ func main() {
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
 
-	os.Exit(run(os.Args[1:]))
+	return run(args)
 }
 
 // extractInterspersedArgs reorders args so that known top-level flags come
@@ -150,8 +172,13 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "Usage: nox <command> [flags]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
 		fmt.Fprintf(os.Stderr, "  scan <path>      Scan a directory for security issues\n")
+		fmt.Fprintf(os.Stderr, "  sbom <artifact>  SPDX SBOM of a release archive or file (offline, deterministic)\n")
 		fmt.Fprintf(os.Stderr, "  show [path]      Inspect findings interactively\n")
 		fmt.Fprintf(os.Stderr, "  explain <path>   Explain findings using an LLM\n")
+		fmt.Fprintf(os.Stderr, "  why [path]       Answer what a finding claims and what supports it, from the scan alone (deterministic, no LLM)\n")
+		fmt.Fprintf(os.Stderr, "  replay <file>    Re-derive a scan's verdicts from its evidence artifact (reads nothing else)\n")
+		fmt.Fprintf(os.Stderr, "  variants [CVE]   Find first-party code matching the root cause of a known CVE\n")
+		fmt.Fprintf(os.Stderr, "  verify-secrets   ACTIVE: ask each provider whether a found credential is live (sends the credential; opt-in)\n")
 		fmt.Fprintf(os.Stderr, "  confirm          ACTIVE: dynamically confirm AI prompt-injection findings against a running --target (opt-in)\n")
 		fmt.Fprintf(os.Stderr, "  attack <cmd>     Dynamic exploit validation: plan (offline), run, replay, regress (ACTIVE, --authorize)\n")
 		fmt.Fprintf(os.Stderr, "  badge [path]     Generate an SVG status badge\n")
@@ -175,6 +202,7 @@ func run(args []string) int {
 		fmt.Fprintf(os.Stderr, "  rule-review      List rule propositions worth a maintainer read\n")
 		fmt.Fprintf(os.Stderr, "  ci-gate          Decide whether a scan should fail a build (degradations, dead baseline, net-new)\n")
 		fmt.Fprintf(os.Stderr, "  advisories       Decide what to do about newly disclosed dependency advisories (report, prepare, remediate)\n")
+		fmt.Fprintf(os.Stderr, "  intel <cmd>      NOX Intelligence: what a scan would contribute, consent, operator accounts\n")
 		fmt.Fprintf(os.Stderr, "  enable           Turn on optional checks by what they check (writes .nox.yaml)\n")
 		fmt.Fprintf(os.Stderr, "  install-ci       Write a GitHub Actions workflow: scan on PRs, watch for new advisories on a schedule\n")
 		fmt.Fprintf(os.Stderr, "  install          Install plugins listed in .nox.yaml plugins.required\n")
@@ -209,6 +237,8 @@ func run(args []string) int {
 	switch command {
 	case "scan":
 		return runScan(remaining[1:], formatFlag, outputDir, rulesFlag, quietFlag, verboseFlag)
+	case "sbom":
+		return runSBOM(remaining[1:])
 	case "protect":
 		return runProtect(remaining[1:])
 	case "show":
@@ -385,7 +415,7 @@ func resolveOutputDir(flagValue, configValue string) string {
 	if configValue != "" {
 		return configValue
 	}
-	return "."
+	return defaultReportDir
 }
 
 // stagedScanOptions adapts the scan options for a --staged run.
@@ -431,8 +461,8 @@ func absAgainst(root, p string) string {
 // them: -q and --quiet must keep binding one variable, and that guard reads
 // the source.
 const (
-	usageFormat  = "output formats: json,sarif,cdx,spdx,all (comma-separated) (default \"json\")"
-	usageOutput  = "output directory for report files (default \".\")"
+	usageFormat  = "output formats: json,sarif,cdx,spdx,html,all (comma-separated) (default \"json\")"
+	usageOutput  = "output directory for report files (default \".nox/reports\", which nox keeps out of git)"
 	usageRules   = "path to custom rules YAML file or directory"
 	usageQuiet   = "suppress all output except errors"
 	usageQuietSh = "suppress all output except errors (shorthand)"
@@ -606,8 +636,15 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	// the project opts in (default) and the operator hasn't passed
 	// --no-auto-install. Failures are non-fatal — the scan still runs.
 	if !noAutoInstallFlg && cfg.Plugins.AutoInstallEnabled() && len(cfg.Plugins.Required) > 0 {
-		if rc := autoInstallProjectPlugins(target, &cfg.Plugins, quiet); rc != 0 && verbose {
+		if rc := autoInstallProjectPlugins(target, &cfg.Plugins, quiet, offlineFlag); rc != 0 && verbose {
 			fmt.Fprintf(os.Stderr, "[warn] auto-install returned %d; some plugins may be missing\n", rc)
+		}
+	}
+	// A retired plugin still runs if it is installed, so name it whether or
+	// not auto-install did anything.
+	if !quiet && len(cfg.Plugins.Required) > 0 {
+		if st, err := LoadState(DefaultStatePath()); err == nil {
+			warnDeprecatedRequired(os.Stderr, cfg.Plugins.Required, st)
 		}
 	}
 
@@ -615,7 +652,15 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	formatFlag = resolveOutputFormat(formatFlag, cfg.Output.Format)
 	outputDir = resolveOutputDir(outputDir, cfg.Output.Directory)
 
-	formats := parseFormats(formatFlag)
+	formats, err := parseFormats(formatFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
+	}
+	if err := validateThresholds(thresholdFlag, minConfidenceFlag); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
+	}
 
 	if !quiet {
 		switch {
@@ -781,10 +826,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 
 	if !quiet {
 		// A scope that did not run has no count, not a count of zero.
-		deps := fmt.Sprintf("%d dependencies", pkgCount)
-		if !result.Scope.Has(nox.ScopeDeps) {
-			deps = "dependencies not scanned"
-		}
+		deps := dependencySummary(pkgCount, result.Scope.Has(nox.ScopeDeps), result.Degradations)
 		aiComponents := result.AIInventory.Summary()
 		if !result.Scope.Has(nox.ScopeAI) {
 			aiComponents = "AI components not scanned"
@@ -806,6 +848,18 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 			fmt.Println("[offline] zero-network guarantee: no OSV, no API, no token, no telemetry (recorded in findings.json meta)")
 		}
 		if note := networkNotice(cfg, offlineFlag, noOSVFlag, result.Scope.Has(nox.ScopeDeps), pkgCount); note != "" {
+			fmt.Println(note)
+		}
+		if note := mavenNetworkNotice(cfg, result.Inventory.MavenPOMsRequested()); note != "" {
+			fmt.Println(note)
+		}
+		if note := imageNetworkNotice(result.Inventory.ImageHostsContacted()); note != "" {
+			fmt.Println(note)
+		}
+		if note := goModulesNetworkNotice(result.Inventory.GoModulesFetchedVia()); note != "" {
+			fmt.Println(note)
+		}
+		if note := feedNetworkNotice(result.FeedsRequested); note != "" {
 			fmt.Println(note)
 		}
 	}
@@ -830,7 +884,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	// it configured was not in force.
 
 	// Generate reports.
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := ensureReportDir(outputDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: creating output directory: %v\n", err)
 		return 2
 	}
@@ -852,10 +906,11 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 
 		case "sarif":
 			path := filepath.Join(outputDir, "results.sarif")
+			// Describes the rules its results use, as the MCP report does. The
+			// whole catalog (1,500+ descriptors, about 2 MB) was bytes every
+			// Code Scanning upload carried and nothing read: a descriptor is
+			// looked at only through a result that points at it.
 			r := result.SARIFReporter(version)
-			// The CLI writes to a file, not to a response budget, so it can
-			// afford the full rule catalog the MCP surface cannot.
-			r.Rules = result.Rules
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
@@ -876,7 +931,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 				fmt.Fprintf(os.Stderr, "[scope] %s not written: dependencies were not scanned\n", path)
 				continue
 			}
-			r := sbom.NewCycloneDXReporter(version).WithAIInventory(result.AIInventory)
+			r := result.CycloneDX(version)
 			if err := r.WriteToFile(result.Inventory, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
@@ -942,6 +997,13 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		}
 	}
 
+	// A staged scan shows no assessment, and under --quiet (how every hook
+	// calls it) showed nothing at all: a refused commit with no stated reason.
+	gating := gatingFindings(result.PolicyResult, activeFindings)
+	if stagedFlag {
+		printStagedFindings(os.Stderr, gating, verbose)
+	}
+
 	if !quiet {
 		if assessmentShown(quiet, stagedFlag, historyFlag) {
 			scanAssessment{result: result, active: activeFindings, target: target, outDir: outputDir,
@@ -964,16 +1026,57 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		return result.PolicyResult.ExitCode
 	}
 
-	if findingCount > 0 {
+	if len(gating) > 0 {
 		return 1
 	}
 	return 0
+}
+
+// validateThresholds rejects a --severity-threshold or --min-confidence that
+// names no level.
+//
+// Neither was checked. An unknown severity threshold is met by no finding, so
+// `--severity-threshold hihg` exited 0 with a secret staged; an unknown
+// confidence threshold is met by every finding, so the filter the operator
+// asked for was silently not applied.
+func validateThresholds(severity, confidence string) error {
+	if severity != "" && !findings.Severity(severity).IsValid() {
+		return fmt.Errorf("unknown --severity-threshold %q: use critical, high, medium or low", severity)
+	}
+	if confidence != "" && !findings.Confidence(confidence).IsValid() {
+		return fmt.Errorf("unknown --min-confidence %q: use high, medium or low", confidence)
+	}
+	return nil
+}
+
+// gatingFindings returns the findings that make a scan exit 1. Without a
+// policy that is every active finding except the two nox itself established are
+// not a problem here: a dependency vulnerability that is not impacting (#1012),
+// and a vendor's published example value, which is documentation and not a
+// credential. With one, the policy decides the exit code and this returns the
+// active findings it was given when it failed.
+func gatingFindings(result *policy.Result, active []findings.Finding) []findings.Finding {
+	if result != nil {
+		if result.ExitCode == 0 {
+			return nil
+		}
+		return active
+	}
+	var gating []findings.Finding
+	for i := range active {
+		if active[i].GatesByDefault() {
+			gating = append(gating, active[i])
+		}
+	}
+	return gating
 }
 
 func runServe(args []string) int {
 	serveFS := flag.NewFlagSet("serve", flag.ContinueOnError)
 	var allowedPaths string
 	serveFS.StringVar(&allowedPaths, "allowed-paths", "", "comma-separated workspace roots the server may scan (default: the working directory)")
+	var hostPlugins bool
+	serveFS.BoolVar(&hostPlugins, "plugins", false, "host installed plugins, adding the plugin.list and plugin.call_tool tools (trust policy from the first root's .nox.yaml)")
 
 	if err := serveFS.Parse(args); err != nil {
 		return 2
@@ -985,7 +1088,22 @@ func runServe(args []string) int {
 		return 2
 	}
 
-	srv := server.New(version, paths)
+	host, warnings, err := servePluginHost(context.Background(), hostPlugins, paths[0])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
+	}
+	// stdout carries the MCP protocol; anything for the operator goes to stderr.
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "[plugin warn] %s\n", w)
+	}
+	var opts []server.Option
+	if host != nil {
+		defer func() { _ = host.Close() }()
+		opts = append(opts, server.WithPluginHost(host))
+	}
+
+	srv := server.New(version, paths, opts...)
 	if err := srv.Serve(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: MCP server failed: %v\n", err)
 		return 2
@@ -1025,24 +1143,36 @@ func serveAllowedPaths(flagValue string) ([]string, error) {
 	return []string{cwd}, nil
 }
 
+// reportFormats are the formats `nox scan --format` writes, in the order "all"
+// expands to. The switch that writes reports has a case for each; a name that
+// is not here has no case there, so it must be refused, not skipped.
+var reportFormats = []string{"json", "sarif", "cdx", "spdx", "html"}
+
 // parseFormats splits the comma-separated format flag into individual format
 // strings. "all" expands to all supported formats.
-func parseFormats(fmtFlag string) []string {
+//
+// An unknown name is an error. It used to pass through to a switch with no
+// default branch, so `--format sarfi` scanned, wrote no report and exited 0.
+func parseFormats(fmtFlag string) ([]string, error) {
 	if fmtFlag == "all" {
-		return []string{"json", "sarif", "cdx", "spdx", "html"}
+		return append([]string(nil), reportFormats...), nil
 	}
 
 	var formats []string
 	for _, f := range strings.Split(fmtFlag, ",") {
 		f = strings.TrimSpace(f)
-		if f != "" {
-			formats = append(formats, f)
+		if f == "" {
+			continue
 		}
+		if !slices.Contains(reportFormats, f) {
+			return nil, fmt.Errorf("unknown output format %q: use %s, or all on its own", f, strings.Join(reportFormats, ", "))
+		}
+		formats = append(formats, f)
 	}
 	if len(formats) == 0 {
-		return []string{"json"}
+		return []string{"json"}, nil
 	}
-	return formats
+	return formats, nil
 }
 
 // emitHypotheses writes the active-testing questions a scan raises.
@@ -1091,4 +1221,20 @@ func joinScopes(ss []nox.Scope) string {
 		names[i] = string(s)
 	}
 	return strings.Join(names, ", ")
+}
+
+// dependencySummary words the dependency count for the [results] line. "0
+// dependencies" is a claim that none exist; when a manifest was recognised and
+// not turned into packages (lockfile_parse), the count is a floor, and saying
+// so is the difference between a clean result and a blind one.
+func dependencySummary(count int, scanned bool, degradations []nox.Degradation) string {
+	if !scanned {
+		return "dependencies not scanned"
+	}
+	for _, d := range degradations {
+		if string(d.Kind) == "lockfile_parse" {
+			return fmt.Sprintf("%d dependencies checked (some declared dependencies were NOT checked; see degradations)", count)
+		}
+	}
+	return fmt.Sprintf("%d dependencies", count)
 }

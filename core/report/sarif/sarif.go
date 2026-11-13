@@ -210,6 +210,16 @@ type Reporter struct {
 	// reads the result, not nox's meta block — so shipping the identifier alone
 	// would be shipping nothing.
 	CompetenceProfiles []capability.Profile
+
+	// Declared is the scan's rule catalog, read only for each rule's declared
+	// severity, by a surface that does not embed the catalog (Rules nil).
+	//
+	// Which descriptor a result points at depends on it: a finding at its rule's
+	// declared severity is reported under the rule's own id, any other under a
+	// severity variant (see resultRuleID). Without it a surface would have to
+	// guess the rule's severity from the findings, and the SARIF from the CLI
+	// and from MCP would name the same finding differently.
+	Declared *rules.RuleSet
 }
 
 // NewReporter returns a Reporter configured with the given tool
@@ -236,7 +246,8 @@ func (r *Reporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 	results := make([]Result, 0, len(items))
 	for i := range items {
 		f := items[i]
-		idx, ok := ruleIndex[f.RuleID]
+		ruleID := r.resultRuleID(f)
+		idx, ok := ruleIndex[ruleID]
 		if !ok {
 			// This should not happen if buildRuleCatalog is correct, but
 			// handle it defensively.
@@ -280,7 +291,7 @@ func (r *Reporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 		}
 
 		result := Result{
-			RuleID:       f.RuleID,
+			RuleID:       ruleID,
 			RuleIndex:    idx,
 			Level:        severityToLevel(f.Severity),
 			Message:      Message{Text: f.Message},
@@ -431,10 +442,6 @@ func severityToLevel(s findings.Severity) string {
 	}
 }
 
-// buildRuleCatalog constructs the SARIF rules array and a map from rule ID to
-// its index within that array. When the reporter has a RuleSet, the catalog is
-// populated from it. Otherwise the catalog is derived from the unique rule IDs
-// found in the given findings slice.
 // encodeURI turns a scanned file path into a valid SARIF artifact URI. Paths
 // may contain spaces, '#', '?' and other characters that are invalid in a raw
 // URI reference; a bare '#' in particular truncates the path at the fragment.
@@ -501,173 +508,174 @@ func (r *Reporter) gapsFor(id string) []capability.Gap {
 	return nil
 }
 
+// resultRuleID names the rule descriptor a finding is reported under.
+//
+// GitHub Code Scanning rates an alert by its descriptor's security-severity
+// alone; a result's level never moves it between critical, high, medium and
+// low. So a descriptor can carry one severity, and a finding at any other
+// severity needs a descriptor of its own: `<rule>/<severity>`, the hierarchical
+// form SARIF §3.27.5 gives a sub-rule.
+//
+// A finding at its rule's declared severity keeps the rule's plain id, so the
+// alerts nothing re-rated keep their identity. A rule nox declares nothing
+// about (a plugin's) has no severity of its own to compare with, so every one
+// of its findings is named by severity.
+//
+// The answer depends on the finding and the declared catalog only. Deriving a
+// rule's severity from the findings instead, as this reporter once did, let
+// one info finding sorting first strip the rating from every real one, and
+// made each alert's rating hinge on what else the scan happened to find.
+func (r *Reporter) resultRuleID(f findings.Finding) string {
+	if f.RuleID == "" || !f.Severity.IsValid() {
+		return f.RuleID
+	}
+	if rule := r.declared(f.RuleID); rule != nil && rule.Severity == f.Severity {
+		return f.RuleID
+	}
+	return f.RuleID + "/" + string(f.Severity)
+}
+
+// declared returns the catalog's rule for id, or nil.
+func (r *Reporter) declared(id string) *rules.Rule {
+	for _, rs := range []*rules.RuleSet{r.Rules, r.Declared} {
+		if rs == nil {
+			continue
+		}
+		if rule, ok := rs.ByID(id); ok {
+			return rule
+		}
+	}
+	return nil
+}
+
+// buildRuleCatalog constructs the SARIF rules array and a map from descriptor
+// id to its index. With an embedded catalog (Rules) every rule is listed at its
+// declared severity, in id order; after it, and only when a result needs one,
+// comes each severity variant and each descriptor for a rule the catalog does
+// not hold, also in id order.
 func (r *Reporter) buildRuleCatalog(items []findings.Finding) (catalog []ReportingDescriptor, index map[string]int) {
+	index = make(map[string]int)
 	if r.Rules != nil {
-		catalog, index = r.buildCatalogFromRuleSet()
-	} else {
-		return r.buildCatalogFromFindings(items)
+		all := r.Rules.Rules()
+		sorted := make([]*rules.Rule, len(all))
+		copy(sorted, all)
+		sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
+		catalog = make([]ReportingDescriptor, 0, len(sorted))
+		for _, rule := range sorted {
+			index[rule.ID] = len(catalog)
+			catalog = append(catalog, ruleDescriptor(rule))
+		}
 	}
 
-	// Reconcile against the findings actually present. A finding whose rule is
-	// not in the RuleSet — every plugin finding (taint, reachability) and any
-	// analyzer rule missing from the catalog — would otherwise get RuleIndex 0,
-	// a dangling ruleId pointing at whatever rule sorts first. GitHub Code
-	// Scanning validates this and rejects the whole upload silently. Synthesise
-	// a minimal descriptor for each missing rule ID so the reference resolves.
+	var extra []ReportingDescriptor
 	for i := range items {
-		id := items[i].RuleID
+		f := items[i]
+		id := r.resultRuleID(f)
 		if _, ok := index[id]; ok || id == "" {
 			continue
 		}
-		index[id] = len(catalog)
-		desc := ReportingDescriptor{
-			ID:               id,
-			Name:             id,
-			ShortDescription: Message{Text: items[i].Message},
-			DefaultConfiguration: Configuration{
-				Level: severityToLevel(items[i].Severity),
-			},
-		}
-		if ss := securitySeverity(items[i].Severity); ss != "" {
-			desc.Properties = map[string]any{"security-severity": ss}
-		}
-		catalog = append(catalog, desc)
+		index[id] = -1 // placeholder until the extras are sorted
+		extra = append(extra, r.variantDescriptor(f, id))
+	}
+	sort.Slice(extra, func(i, j int) bool { return extra[i].ID < extra[j].ID })
+	for _, d := range extra {
+		index[d.ID] = len(catalog)
+		catalog = append(catalog, d)
 	}
 	return catalog, index
 }
 
-// buildCatalogFromRuleSet creates catalog entries for every rule in the
-// RuleSet, sorted by rule ID for deterministic output.
-func (r *Reporter) buildCatalogFromRuleSet() (catalog []ReportingDescriptor, index map[string]int) {
-	allRules := r.Rules.Rules()
-
-	// Sort rules by ID for deterministic ordering.
-	sorted := make([]*rules.Rule, len(allRules))
-	copy(sorted, allRules)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].ID < sorted[j].ID
-	})
-
-	catalog = make([]ReportingDescriptor, 0, len(sorted))
-	index = make(map[string]int, len(sorted))
-
-	for _, rule := range sorted {
-		idx := len(catalog)
-		index[rule.ID] = idx
-
-		desc := ReportingDescriptor{
-			ID:   rule.ID,
-			Name: rule.ID,
-			ShortDescription: Message{
-				Text: rule.Description,
-			},
-			DefaultConfiguration: Configuration{
-				Level: severityToLevel(rule.Severity),
-			},
+// variantDescriptor describes a descriptor id that is not a declared rule at
+// its own severity: a severity variant of a declared rule, a declared rule
+// listed because a result points at it (no embedded catalog), or a rule nox
+// declares nothing about.
+func (r *Reporter) variantDescriptor(f findings.Finding, id string) ReportingDescriptor {
+	rule := r.declared(f.RuleID)
+	if rule != nil && id == f.RuleID {
+		return ruleDescriptor(rule)
+	}
+	var desc ReportingDescriptor
+	if rule != nil {
+		desc = ruleDescriptor(rule)
+	} else {
+		desc = ReportingDescriptor{ShortDescription: Message{Text: f.Message}}
+	}
+	desc.ID = id
+	desc.Name = id
+	desc.DefaultConfiguration = Configuration{Level: severityToLevel(f.Severity)}
+	props := make(map[string]any, len(desc.Properties)+2)
+	for k, v := range desc.Properties {
+		props[k] = v
+	}
+	delete(props, "security-severity")
+	if ss := securitySeverity(f.Severity); ss != "" {
+		props["security-severity"] = ss
+	}
+	if id != f.RuleID {
+		props["parent-rule"] = f.RuleID
+		if rule != nil {
+			desc.ShortDescription = Message{Text: fmt.Sprintf("%s (reported at %s)", rule.Description, f.Severity)}
 		}
+	}
+	desc.Properties = props
+	return desc
+}
 
-		props := make(map[string]any, len(rule.Metadata)+2)
-		for k, v := range rule.Metadata {
-			props[k] = v
-		}
-		// Surface OWASP MCP Top 10 control mapping for standards alignment.
-		if control := compliance.ControlForRule(rule.ID, rule.Tags); control != "" {
-			props["owasp-mcp"] = control
-		}
-		// Emit rule tags in the standard SARIF taxonomy slot.
-		if len(rule.Tags) > 0 {
-			props["tags"] = rule.Tags
-		}
-		// GitHub Code Scanning classifies alerts by this, not by SARIF level.
-		if ss := securitySeverity(rule.Severity); ss != "" {
-			props["security-severity"] = ss
-		}
-		if len(props) > 0 {
-			desc.Properties = props
-		}
+// ruleDescriptor describes a declared rule at its declared severity.
+func ruleDescriptor(rule *rules.Rule) ReportingDescriptor {
+	desc := ReportingDescriptor{
+		ID:   rule.ID,
+		Name: rule.ID,
+		ShortDescription: Message{
+			Text: rule.Description,
+		},
+		DefaultConfiguration: Configuration{
+			Level: severityToLevel(rule.Severity),
+		},
+	}
 
-		// Populate help text from Remediation for GitHub Code Scanning.
-		if rule.Remediation != "" {
-			helpText := "**Remediation:** " + rule.Remediation
-			helpMarkdown := "**Remediation:** " + rule.Remediation
-			if len(rule.References) > 0 {
-				helpText += "\n\nReferences:\n"
-				helpMarkdown += "\n\n**References:**\n"
-				for _, ref := range rule.References {
-					helpText += "- " + ref + "\n"
-					helpMarkdown += "- [" + ref + "](" + ref + ")\n"
-				}
-			}
-			desc.FullDescription = &Message{Text: rule.Description}
-			desc.Help = &MultiformatMessage{
-				Text:     helpText,
-				Markdown: helpMarkdown,
-			}
-		}
+	props := make(map[string]any, len(rule.Metadata)+2)
+	for k, v := range rule.Metadata {
+		props[k] = v
+	}
+	// Surface OWASP MCP Top 10 control mapping for standards alignment.
+	if control := compliance.ControlForRule(rule.ID, rule.Tags); control != "" {
+		props["owasp-mcp"] = control
+	}
+	// Emit rule tags in the standard SARIF taxonomy slot.
+	if len(rule.Tags) > 0 {
+		props["tags"] = rule.Tags
+	}
+	// GitHub Code Scanning classifies alerts by this, not by SARIF level.
+	if ss := securitySeverity(rule.Severity); ss != "" {
+		props["security-severity"] = ss
+	}
+	if len(props) > 0 {
+		desc.Properties = props
+	}
 
-		// Use the first reference as helpUri.
+	// Populate help text from Remediation for GitHub Code Scanning.
+	if rule.Remediation != "" {
+		helpText := "**Remediation:** " + rule.Remediation
+		helpMarkdown := "**Remediation:** " + rule.Remediation
 		if len(rule.References) > 0 {
-			desc.HelpURI = rule.References[0]
+			helpText += "\n\nReferences:\n"
+			helpMarkdown += "\n\n**References:**\n"
+			for _, ref := range rule.References {
+				helpText += "- " + ref + "\n"
+				helpMarkdown += "- [" + ref + "](" + ref + ")\n"
+			}
 		}
-
-		catalog = append(catalog, desc)
+		desc.FullDescription = &Message{Text: rule.Description}
+		desc.Help = &MultiformatMessage{
+			Text:     helpText,
+			Markdown: helpMarkdown,
+		}
 	}
 
-	return catalog, index
-}
-
-// buildCatalogFromFindings creates minimal catalog entries derived from the
-// unique rule IDs in the findings. The entries are sorted by rule ID.
-func (r *Reporter) buildCatalogFromFindings(items []findings.Finding) (catalog []ReportingDescriptor, index map[string]int) {
-	// Collect unique rule IDs preserving the first finding's data for each.
-	type ruleInfo struct {
-		id       string
-		severity findings.Severity
-		message  string
+	// Use the first reference as helpUri.
+	if len(rule.References) > 0 {
+		desc.HelpURI = rule.References[0]
 	}
-
-	seen := make(map[string]struct{})
-	var unique []ruleInfo
-
-	for i := range items {
-		f := items[i]
-		if _, exists := seen[f.RuleID]; exists {
-			continue
-		}
-		seen[f.RuleID] = struct{}{}
-		unique = append(unique, ruleInfo{
-			id:       f.RuleID,
-			severity: f.Severity,
-			message:  f.Message,
-		})
-	}
-
-	// Sort by ID for deterministic output.
-	sort.Slice(unique, func(i, j int) bool {
-		return unique[i].id < unique[j].id
-	})
-
-	catalog = make([]ReportingDescriptor, 0, len(unique))
-	index = make(map[string]int, len(unique))
-
-	for _, ri := range unique {
-		idx := len(catalog)
-		index[ri.id] = idx
-		desc := ReportingDescriptor{
-			ID:   ri.id,
-			Name: ri.id,
-			ShortDescription: Message{
-				Text: ri.message,
-			},
-			DefaultConfiguration: Configuration{
-				Level: severityToLevel(ri.severity),
-			},
-		}
-		if ss := securitySeverity(ri.severity); ss != "" {
-			desc.Properties = map[string]any{"security-severity": ss}
-		}
-		catalog = append(catalog, desc)
-	}
-
-	return catalog, index
+	return desc
 }

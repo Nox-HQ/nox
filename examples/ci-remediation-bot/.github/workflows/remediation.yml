@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install Nox
-        uses: nox-hq/nox@774d22ac2c0b83692802729163f848c7596d2460 # v1.14.0
+        uses: nox-hq/nox@8983bb0c789c5b9d711442ebfd141e0789af248a # v1.66.0
         with:
           path: .
           format: json
@@ -79,7 +79,7 @@ jobs:
 
       - name: Upload remediation plan
         if: always()
-        uses: actions/upload-artifact@v4 # nox:ignore IAC-153 -- example CI artifact, not a released binary
+        uses: actions/upload-artifact@v4
         with:
           name: remediation-plan
           path: remediation-plan.txt

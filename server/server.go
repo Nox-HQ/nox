@@ -85,8 +85,60 @@ type baselineStatusInput struct {
 type baselineAddInput struct {
 	Path        string `json:"path"`
 	Fingerprint string `json:"fingerprint"`
-	Reason      string `json:"reason,omitempty"`
+	// Reason, Owner and Confirmed are the baselineConsent arguments. They are
+	// spelled out on each input and not embedded, because the schema generator
+	// does not descend into an embedded struct: embedded, they were absent from
+	// the published schema, which also sets additionalProperties to false, so a
+	// client that validates its calls could never have supplied them.
+	Reason    string `json:"reason"`
+	Owner     string `json:"owner,omitempty"`
+	Confirmed bool   `json:"confirmed"`
 }
+
+func (in baselineAddInput) consent() baselineConsent {
+	return baselineConsent{Reason: in.Reason, Owner: in.Owner, Confirmed: in.Confirmed}
+}
+
+// baselineConsent is what both baseline tools need before they suppress
+// anything. Adding a finding to the baseline stops nox reporting it, so the
+// entry has to say why, and the call has to carry the operator's consent.
+type baselineConsent struct {
+	// Reason is why the finding is accepted. Required: it is stored on the
+	// entry, where a reviewer reads it.
+	Reason string
+	// Owner is the person or team answerable for the decision. Optional.
+	Owner string
+	// Confirmed must be true. As with plugin_install, the MCP host collects the
+	// operator's consent before forwarding the call, and a boolean cannot be
+	// talked into existence the way a free-text approval can.
+	Confirmed bool
+}
+
+// refusal returns why the call may not suppress anything, or "" when it may.
+func (c baselineConsent) refusal(tool string) string {
+	if strings.TrimSpace(c.Reason) == "" {
+		return "Error: " + tool + " requires a reason: say why the finding is accepted. It is stored on the baseline entry, where a reviewer reads it."
+	}
+	if !c.Confirmed {
+		return "Error: " + tool + " requires `confirmed: true`. The MCP host must collect operator consent before forwarding this call. Adding a finding to the baseline stops nox reporting it; an agent that could do that unasked could hide what it was told to hide."
+	}
+	return ""
+}
+
+// entry is the baseline entry for a finding this call accepts.
+func (c baselineConsent) entry(f *findings.Finding, now time.Time) *baseline.Entry {
+	return &baseline.Entry{
+		Fingerprint: f.Fingerprint,
+		RuleID:      f.RuleID,
+		FilePath:    f.Location.FilePath,
+		Severity:    f.Severity,
+		Reason:      strings.TrimSpace(c.Reason),
+		Owner:       strings.TrimSpace(c.Owner),
+		Source:      baseline.SourceMCP,
+		CreatedAt:   now,
+	}
+}
+
 type diffInput struct {
 	Path string `json:"path"`
 	Base string `json:"base,omitempty"`
@@ -246,13 +298,13 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("Get security findings from the last scan").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handleGetFindings)
+		Handler(textTool(s.handleGetFindings))
 
 	srv.Tool("get_sbom").
 		Description("Get software bill of materials from the last scan").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handleGetSBOM)
+		Handler(textTool(s.handleGetSBOM))
 
 	srv.Tool("get_finding_detail").
 		Description("Get detailed information about a finding including source context and remediation").
@@ -310,16 +362,17 @@ func (s *Server) registerTools(srv *mcp.Server) {
 	// (nothing is deleted or overwritten) and adding the same fingerprint again
 	// changes nothing, so they are not destructive and are idempotent; they are
 	// still not read-only, and suppressing a finding is a decision a person
-	// should be asked about.
+	// should be asked about. The annotation is advice to the client; the
+	// `reason` and `confirmed` arguments are what the server itself enforces.
 	srv.Tool("baseline_add").
-		Description("Add a finding to the baseline by fingerprint").
+		Description("Add a finding to the baseline by fingerprint, which stops nox reporting it. REQUIRES a `reason` (stored on the entry) and `confirmed: true` — the MCP host MUST collect operator consent before forwarding this call. `owner` optionally names who is answerable for the decision.").
 		Annotations(additiveLocalWrite).
-		Handler(s.handleBaselineAdd)
+		Handler(textTool(s.handleBaselineAdd))
 
 	srv.Tool("baseline_add_many").
-		Description("Batch-suppress multiple findings by fingerprint in a single call. Saves the baseline once and updates the cached scan results so list_findings/badge reflect the new state without a re-scan.").
+		Description("Batch-suppress multiple findings by fingerprint in a single call. REQUIRES a `reason` (stored on every entry) and `confirmed: true` — the MCP host MUST collect operator consent before forwarding this call. `owner` optionally names who is answerable. Saves the baseline once and updates the cached scan results so list_findings/badge reflect the new state without a re-scan.").
 		Annotations(additiveLocalWrite).
-		Handler(s.handleBaselineAddMany)
+		Handler(textTool(s.handleBaselineAddMany))
 
 	srv.Tool("diff").
 		Description("Scan only changed files between two git refs and return findings").
@@ -332,7 +385,7 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("Generate a security grade SVG badge from the last scan").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handleBadge)
+		Handler(textTool(s.handleBadge))
 
 	srv.Tool("version").
 		Description("Return nox version, commit, and build date").
@@ -352,13 +405,13 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("Check whether the nox pre-commit hook is installed in a git repository").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handleProtectStatus)
+		Handler(textTool(s.handleProtectStatus))
 
 	srv.Tool("annotate").
 		Description("Build a GitHub PR review payload from findings for posting via the GitHub API").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handleAnnotate)
+		Handler(textTool(s.handleAnnotate))
 
 	srv.Tool("vex_status").
 		Description("Load a VEX document and show a summary of vulnerability statuses").
@@ -387,12 +440,12 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("Render the detected agent capability lattice as Mermaid (default) or Graphviz dot. Drop into a markdown file or render with dot to audit which tools each agent can call.").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handleAgentGraph)
+		Handler(textTool(s.handleAgentGraph))
 
 	srv.Tool("plugin_install").
 		Description("Install a nox plugin by name (e.g. nox/ai-eval). Resolves the plugin against configured registries, fetches the platform binary, verifies the digest, and registers it in local state. Network call; not read-only. REQUIRES `confirmed: true` — the MCP host MUST collect operator consent before forwarding this call. A plugin install runs new code on the operator's machine.").
 		Annotations(pluginInstallHints).
-		Handler(s.handlePluginInstall)
+		Handler(textTool(s.handlePluginInstall))
 
 	srv.Tool("data_sensitivity_report").
 		Description("Summarize PII and sensitive data findings from the scan (DATA-* rules)").
@@ -405,7 +458,7 @@ func (s *Server) registerTools(srv *mcp.Server) {
 		Description("Generate an interactive HTML security dashboard from scan results").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handleDashboard)
+		Handler(textTool(s.handleDashboard))
 
 	s.registerPluginTools(srv)
 }
@@ -419,13 +472,13 @@ func (s *Server) registerPluginTools(srv *mcp.Server) {
 		Description("List registered plugins and their capabilities").
 		ReadOnly().
 		ClosedWorld().
-		Handler(s.handlePluginList)
+		Handler(textTool(s.handlePluginList))
 
 	srv.Tool("plugin.call_tool").
 		Description("Invoke a tool provided by a registered plugin").
 		ReadOnly().
 		OpenWorld().
-		Handler(s.handlePluginCallTool)
+		Handler(textTool(s.handlePluginCallTool))
 
 	// plugin.read_resource is deliberately NOT registered. Plugins declare their
 	// resources in their manifest, but PluginService has no resource-read RPC
@@ -809,11 +862,10 @@ func (s *Server) handleGetFindingDetail(_ context.Context, input getFindingDetai
 // severity, confidence, and rule family, plus dependency / AI-component totals.
 // This is the cheap "what am I looking at?" call an agent (or human) makes
 // before deciding whether to page through individual findings.
-// cycloneDX builds the CycloneDX reporter for a cached scan, with the scan's
-// AI inventory so the ML-BOM carries the models the scan detected. Every
-// CycloneDX surface goes through here so none of them can drop the models.
+// cycloneDX builds the CycloneDX reporter for a cached scan (see
+// nox.ScanResult.CycloneDX).
 func (s *Server) cycloneDX(result *nox.ScanResult) *sbom.CycloneDXReporter {
-	return sbom.NewCycloneDXReporter(s.version).WithAIInventory(result.AIInventory)
+	return result.CycloneDX(s.version)
 }
 
 func (s *Server) handleSummary(_ context.Context, _ emptyInput) (mcp.StructuredResult, error) {
@@ -1015,6 +1067,10 @@ func (s *Server) handleBaselineAdd(_ context.Context, input baselineAddInput) (s
 	if input.Fingerprint == "" {
 		return "Error: missing required argument: fingerprint", nil
 	}
+	consent := input.consent()
+	if refusal := consent.refusal("baseline_add"); refusal != "" {
+		return refusal, nil
+	}
 
 	// Find the finding in cached scan results.
 	pc := s.getCache("")
@@ -1042,14 +1098,7 @@ func (s *Server) handleBaselineAdd(_ context.Context, input baselineAddInput) (s
 		return "Error: loading baseline: " + err.Error(), nil
 	}
 
-	bl.Add(&baseline.Entry{
-		Fingerprint: matched.Fingerprint,
-		RuleID:      matched.RuleID,
-		FilePath:    matched.Location.FilePath,
-		Severity:    matched.Severity,
-		Reason:      input.Reason,
-		CreatedAt:   time.Now().UTC(),
-	})
+	bl.Add(consent.entry(matched, time.Now().UTC()))
 
 	if err := bl.Save(blPath); err != nil {
 		return "Error: saving baseline: " + err.Error(), nil
@@ -1069,6 +1118,12 @@ type baselineAddManyInput struct {
 	Path         string   `json:"path"`
 	Fingerprints []string `json:"fingerprints"`
 	Reason       string   `json:"reason"`
+	Owner        string   `json:"owner,omitempty"`
+	Confirmed    bool     `json:"confirmed"`
+}
+
+func (in baselineAddManyInput) consent() baselineConsent {
+	return baselineConsent{Reason: in.Reason, Owner: in.Owner, Confirmed: in.Confirmed}
 }
 
 type baselineAddManyResponse struct {
@@ -1087,6 +1142,10 @@ func (s *Server) handleBaselineAddMany(_ context.Context, input baselineAddManyI
 	}
 	if len(input.Fingerprints) == 0 {
 		return "Error: missing required argument: fingerprints", nil
+	}
+	consent := input.consent()
+	if refusal := consent.refusal("baseline_add_many"); refusal != "" {
+		return refusal, nil
 	}
 
 	pc := s.getCache("")
@@ -1114,14 +1173,7 @@ func (s *Server) handleBaselineAddMany(_ context.Context, input baselineAddManyI
 			continue
 		}
 		f := &items[idx]
-		bl.Add(&baseline.Entry{
-			Fingerprint: f.Fingerprint,
-			RuleID:      f.RuleID,
-			FilePath:    f.Location.FilePath,
-			Severity:    f.Severity,
-			Reason:      input.Reason,
-			CreatedAt:   now,
-		})
+		bl.Add(consent.entry(f, now))
 		pc.result.Findings.SetStatus(idx, findings.StatusBaselined)
 		resp.Added++
 	}
@@ -1387,6 +1439,47 @@ func (s *Server) handlePluginList(_ context.Context, _ emptyInput) (string, erro
 	return truncate(string(data)), nil
 }
 
+// pluginCallWorkspace settles the one workspace root a plugin call runs
+// against and returns the input with that root in it.
+//
+// A plugin reads its root from input.workspace_root (a scan sets it there and
+// in the request field), so confining only the request field confined nothing:
+// an agent could omit workspace_root, or put any path in input, and aim the
+// plugin outside the allowed roots. The root is now taken from either place,
+// must agree where both are given, defaults to the first allowed root, and is
+// checked against the allowlist before it is written into both.
+func (s *Server) pluginCallWorkspace(root string, in map[string]any) (workspace string, toolInput map[string]any, err error) {
+	if v, ok := in["workspace_root"]; ok {
+		inRoot, isString := v.(string)
+		if !isString {
+			return "", nil, fmt.Errorf("input.workspace_root must be a path string")
+		}
+		switch {
+		case root == "":
+			root = inRoot
+		case filepath.Clean(inRoot) != filepath.Clean(root):
+			return "", nil, fmt.Errorf("input.workspace_root %q differs from workspace_root %q; give one root", inRoot, root)
+		}
+	}
+	if root == "" && len(s.allowedPaths) > 0 {
+		root = s.allowedPaths[0]
+	}
+	if root == "" {
+		// Unrestricted server (an embedder passed no allowlist) and no root
+		// asked for: nothing to confine or to pass on.
+		return "", in, nil
+	}
+	if err := s.isPathAllowed(root); err != nil {
+		return "", nil, err
+	}
+	out := make(map[string]any, len(in)+1)
+	for k, v := range in {
+		out[k] = v
+	}
+	out["workspace_root"] = root
+	return root, out, nil
+}
+
 func (s *Server) handlePluginCallTool(ctx context.Context, input pluginCallToolInput) (string, error) {
 	if s.host == nil {
 		return "Error: no plugin host configured", nil
@@ -1398,13 +1491,12 @@ func (s *Server) handlePluginCallTool(ctx context.Context, input pluginCallToolI
 
 	toolName := s.resolveToolName(input.Tool)
 
-	if input.WorkspaceRoot != "" {
-		if err := s.isPathAllowed(input.WorkspaceRoot); err != nil {
-			return "Error: " + err.Error(), nil
-		}
+	root, toolInput, err := s.pluginCallWorkspace(input.WorkspaceRoot, input.Input)
+	if err != nil {
+		return "Error: " + err.Error(), nil
 	}
 
-	resp, err := s.host.InvokeTool(ctx, toolName, input.Input, input.WorkspaceRoot)
+	resp, err := s.host.InvokeTool(ctx, toolName, toolInput, root)
 	if err != nil {
 		if _, ok := err.(plugin.RuntimeViolation); ok {
 			return "Error: plugin violation: " + err.Error(), nil
@@ -1780,6 +1872,9 @@ type fixAction struct {
 	To        string `json:"to"`
 	Ecosystem string `json:"ecosystem"`
 	Command   string `json:"command"`
+	// Unverified: the advisory database did not confirm To in time, so it is
+	// only the fix the installed version's findings name.
+	Unverified bool `json:"unverified,omitempty"`
 }
 
 // fix_plan status values disambiguate the four outcomes an empty actions
@@ -1808,7 +1903,7 @@ type fixPlanResponse struct {
 	Text string `json:"text"`
 }
 
-func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.StructuredResult, error) {
+func (s *Server) handleFixPlan(ctx context.Context, input fixPlanInput) (mcp.StructuredResult, error) {
 	pc := s.getCache("")
 	if pc == nil {
 		return toolError("no scan results available — run the scan tool first"), nil
@@ -1822,10 +1917,12 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 	// lookups (--offline, scan.osv.disabled, no deps scope) must not have its
 	// plan phone OSV either. Then the target is only what the findings name.
 	var targets fix.Checker
+	// Memoized: the plan below and the assessment inside remediate.Build ask
+	// about the same versions.
 	if !pc.result.AdvisoryLookupSkipped {
-		targets = osvcheck.New("")
+		targets = fix.Memoize(osvcheck.New(""))
 	}
-	plan := fix.PlanUpgrades(pc.result.Findings.ActiveFindings(), fix.Options{IncludeMajor: input.IncludeMajor, Checker: targets})
+	plan := fix.PlanUpgradesContext(ctx, pc.result.Findings.ActiveFindings(), fix.Options{IncludeMajor: input.IncludeMajor, Checker: targets})
 
 	resp := fixPlanResponse{
 		Note:         "Plan only; this server never changes the workspace. A person applies it with: nox fix apply",
@@ -1836,12 +1933,13 @@ func (s *Server) handleFixPlan(_ context.Context, input fixPlanInput) (mcp.Struc
 	}
 	for _, a := range plan.Actions {
 		resp.Actions = append(resp.Actions, fixAction{
-			RuleID:    a.RuleID,
-			Package:   a.Package,
-			From:      a.From,
-			To:        a.To,
-			Ecosystem: a.Ecosystem,
-			Command:   a.Command(),
+			RuleID:     a.RuleID,
+			Package:    a.Package,
+			From:       a.From,
+			To:         a.To,
+			Ecosystem:  a.Ecosystem,
+			Command:    a.CommandIn(pc.basePath),
+			Unverified: a.Unverified,
 		})
 	}
 

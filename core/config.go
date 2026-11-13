@@ -206,6 +206,7 @@ type ScanSettings struct {
 	ConditionalSeverity  []ConditionalSeverity   `yaml:"conditional_severity"`
 	OSV                  OSVConfig               `yaml:"osv"`
 	Intelligence         IntelligenceConfig      `yaml:"intelligence"`
+	Images               ImagesConfig            `yaml:"images"`
 	Slop                 SlopConfig              `yaml:"slop"`
 	MCPFeed              MCPFeedConfig           `yaml:"mcp_feed"`
 	Entropy              EntropyConfig           `yaml:"entropy"`
@@ -472,6 +473,25 @@ type EntropyConfig struct {
 	RequireContext *bool `yaml:"require_context"`
 }
 
+// ImagesConfig controls reading the software inside digest-pinned base images
+// named in Dockerfiles (core/image, nox-hq/nox#1013). Off until measured on
+// real Dockerfiles: it downloads image layers.
+type ImagesConfig struct {
+	// Enabled reads FROM name@sha256:… images: their layers are fetched by
+	// digest (anonymous pulls only), verified, cached, and their installed
+	// packages inventoried and checked. A tag-only reference is reported as
+	// not checked. On unless set to false. A scan that makes no lookups
+	// (--offline, scan.osv.disabled) reads the cache only.
+	Enabled *bool `yaml:"enabled"`
+
+	// CacheDir overrides where image blobs are cached by digest. Empty
+	// defaults to $HOME/.nox/cache/oci.
+	CacheDir string `yaml:"cache_dir"`
+}
+
+// On reports whether image reading is on: unset is on.
+func (c ImagesConfig) On() bool { return c.Enabled == nil || *c.Enabled }
+
 // OSVConfig controls OSV.dev vulnerability enrichment for dependency scanning.
 type OSVConfig struct {
 	Disabled bool `yaml:"disabled"`
@@ -551,6 +571,13 @@ type IntelligenceConfig struct {
 	// nothing is sent and the scan says so, rather than quietly falling back
 	// to a contribution that cannot count.
 	Attested bool `yaml:"attested"`
+
+	// Outcomes sends one outcome report per scan: this project's dependency
+	// findings under a project pseudonym, so the network can learn which
+	// undecided findings mattered (docs/intelligence.md, "Outcome reports").
+	// A separate opt-in with separate terms (`nox intel consent outcomes`),
+	// on top of contribute: true, never implied by it. Off by default.
+	Outcomes bool `yaml:"outcomes"`
 
 	// ReporterSaltPath overrides where the private reporter salt is kept.
 	// Empty defaults to $HOME/.nox/reporter-salt. The salt never leaves the

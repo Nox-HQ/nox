@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"bufio"
@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nox-hq/nox/core/fix"
+	"github.com/nox-hq/nox/core/pypipin"
 )
 
 // regression is a package that ended up lower than where nox found it.
@@ -55,6 +56,14 @@ func verifyNoRegression(manifestRoot string, actions []upgradeAction) (bad []reg
 // an upgrade. Reports ok=false for ecosystems it cannot read rather than
 // guessing — see verifyNoRegression on why that distinction is kept.
 func installedVersion(manifestRoot string, a upgradeAction) (string, bool) {
+	if a.ecosystem == "pypi" {
+		// A Python fix is a pin edit; the pin it wrote is the version.
+		dir, err := workdirFor(manifestRoot, a)
+		if err != nil {
+			return "", false
+		}
+		return pypipin.PinnedVersion(filepath.Join(dir, filepath.Base(a.manifest)), a.pkg)
+	}
 	if a.ecosystem != "go" {
 		// Other ecosystems resolve through lockfiles with their own formats;
 		// until each is parsed, they are reported as unchecked.

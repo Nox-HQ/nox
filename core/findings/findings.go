@@ -728,10 +728,23 @@ var confidencePriorityRank = map[Confidence]int{
 // import is in the linked set — reach.SymbolReferenced, a strictly weaker
 // proposition than the call-graph reachability this ranking is about. Two
 // producers writing one key with different meanings put a linker answer and a
-// call-graph answer in the same sort bucket. Dependency findings now carry
-// `reach_level` and rank neutral here, which is the honest position for a
-// question nothing in core answers.
+// call-graph answer in the same sort bucket. Dependency findings carry
+// `reach_level`, which is NOT read here.
+//
+// They rank by `applicability` instead, whose two conclusive outcomes are this
+// ranking's two ends and nothing weaker: "impacting" is only ever built from a
+// call path the scanner found (applicability.Established at CallReachable, with
+// a witness), and "not_impacting" only from a deterministic refutation (the
+// build links no affected package). Undetermined stays neutral. Before this, no
+// producer in core wrote "reachable" any more, so an impacting dependency
+// finding ranked level with an undetermined one of the same severity.
 func reachabilityRank(f *Finding) int {
+	switch f.Metadata["applicability"] {
+	case "impacting":
+		return 0
+	case "not_impacting":
+		return 2
+	}
 	switch f.Metadata["reachable"] {
 	case "true":
 		return 0
@@ -742,11 +755,45 @@ func reachabilityRank(f *Finding) int {
 	}
 }
 
+// importedRank orders dependency findings the scanner could not decide by
+// whether the project's own source imports the module (dependency_imported):
+// imported first, then unknown, then not imported. It is an ordering, never a
+// verdict, and outranks advisoryPriority because on 500 Go repositories it
+// carried the signal that one does not: as an order of decided findings it
+// scored average precision 0.170 where nox_priority scored 0.021, at a base rate
+// of 0.020 (nox-intelligence docs/design/learning-loop.md).
+func importedRank(f *Finding) int {
+	switch f.Metadata["dependency_imported"] {
+	case "true":
+		return 0
+	case "false":
+		return 2
+	}
+	return 1
+}
+
+// advisoryPriority is NOX Intelligence's ranking of a dependency finding's
+// advisory (metadata priority_score, how likely the advisory is to be
+// weaponised): higher first. It only orders findings that tie on everything
+// that outranks it, and never changes a severity or hides anything. A finding
+// without one (no intelligence answer, or not a dependency finding) is 0, so
+// all of them tie here and keep their location order among themselves, and the
+// comparison stays a consistent ordering.
+func advisoryPriority(f *Finding) float64 {
+	v, err := strconv.ParseFloat(f.Metadata["priority_score"], 64)
+	if err != nil || v < 0 || v != v {
+		return 0
+	}
+	return v
+}
+
 // SortByPriority orders findings for a human reading top-down: active findings
 // before suppressed/baselined ones, then by severity, then by reachability
-// (confirmed-reachable up, likely-false-positive unreachable down — see the
-// reachability plugin), then confidence, then a stable location tiebreak. Use
-// it for display/reporting; SortDeterministic remains the canonical order for
+// (confirmed-reachable up, likely-false-positive unreachable down — see
+// reachabilityRank), then confidence, then whether the project imports the
+// dependency (importedRank), then NOX Intelligence's advisory priority (see
+// advisoryPriority), then a stable location tiebreak. Use it for
+// display/reporting; SortDeterministic remains the canonical order for
 // baselines and diffs.
 func (fs *FindingSet) SortByPriority() {
 	sort.SliceStable(fs.items, func(i, j int) bool {
@@ -762,6 +809,12 @@ func (fs *FindingSet) SortByPriority() {
 		}
 		if ac, bc := confidencePriorityRank[a.Confidence], confidencePriorityRank[b.Confidence]; ac != bc {
 			return ac < bc
+		}
+		if ai, bi := importedRank(&a), importedRank(&b); ai != bi {
+			return ai < bi
+		}
+		if ap, bp := advisoryPriority(&a), advisoryPriority(&b); ap != bp {
+			return ap > bp
 		}
 		if a.Location.FilePath != b.Location.FilePath {
 			return a.Location.FilePath < b.Location.FilePath
@@ -1099,4 +1152,26 @@ func (fs *FindingSet) SetMetadata(i int, key, value string) {
 		fs.items[i].Metadata = map[string]string{}
 	}
 	fs.items[i].Metadata[key] = value
+}
+
+// GatesByDefault reports whether an active finding fails a scan that has no
+// policy. Every finding does, except a dependency vulnerability (VULN-001)
+// nox decided is not impacting: the scan established deterministically that
+// the vulnerable code is not linked or not reached by this build. It stays in
+// every report, at info severity and as a VEX `not_affected` in the SBOM; a
+// policy (`policy.fail_on`) decides for itself as before.
+//
+// The other exception is a secrets finding whose value is one its vendor
+// publishes in documentation (ValueClassPublishedExample). That was established
+// by reading the value, it authenticates nothing, and a repository whose README
+// quotes AWS's example key has not failed a security check.
+func (f *Finding) GatesByDefault() bool {
+	if f.RuleID == "VULN-001" {
+		return f.Metadata["applicability"] != "not_impacting"
+	}
+	return !f.isPublishedExample()
+}
+
+func (f *Finding) isPublishedExample() bool {
+	return strings.HasPrefix(f.RuleID, "SEC-") && f.Metadata[MetaValueClass] == ValueClassPublishedExample
 }

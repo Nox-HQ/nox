@@ -1,7 +1,6 @@
 package deps
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -139,30 +138,6 @@ func cvssToSeverity(score string) findings.Severity {
 		return findings.SeverityMedium
 	}
 	return scoreToSeverity(f)
-}
-
-// upgradeCommand returns the canonical one-liner an operator can run to
-// upgrade a package to its fixed version. Returns "" for ecosystems we
-// don't have a templated command for (the operator can still see fixed_in).
-func upgradeCommand(ecosystem, pkg, fixedVer string) string {
-	switch ecosystem {
-	case "go":
-		return fmt.Sprintf("go get %s@v%s", pkg, strings.TrimPrefix(fixedVer, "v"))
-	case "npm":
-		return fmt.Sprintf("npm install %s@%s", pkg, fixedVer)
-	case "pypi":
-		return fmt.Sprintf("pip install '%s>=%s'", pkg, fixedVer)
-	case "rubygems":
-		return fmt.Sprintf("bundle update %s --conservative", pkg)
-	case "cargo":
-		return fmt.Sprintf("cargo update -p %s --precise %s", pkg, fixedVer)
-	case "maven", "gradle":
-		return fmt.Sprintf("upgrade %s to %s in your build file", pkg, fixedVer)
-	case "nuget":
-		return fmt.Sprintf("dotnet add package %s --version %s", pkg, fixedVer)
-	default:
-		return ""
-	}
 }
 
 // osvEcosystem reports the OSV ecosystem string for a nox ecosystem name, and

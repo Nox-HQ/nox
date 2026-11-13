@@ -20,6 +20,11 @@ import (
 // still looked up with bytes.Contains. A keyword counts as present exactly
 // when bytes.Contains would say so: the hash only chooses which keywords to
 // compare, it never decides.
+//
+// The literal index now answers the pre-filters from its own pass over the
+// file (literalindex.go, fileLiterals.keywordsPresent). This pass, over the
+// lower-cased file, answers where that one cannot, and is what it is tested
+// against.
 type keywordIndex struct {
 	rules    int       // len(RuleSet.Rules()) when built
 	keywords [][]byte  // distinct, lower-cased

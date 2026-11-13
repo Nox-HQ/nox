@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"encoding/json"
@@ -14,16 +14,19 @@ import (
 // an OpenVEX document from findings.json. `sync` is a planned subcommand for
 // keeping vex.json aligned with subsequent scans.
 func runVex(args []string) int {
+	const vexUsage = "Usage: nox vex <init> [flags]"
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: nox vex <init> [flags]")
+		fmt.Fprintln(os.Stderr, vexUsage)
 		return 2
 	}
 	switch args[0] {
+	case "-h", "-help", "--help", "help":
+		return printGroupHelp(vexUsage)
 	case "init":
 		return runVexInit(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown vex subcommand: %s\n", args[0])
-		fmt.Fprintln(os.Stderr, "Usage: nox vex <init> [flags]")
+		fmt.Fprintln(os.Stderr, vexUsage)
 		return 2
 	}
 }
@@ -36,7 +39,7 @@ func runVexInit(args []string) int {
 		product    string
 		force      bool
 	)
-	fs.StringVar(&inputPath, "input", "findings.json", "path to findings.json from a previous scan")
+	fs.StringVar(&inputPath, "input", scanReportPath(".", "findings.json"), "path to findings.json from a previous scan")
 	fs.StringVar(&outputPath, "output", "vex.json", "destination path for the generated stub")
 	fs.StringVar(&product, "product", "", "product identifier to embed in each statement: a package URL "+
 		"(pkg:npm/foo@1.2.3, pkg:golang/example.com/m@v1.2.3) or, for a container, its digest "+

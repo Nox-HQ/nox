@@ -46,5 +46,5 @@ as artifacts.
   (`artifacts:reports:sast`) expects GitLab's own JSON schema, not SARIF, so
   it is not wired here; download the artifact or feed the SARIF to a viewer.
 - For a non-containerised runner you can install nox directly instead of using
-  the image — `go install github.com/nox-hq/nox/cli@v1.2.0` — and drop the
+  the image — `go install github.com/nox-hq/nox/cmd/nox@latest` — and drop the
   `image:` block.

@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -136,5 +137,31 @@ import langchain
 	}
 	if count != 1 {
 		t.Errorf("expected langchain to appear once, got %d", count)
+	}
+}
+
+// Every framework pattern opens with literals, so every one must be answered
+// through the literal-prefix plan; one that loses its plan is silently a
+// full-file regex scan again (#736). And each must agree with plain regexp.
+func TestFrameworkPatternsArePlannedAndExact(t *testing.T) {
+	corpus := []string{
+		"", "from langchain.llms import OpenAI", "import  llama_index", "@llamaindex/core",
+		"from crewai import Agent", "CrewAI", "import { generateText } from 'ai'",
+		"require ( \"ai\" )", "github.com/felixgeelhaar/agent-go", "Microsoft.SemanticKernel",
+		"from pinecone import Pinecone", "qdrant_client", "weaviate.io", "chromadb", "chromadbx",
+		"pgvector", "pymilvus", "@modelcontextprotocol/sdk", "from fromage import cheese",
+		"import os\nimport sys\n", strings.Repeat("from x import y\n", 50) + "import haystack",
+		"from \u212a import x", "import langchain\xff",
+	}
+	for _, p := range frameworkPatterns {
+		if !p.pattern.HasPlan() {
+			t.Errorf("%s: pattern %q has no literal-prefix plan", p.componentName, p.pattern)
+		}
+		re := regexp.MustCompile(p.pattern.String())
+		for _, c := range corpus {
+			if got, want := p.pattern.Match([]byte(c)), re.MatchString(c); got != want {
+				t.Errorf("%s on %q: Match = %v, regexp says %v", p.componentName, c, got, want)
+			}
+		}
 	}
 }

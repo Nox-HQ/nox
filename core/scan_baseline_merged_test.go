@@ -13,16 +13,17 @@ import (
 )
 
 // Two records for one vulnerability, as NOX Intelligence v0.20.0 sends them.
-// sameAs controls whether it says so; a service before v0.20.0 did not, and a
-// baseline written against it holds one entry per record.
-func twoIDIntel(t *testing.T, sameAs bool) *httptest.Server {
+// With merged false they share no name, so today's scan keeps them apart the
+// way a scan before the merge did (with no nox_same_as, older scans reported
+// every record): a baseline written then holds one entry per record.
+func twoIDIntel(t *testing.T, merged bool) *httptest.Server {
 	t.Helper()
 	rec := func(id, other, summary string) string {
-		s := ""
-		if sameAs {
-			s = `,"nox_same_as":["` + other + `"]`
+		if !merged {
+			return `{"id":"` + id + `","modified":"2026-05-01T00:00:00Z","summary":"` + summary + `"}`
 		}
-		return `{"id":"` + id + `","modified":"2026-05-01T00:00:00Z","summary":"` + summary + `","aliases":["` + other + `"]` + s + `}`
+		return `{"id":"` + id + `","modified":"2026-05-01T00:00:00Z","summary":"` + summary + `","aliases":["` + other +
+			`"],"nox_same_as":["` + other + `"]}`
 	}
 	unrelated := `{"id":"GHSA-zzzz-zzzz-zzzz","modified":"2026-05-01T00:00:00Z","summary":"a different flaw"}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -38,9 +39,9 @@ func twoIDIntel(t *testing.T, sameAs bool) *httptest.Server {
 	return srv
 }
 
-func scanTwoID(t *testing.T, dir string, sameAs bool) *ScanResult {
+func scanTwoID(t *testing.T, dir string, merged bool) *ScanResult {
 	t.Helper()
-	t.Setenv(IntelligenceEndpointEnv, twoIDIntel(t, sameAs).URL)
+	t.Setenv(IntelligenceEndpointEnv, twoIDIntel(t, merged).URL)
 	ref := osvDown(t)
 	if err := os.WriteFile(filepath.Join(dir, ".nox.yaml"),
 		[]byte("scan:\n  osv:\n    base_url: "+ref.URL+"\n    cache_disabled: true\n  intelligence:\n    verification: false\n"), 0o644); err != nil {

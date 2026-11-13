@@ -1,4 +1,4 @@
-package remediate
+package npmtree
 
 import (
 	"strconv"

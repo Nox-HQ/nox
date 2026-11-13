@@ -7,6 +7,607 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.66.0] - 2026-11-13
+
+Fixes from an audit of 1.65.0 as a user meets it (#1066).
+
+What an audit of 1.65.0 found in the findings themselves (#1067): ratings and
+wording that claimed more than the scan knew.
+
+### Added
+
+- `nox serve --plugins` lets an agent call installed plugins through MCP
+  (`plugin.list`, `plugin.call_tool`). Both tools existed in the server, but
+  `nox serve` never attached a plugin host, so they were never offered. The
+  flag is off by default, since a call starts a plugin process. Each plugin
+  passes the checks a scan applies (binary digest, track safety profile, the
+  `plugin_policy` in the workspace's `.nox.yaml`). A plugin that fails one is
+  named on stderr and the rest are hosted.
+- `plugin.call_tool` confines the root a plugin reads. It checked
+  `workspace_root` only when given and never `input.workspace_root`, where
+  plugins read their root, so a call could aim a plugin outside the allowed
+  roots. The root now comes from either place, must agree where both are
+  given, defaults to the first allowed root and is checked before the plugin
+  runs.
+
+### Changed
+
+- **Reports go to `.nox/reports/`, not the working directory.** `nox scan .`
+  used to write `findings.json`, `results.sarif`, the SBOMs and the AI
+  inventory next to the code, five untracked files one `git add .` from being
+  committed. nox puts a `.gitignore` in the new directory, so git never lists
+  the reports and your own `.gitignore` is untouched. Commands that read a
+  report (`fix`, `fix plan`, `vex`, `annotate`, `advisories`, `ci-gate`,
+  `verify-secrets`, `attack`, `confirm`, `agent-graph`, `model`, `compliance`)
+  look there first and still read a `./findings.json` from an older scan.
+  `nox mcp drift` writes there too. `--output` and `output.directory` work as
+  before, and the GitHub Action passes its own `--output`, so it is
+  unaffected. **Breaking for scripts** that run `nox scan .` and then read
+  `./findings.json`: read `.nox/reports/findings.json`, or pass `--output .`
+  to keep the old place. Delete reports an older scan left in the tree;
+  until you do, a scan skips them and names them in a `[degraded]` line.
+- A mistyped `--format`, `--severity-threshold` or `--min-confidence` (and
+  `output.format` in `.nox.yaml`) is an error, exit 2, before the scan runs.
+  `--format sarfi` used to exit 0 and write no report; `--severity-threshold
+  hihg` matched no severity, so a scan with a staged secret exited 0; an
+  unknown `--min-confidence` applied no filter. A CI job or Action input
+  with such a typo was green and is now red. `html`, a working format, is
+  listed in the help text and the shell completions.
+- The MCP tools `baseline_add` and `baseline_add_many` refuse without a
+  non-blank `reason` and `confirmed: true`. They stop nox reporting a
+  finding and used to do it for any caller that asked. The entry records
+  the reason, an optional `owner`, and `"source": "mcp"`, a new optional
+  field on baseline entries that older versions ignore.
+- An MCP tool that refuses sets `isError`. Twelve tools reported a failure
+  as the text "Error: ..." in a successful result, so a client branching on
+  `isError` read a refused `plugin_install` or a `baseline_add` that wrote
+  nothing as success.
+- A scan names every host it contacts. Besides the dependency lookup, a
+  `[network]` line is printed for a base-image pull (registry, token
+  service and storage host), for Go modules the go command had to fetch
+  (the module cache is asked first, with `GOPROXY=off`), and for the signed
+  slopsquat and MCP advisory feeds. A request a cache answered prints
+  nothing. A project with no dependency used to request the slopsquat feed
+  and say nothing about the network.
+- **Install with `go install github.com/nox-hq/nox/cmd/nox@latest`.** The
+  binary is named `nox`. The old path, `github.com/nox-hq/nox/cli`, named it
+  `cli` after its directory and needed a rename; from this release `cli` is
+  the package the command line lives in, not a program, so `go install` of
+  that path fails with "not a main package" — releases up to 1.65.0 still
+  install from it. Builds from source use `./cmd/nox` (`go build ./cmd/nox`,
+  `go run ./cmd/nox scan .`); release binaries, Homebrew and the Docker image
+  are unchanged.
+
+- `--offline`, `--no-osv` and `scan.osv.disabled` keep every feed off the
+  network and still read a verified cached copy, as `docs/intelligence.md`
+  says. `--no-osv` used to fetch the MCP advisory feed, `scan.osv.disabled`
+  ignored a cached one, and a slopsquat feed named by URL in
+  `scan.slop.feed` was fetched under both.
+
+- A vendor's published example key is reported at info, as documentation.
+  `AKIAIOSFODNN7EXAMPLE` and its secret key from AWS's documentation and
+  Stripe's sample `sk_test_` key were reported as high or critical
+  credentials to rotate. A finding whose whole matched value is one of
+  eight such values now says whose documentation it comes from and carries
+  `value_class: published_example` and the rule's own rating as
+  `rule_severity`. It no longer fails a scan that has no policy and no
+  longer meets a severity threshold, as a dependency vulnerability shown
+  not to impact the build has not since 1.58.0. A key that only contains
+  `EXAMPLE`, or starts with a published value, keeps its rating.
+- A test-mode key is reported at medium, as a test-mode key. A Stripe
+  `sk_test_` or `rk_test_`, Duffel `duffel_test_`, Shippo `shippo_test_`
+  or Lob `test_` key was rated like the live key, critical or high. It is
+  still a secret in the repository: it still fails a scan with no policy
+  and the fix plan still says to rotate it, but it no longer meets
+  `--severity-threshold high`. The finding carries `value_class: test_mode`
+  and `rule_severity`. A class only ever lowers a rating.
+- A client ID or account SID is reported at info, as an identifier. Nine
+  rules (SEC-260, SEC-264, SEC-274, SEC-292, SEC-379, SEC-421, SEC-557,
+  SEC-559, SEC-756: LinkedIn, Looker, MessageBird, Plaid, Twilio, Azure and
+  Google OAuth) claimed a hard-coded credential at high severity and told the
+  reader to rotate it; on a real repository a LinkedIn client ID and a Twilio
+  Account SID in `.env.example` led the assessment. They now say "not a
+  credential", cite CWE-547 instead of CWE-798, and name the secret that does
+  matter. Matches and fingerprints are unchanged.
+- A dependency finding's message says what was established in words. It
+  used to end in the applicability ladder's identifiers ("established as
+  far as "affected_version"; symbol_used was not established"), in SARIF,
+  pull request comments, `nox explain` and the CycloneDX analysis detail.
+  The metadata keys and values are unchanged, and so is every fingerprint:
+  a dependency finding's identity is still computed over the 1.65.0
+  wording, so baselines, waivers and VEX statements keep matching.
+
+- `results.sarif` from `nox scan` describes only the rules its results point
+  at, as the MCP report already did. It embedded the whole catalog: 1,503
+  descriptors, 1.97 MB for a scan with six results, which every Code Scanning
+  upload carried and nothing read. Alert identity is unchanged: a result
+  points at the same descriptor id as before.
+
+### Fixed
+
+- Built with Go 1.27.4. Go 1.27.3 has GO-2026-6859, a crash in the HTTP/1
+  server when a request body limit races with header reads. Building from
+  source needs Go 1.27.4 or later.
+- `nox install-hook` printed "Hook will fail on findings of severity:
+  critical,high" and installed a hook that blocked only critical: a staged
+  high-severity secret was committed. The threshold is the least severe
+  severity listed. The hook also blocked without saying why (the scan's exit
+  ended the script before the explanation), left `findings.json` and
+  `ai.inventory.json` in the repository after every commit, and treated a
+  `--bin` path with a space in it as "not found", letting every commit
+  through. `install-hook` and `protect install` now write the same script.
+- A staged scan that fails names the findings that fail it (severity, rule,
+  `file:line` and the rule's message, never the matched text), on stderr and
+  under `--quiet` too. A hook's refusal used to state no reason.
+- The pre-commit framework hook (`.pre-commit-hooks.yaml`) writes its reports
+  to a temporary directory instead of the repository being committed to.
+- Go advisories are no longer narrowed when the build could not be loaded.
+  With a module neither cached nor fetchable, `go list -deps -e` exits 0 and
+  prints a partial package list, which was read as the whole link set: an
+  advisory for a package reached only through the missing module became
+  "not linked" and dropped to info. Such a build is now unknown and the
+  findings keep their severity.
+- `--help` on a command group (`baseline`, `protect`, `plugin`, `registry`,
+  `intel`, `vex`, `completion`, `uri`, `doctor`) prints usage and exits 0.
+  It was "unknown subcommand: --help", exit 2, and `nox doctor --help` ran
+  the doctor. `nox --help` lists `replay`, `why`, `intel`, `verify-secrets`
+  and `variants`, which it omitted.
+- A release installed with `go install github.com/nox-hq/nox/cli@<version>`
+  reports that version instead of "nox dev (commit: none, built: unknown)".
+  A build from a checkout reports its commit, `+dirty` with uncommitted
+  changes.
+- Documentation that described a different product: the MCP tool and
+  resource tables (README counted 10 tools and 5 resources; `nox serve`
+  registers 28 and 13, and never serves `plugin.list` or
+  `plugin.call_tool`), the Action pins in every example (v0.4.2, v1.5.0 and
+  `@v1`; now the v1.65.0 commit), the `go install` instructions (the binary
+  is named `cli`; they now rename it), the README's sample output, and the
+  statement that the scan engine makes no network request. Tests hold the
+  MCP tables to the registered surface and the pins to the release nox runs
+  on itself.
+
+- A sample Google service-account file was reported as a critical leaked
+  key. SEC-008 matches the line that says a JSON document is a
+  service-account file; the credential is the document's `private_key`.
+  When that field holds a value too short to be a key (`"..."`, a template
+  variable, the PEM armour with the body left out), the finding is
+  withdrawn and the reason recorded. A document with a key in it, and any
+  document nox cannot read to its closing brace, is reported as before.
+- The assessment printed "(highest severity: )" for a dependency whose
+  advisories are all info, spelled a Go upgrade target without the `v` the
+  installed version has (`v0.58.0 to 0.58.1-…`), and did not say when
+  every advisory on the line was shown not to impact the build.
+- One credential that two rules report is one issue in the assessment. A
+  Lob key (SEC-070 and SEC-262), an AWS access key (SEC-001 and SEC-508)
+  and a PEM key (SEC-004 and SEC-299) were listed twice at the same file
+  and line and counted as two issues. The title names both rules. The
+  findings and their count are unchanged.
+- The fix plan told the reader to rotate "the exposed value" for a rule
+  that reports an identifier or a public key (an S3 URL at info), and
+  printed "Imported from Gitleaks: <id>" as the thing to supply for 186
+  rules, which `nox explain` also showed as the remediation. Each now
+  says what to do.
+- A distribution advisory with no summary left ":  —" in the message.
+- **GitHub Code Scanning now rates each alert at its finding's severity.**
+  GitHub reads an alert's rating only from the rule it points at, so a finding
+  nox had re-rated — a reachability downgrade, a `severity_override`, a VULN-001
+  advisory at its own severity, a published example key — showed on GitHub at
+  its rule's rating. With `--format sarif` that was always the rule's declared
+  severity; from MCP it was whichever of the rule's findings sorted first, so an
+  info finding could strip a real leak of its rating. A finding at its rule's
+  declared severity keeps the rule's id; any other is reported under
+  `<rule>/<severity>`, a sub-rule with the rule's help and the right rating.
+  Those alerts close and reopen once under the new id after upgrading, and
+  their dismissals do not carry over. Fingerprints, baselines, waivers and VEX
+  are unchanged. See `docs/adr/0003-sarif-descriptor-per-rule-and-severity.md`.
+- The `actions/remediate` composite action ran the scan Action pinned at
+  v1.62.0, three releases behind the nox it was released with. The pin check
+  that keeps the documented Action pins on the release nox runs itself now
+  covers `actions/` too, so the pin moves with every release.
+- MARKETPLACE.md, the GitHub Marketplace listing copy, was written for v0.8.1:
+  717 rules, 19 plugins, "OSV lookups gated behind a single flag", a binary
+  cache the Action does not have, and a pre-listing checklist for that
+  release. It now describes the current Action and what an online scan sends.
+
+## [1.65.0] - 2026-11-10
+
+### Changed
+
+- nox is built with Go 1.27.3 (was 1.26.5): release binaries from the next
+  release on, and building from source, which needs 1.27.3 or later. The
+  Docker image already used Go 1.27. CI follows go.mod everywhere, so
+  fuzzing no longer fails on golang/go#75804, a false "context deadline
+  exceeded" that 3 of the last 25 pushes to main hit, and gofmt in CI
+  matches local tooling. golangci-lint moves to v2.15.0: v2.12.2 was built
+  with Go 1.26 and cannot lint a 1.27 module.
+### Fixed
+
+- The Action's `pr-comment` counted zero findings at every severity and
+  posted no inline comment for the report nox writes (#1016): a shell script
+  read the indented `findings.json` with `sed`, one line at a time, needed
+  bash 4 (`declare -A`, absent from macOS's bash 3.2) and fell back to a
+  one-line summary without `python3`. `nox annotate` now does it:
+  `--summary` posts the per-severity count of every finding,
+  `--max-comments` and `--min-severity` bound the inline comments, and
+  findings are read with the loader every other command uses. With
+  `annotate` and `pr-comment` both on, inline comments are posted once, not
+  twice. The script is removed.
+
+## [1.64.0] - 2026-11-10
+
+### Added
+
+- OpenSSL linked statically into a binary in a base image (Node.js bundles
+  its own) is read and checked against OSV's OpenSSL advisories, with the
+  fixed release derived from the series (#1013). A binary counts only when
+  its dynamic section names neither libcrypto nor libssl: nginx, mod_ssl and
+  the openssl tool carry the same version text but run the distribution's
+  libcrypto. Measured on `node:22.11.0-alpine`: 32 advisories for its
+  quictls 3.0.15, equal to OSV's; on the sixteen measured images, bundled
+  OpenSSL only in `node:22-alpine`.
+
+## [1.63.0] - 2026-11-09
+
+### Changed
+
+- Base images are read by default (`scan.images.enabled: false` turns it
+  off). Only an image advisory with a fix released gates a build; one with
+  no fix yet is recorded at info with its real severity in
+  `original_severity`, as distribution-rated unimportant/negligible ones now
+  also carry it. A scan that makes no lookups reads images from the cache
+  only. Measured first on sixteen pinned images: every advisory OSV lists
+  for every package read is reported, and none it does not list
+  (docs/design/container-image-advisories.md).
+
+### Added
+
+- With `scan.images.enabled`, AlmaLinux and Rocky Linux images (EL9 and
+  later) are checked: rpm's sqlite database is read without a SQLite library
+  or running rpm, packages are compared in rpm's own version order (nox-core
+  v0.17.0), and SBOMs name them `pkg:rpm/...` with the epoch as a qualifier.
+  Read lists equal `rpm -qa` in almalinux:9 (158 packages) and rockylinux:9
+  (141); advisories equal OSV's for every package, directly and through NOX
+  Intelligence. Red Hat/UBI images (advisories are per product repository,
+  which rpm does not record), rpm's Berkeley DB (EL8 and earlier) and a
+  database with an uncheckpointed write-ahead log are reported as not
+  checked, with the reason.
+
+## [1.62.0] - 2026-11-08
+
+### Added
+
+- With `scan.images.enabled`, Ubuntu images are checked: the support stream
+  comes from the image's os-release (Ubuntu:24.04:LTS, or the release alone
+  when not LTS; Pro and FIPS streams are never assumed), versions are
+  compared in dpkg order (nox-core v0.16.0), and an advisory Ubuntu rates
+  negligible is recorded at info, as Debian's unimportant is. On
+  ubuntu:24.04, nox's advisories equal OSV's for all 66 packages.
+- With `scan.images.enabled`, Go executables inside a base image are read
+  for their build info while the layer streams past, nothing written to
+  disk: the Go release (stdlib at an exact version) and every module linked.
+  A binary a later layer deletes or overwrites is not reported. Read from
+  nox's own 1.60.1 image: stdlib 1.27.3 and nox-core v0.14.0 from
+  /usr/local/bin/nox.
+
+### Fixed
+
+- SBOMs give every inventoried component a package URL: distribution
+  packages read from images (`pkg:apk/alpine/...`,
+  `pkg:deb/debian|ubuntu/...` with `arch=source` and `distro`), base images
+  (`pkg:docker/...`, with `repository_url` off Docker Hub), and Composer,
+  Pub, Hex, Swift, CocoaPods and Conan packages had none. Versions are
+  percent-encoded as the spec requires (`+` is `%2B`). A three-image scan:
+  143 of 143 components carry a purl that packageurl-python parses and
+  round-trips.
+
+## [1.61.0] - 2026-11-06
+
+### Changed
+
+- A Debian advisory carries Debian's own rating for the release
+  (`distro_urgency`), and one Debian rates unimportant is recorded at info
+  instead of its CVSS severity. On node:22-bookworm-slim, 36 of 98
+  advisories are unimportant; 62 gate where 98 did. Advisories cached by
+  earlier versions are fetched once more, since they were stored without the
+  rating.
+
+## [1.60.1] - 2026-11-06
+
+### Fixed
+
+- The release build runs again. v1.60.0 was tagged but never published: the
+  pnpm fix oracle failed rather than skipped on any Linux CI runner without
+  pnpm, and the release build's test hook is one. ci.yml now states the
+  requirement (NOX_REQUIRE_PNPM) where it installs pnpm. 1.60.1 carries
+  everything listed under 1.60.0.
+
+## [1.60.0] - 2026-11-06 [YANKED]
+
+### Added
+
+- Alpine and Debian packages are checked for advisories (nox-core v0.14.0),
+  compared in apk's and dpkg's own version order: semver had ranked 1.0-r10
+  below 1.0-r9 and a ~ backport above its fix. With `scan.images.enabled`, a
+  digest-pinned base image's distribution packages are now checked, not only
+  listed.
+- `scan.images.enabled` (opt-in) reads what a digest-pinned base image has
+  installed, without running it: layers are fetched by digest, verified,
+  cached under ~/.nox/cache/oci, and Alpine apk, Debian dpkg (with
+  distroless status.d) and Go toolchain packages are inventoried at the FROM
+  line and checked. Their advisories are not judged by the tree's code. A
+  tag-only FROM is reported as not checked; an image that cannot be read is
+  named with the reason (#1013).
+- `nox sbom -format cyclonedx` writes an artifact's SBOM as CycloneDX 1.5,
+  with the artifact as `metadata.component` (named, with its SHA-256)
+  depending on every component, and a serial number derived from the
+  artifact's digest. Validated against the CycloneDX 1.5 schema. SPDX stays
+  the default.
+
+### Fixed
+
+- Fix advice for an npm package the project does not list reads yarn v1 and
+  text bun.lock lockfiles as it reads package-lock.json: it names the parent
+  whose range holds the package and the forcing entry (`resolutions` for
+  yarn), or offers the update. pnpm-lock.yaml records resolved versions, not
+  ranges, so for pnpm nox says it cannot tell beforehand, offers the update
+  for review, and checks the result.
+- `nox fix` checks where every package manager's update landed, not only
+  npm's: a transitive package a parent kept below the fix, or one the update
+  made a dependency of the project's own, is reported instead of applied.
+  Real pnpm runs in CI against a local registry to hold it to that.
+- `nox fix` moves a vulnerable Python package by editing its exact pin in
+  the requirements file the finding names, and runs nothing. It ran `pip
+  install` instead, which installs into whatever environment pip resolves to
+  and never touched that file, so the finding could not go away (it then
+  said the version was "likely held by an override"). A range, a hash-pinned
+  file and a uv, poetry or pipenv lockfile are reported as manual, with the
+  reason and the tool's own command. Findings, `nox fix plan` and the MCP
+  fix plan say the same, from one place (`core/pypipin`).
+- The upgrade command a finding, `nox fix plan` and the MCP fix plan show is
+  the one `nox fix` apply runs (`fix.Invocation`). For three ecosystems it
+  was the unsafe form apply avoids: `bundle update` (installs gems,
+  compiling native extensions), `composer update` without `--no-scripts
+  --no-plugins`, and `dotnet add package` without `--no-restore` (restore
+  runs the package's MSBuild targets).
+- Release SBOMs name their creator with the release version. v1.59.0's, the
+  first nox wrote itself, said `Tool: nox-dev`: the nox that writes them was
+  built without the version stamp the archives carry.
+
+## [1.59.0] - 2026-11-05
+
+### Added
+
+- Compiled Go executables are inventoried from their embedded build info:
+  modules at their built versions and `stdlib` at the exact Go release, so
+  advisories against the standard library now match. Applicability for these
+  packages stays undetermined instead of being judged by the source tree's
+  link set, which would refute advisories for code the binary shipped.
+- `nox sbom <artifact>`: the SPDX SBOM of a release archive or file, with the
+  artifact as the document's subject (name and SHA-256). Offline and
+  deterministic.
+
+### Changed
+
+- macOS binaries are signed with the Developer ID and notarized by Apple.
+  Gatekeeper accepts them as installed (`source=Notarized Developer ID`), so
+  the Homebrew cask no longer strips the quarantine attribute after install;
+  it still does for a release built without the signing secrets, whose
+  binaries are not notarized.
+- nox's release SBOMs are written by nox (`nox sbom`), not syft. GoReleaser's
+  `sboms:` named no command, so every release since February ran its default,
+  syft. The package sets match: 50 packages for the v1.58.0 darwin/arm64
+  archive, none only one side has.
+
+### Fixed
+
+- `nox intel consent` reports every consent scope. It read only the
+  contribution terms and said "No terms accepted on this machine" while
+  accepted outcome terms were stored beside them. A scope typed after the
+  verb (`nox intel consent show outcomes`) is refused, naming the order that
+  works; it printed the contribution terms and ignored the word.
+- A finding, `nox fix plan`, the MCP fix plan and `nox fix` apply now give
+  one answer for an npm fix, from one place (`core/npmtree`): the command
+  apply runs there (the workspace's package manager, the section and
+  specifier style package.json already uses, `npm update` for a package it
+  does not list), or, when the lockfile shows a parent's range holds the
+  package, no command and the parent and `overrides` entry named. They had
+  disagreed: the plan printed `npm install <pkg>@<fixed>` where apply ran
+  `pnpm update` or `npm update`, and apply ran `npm update` on a held
+  package to find out it could not move, after listing it as `plan:` in
+  `--dry-run`. Apply now lists it as `held:` and runs nothing. A test runs
+  real npm against a local registry and checks every offered command fixes
+  the finding and every held one really is held.
+- The finding's and the plan's per-ecosystem command tables were two copies
+  that had drifted (only one knew composer, only the other maven); there is
+  one now, `fix.UpgradeCommand`.
+- A vulnerable npm package that the project does not list itself (a
+  transitive one) no longer comes with `npm install <pkg>@<fixed>` as its
+  fix. That command adds a second, direct copy and leaves the one the parent
+  resolves vulnerable, so the lockfile looks fixed while the finding stays.
+  Such findings now carry `remediation_scope: transitive` and a note saying
+  what decides the move.
+- `nox fix plan` checks a major-version fix for a transitive npm package
+  against the parents' declared ranges, as it already did for minor fixes.
+  It named minimatch 10.2.6 -> 11.0.1 a release-notes review, though every
+  `vscode-languageclient` release requires `^10.2.6`; it now names that
+  parent and the `overrides` entry that forces the version.
+- SPDX documents carry a namespace derived from their content. It was one
+  constant URI for every document nox wrote, and SPDX 2.3 requires it to be
+  unique per document.
+- Binary content holds no waivers. A scan that walked a compiled executable
+  parsed the `nox:ignore` text embedded in it (nox's own embeds rule
+  remediations) and reported each as a waiver matching no finding.
+
+- `nox intel consent` usage names the `outcomes` scope alongside `attack`; an
+  unknown subcommand no longer hides that outcome consent exists.
+
+## [1.58.0] - 2026-11-04
+
+### Added
+
+- The CycloneDX SBOM records a dependency vulnerability nox decided is not impacting as a VEX analysis: `analysis.state: not_affected`, with justification `code_not_present` when the affected package is not linked by the build and `code_not_reachable` when it is linked but not called, and the reach scope as `detail`. Undecided and impacting verdicts carry none. The CLI, the MCP server and the compliance and threat-model evidence all write it (#1012).
+- Outcome reports, off by default (`docs/intelligence.md`, "Outcome reports"). With `scan.intelligence.outcomes: true`, contribution on, and the separate outcome terms accepted (`nox intel consent outcomes`, version `outcomes-2026-11`), a scan sends one report of its dependency findings and their applicability verdicts to NOX Intelligence (`POST /v1/outcomes`), under a project pseudonym: an HMAC of the repository's root commit under the private reporter salt. It is what lets the service learn which undecided findings mattered. A shallow clone or a directory outside git sends nothing and the scan says why; the report is always anonymous, carries no severity, paths, repository name or commit hash, and `nox intel forget` now deletes outcome reports too and withdraws both consents. `nox intel allowlist --outcomes` lists its fields and `nox intel preview --outcomes` prints the exact report. Needs a service that accepts outcome reports (nox-intelligence 0.29.0); an older one refuses it and the scan records that.
+
+### Changed
+
+- The contribution terms are now version `2026-11` and the attack-evidence terms `attack-2026-11`. The text adds who runs NOX Intelligence at intel.klarlabs.de and is responsible for what it receives (Felix Geelhaar, klarlabs-studio; nox@felixgeelhaar.de), where the service and its backups are hosted (Hetzner, Germany and Finland), the legal basis (consent) and your rights; what is sent and what is done with it are unchanged. The outcome terms (`outcomes-2026-11`, new in this release) say the same. Each text names the page that publishes it unchanged, `https://nox-hq.dev/terms/<version>`. Contribution and attack contribution pause until you accept the new version (`nox intel consent accept`, `nox intel consent attack accept`), and each scan says so.
+- Without a policy, a dependency vulnerability nox decided is not impacting no longer fails the scan by itself (exit 1). It stays in every report at info severity; a configured `policy.fail_on` decides as before (#1012).
+- IAC-309 and IAC-245, which ask you to verify intent, now say how to record that you did: a `nox:ignore <rule> -- <reason>` waiver on the line above or at the end of the line, which marks the finding suppressed with the reason (`docs/usage.md`, "Inline Suppressions"; #1011).
+- Reports order dependency findings that tie on severity by what the scan established about this application: decided impacting first, decided not impacting last (`applicability`), then, among the undecided, whether the project's own source imports the module, and only then NOX Intelligence's advisory priority. Go findings record the fact as `dependency_imported` (`true` or `false`; absent when no Go source was read, and never from tests, `vendor/` or `testdata/`). It orders and decides nothing. Measured on 500 Go repositories pinned before 2024 (nox-intelligence `docs/design/learning-loop.md`): as an order of the findings nox could decide, it scored average precision 0.170 against 0.021 for advisory priority, at a base rate of 0.020, and 7.6% of findings whose module the project imports were impacting, against 0.4% of the rest.
+
+### Fixed
+
+- IAC-124 accepted only a line starting `LABEL maintainer`. The OCI image-spec key `org.opencontainers.image.authors` now satisfies it too, and either key counts anywhere in a LABEL instruction: after other keys, quoted, or on a continuation line. The remediation suggests a team or role address rather than a personal one. Fingerprints are unchanged (#1009).
+- IAC-153 reported every `actions/upload-artifact` step in a workflow that attests nothing, including scan reports kept with each run. An upload in a workflow triggered only by `pull_request` or `merge_group`, or in a step that runs after a failure (`if: always()`, `failure()`, `!cancelled()`), keeps diagnostics rather than publishing a build, and is no longer reported. The finding moves to the first upload that could be a build, so a diagnostic upload before it no longer hides it (#1010). A `nox:ignore IAC-153` waiver on such an upload now suppresses nothing and the scan reports it as unused; remove it (nox's own workflows carried six).
+- The display order ignored dependency reachability. It read `reachable`, which the dependency analyzer stopped writing when that key was split into `reach_*` and `applicability`, so an impacting finding ranked level with an undecided one of the same severity. It now reads `applicability`, whose conclusive outcomes are a call path the scan found and a deterministic refutation; the reachability plugin's `reachable` still ranks findings without one.
+
+## [1.57.0] - 2026-11-03
+
+### Fixed
+
+- A scan with NOX Intelligence off (`scan.intelligence.disabled`, or an older service) reported one vulnerability once per identifier: OSV.dev returns a Go module advisory and its GitHub advisory as two records, and only the service's `nox_same_as` joined them. Across 20 real repositories that was 2,201 Go findings for 947 vulnerabilities and 2,051 PyPI findings for 823. Records with no `nox_same_as` are now joined by the service's own rule (records in one answer that share an id or alias are one vulnerability); when the source does send `nox_same_as`, it stays authoritative. Baselines written against either identifier keep matching, as for the service's merges.
+- With NOX Intelligence on, Go dependency findings lost their reachability verdict. The service sends a Go module advisory and its GitHub advisory as two records marked as the same vulnerability; the scan keeps one, chosen for severity, which is usually the GitHub advisory, and only the Go advisory carries the affected import paths and symbols. Across 8 real Go repositories, 219 of 362 decided verdicts (187 not impacting, 32 impacting) fell back to undetermined against the same scan with the service off. The kept record now takes every member's import paths and symbols (`nox_symbols` too); a path listed without symbols stays "the whole package". After the fix both scans decide the same 362. A finding this newly decides as not impacting drops to info and, because its message records the verdict, gets a new fingerprint: a baseline entry for the old high finding no longer matches it, and the new one does not gate (in nox-intelligence's own scan, 4 gRPC advisories whose affected packages its build does not link).
+
+### Added
+
+- Dependency findings record NOX Intelligence's advisory priority (`nox_priority`, rule `epss-first-severity-cwe/v1`): `priority_score`, `priority_rule`, `priority_band`, `priority_why`, `priority_epss`, `priority_epss_percentile`. Reports order findings that tie on severity, reachability and confidence by it, highest first; findings without one keep their location order. It never changes a severity, gates, or hides a finding (`docs/intelligence.md`). Measured by the service on 2025+ GitHub package advisories: 54% of weaponised advisories in the top tenth, against 39% for EPSS alone.
+
+### Changed
+
+- `nox-core` decodes `nox_priority` and keeps `database_specific.cwe_ids` on records.
+
+## [1.56.0] - 2026-11-02
+
+Language reach, measured on real repositories. Maven versions managed by a parent pom, an imported BOM or a `${property}` are resolved (offline from the repository, online from published parents and BOMs fetched through NOX Intelligence), and what cannot be resolved is reported instead of silently skipped: unchecked Maven dependencies went 25→0 on spring-petclinic, 23→0 WebGoat, 354→0 dropwizard, 635→1 quarkus-quickstarts. Gradle builds report their versionless dependencies and resolve `$variables`. Routes and missing-authentication leads for Spring, JAX-RS, Go (net/http, Gin, Echo, Chi), ASP.NET Core, Rails and Laravel; SwiftPM, mix, Gradle, CocoaPods and Conan lockfiles; JVM framework parameters as taint sources. Side by side with osv-scanner 2.6.0 and Trivy 0.75.0: identical to osv-scanner on uv.lock and pnpm projects (202/202, 346/346; Trivy 180, 306); every finding osv-scanner has that nox lacks is a transitive dependency. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.11, fingerprints included (209 and 126).
+
+### Added
+
+- **Rails and Laravel routes join the route table, with AUTHN-001 over them.** Rails: `config/routes.rb` (and the files it `draw`s, in the context of the draw site) is read statement by statement, `get`/`post`/`put`/`patch`/`delete`/`match … via:`/`root`, `resources` and `resource` (expanded to their RESTful routes, with `only:`, `except:`, `param:`, `path:`, `controller:`, `module:`), `namespace`, `scope`, `controller`, `member`/`collection`, `on:` and nested resources, and each route is joined to its action in `app/controllers`. A route is authenticated by a `before_action` (or `prepend_`/`append_`, `before_filter`) on its controller or any ancestor in the repository whose name says it authenticates (`authenticate_user!`, `require_login`), by `http_basic_authenticate_with`, `load_and_authorize_resource` or an admin gate, by an `include` of a concern that is in the repository and declares one (Rails 8 `Authentication`), by `authenticate :user do` / `authenticated :user do` in the routes file, or by a check on the caller inside the action; `only:`/`except:` and `skip_before_action` are honoured per action, and a skip leaves the action unauthenticated, not public, so a state-changing action that skips it is still a lead. A callback the repository defines is read, not taken at its name: Lobsters' `authenticate_user` looks for a session and always returns true, so a name-only reader would have called all 218 of its routes authenticated; a callback not named for it that answers 401 (Chatwoot's `set_platform_app`) is the gate; `authenticate_user` beside an `authenticate_user!` is the optional half; `verify_authenticity_token` is CSRF, not authentication. Laravel: `routes/*.php` (`Route::` and `$router->`) with `prefix`, `middleware`, `controller`, `namespace`, `withoutMiddleware`, the array form of `Route::group`, `Route::resource`/`apiResource`/`resources`/`apiResources` (with `->only`/`->except`), `match` and `any`, and route files included by `->group(base_path('routes/x.php'))` or mapped by a provider (its prefix and middleware are read from there). A route is authenticated by middleware `auth`, `auth:*`, `auth.basic`, `Authenticate::class` or an alias or class whose name says it authenticates, on the route or any enclosing group, by `$this->middleware('auth')` with `->only`/`->except` in a controller constructor or `HasMiddleware::middleware()`, on a parent controller, or by an inline check on the caller; `can:`, `role:`, `abilities:` and `authorizeResource` are access control too, `verified`, `guest`, `throttle`, `signed`, `RedirectIfAuthenticated` and `AuthenticateSession` are not authentication, and routes/api.php is served under `/api` and is not authenticated by default. AUTHN-001 is the existing shared rule, so the lead is the same: a DELETE, PUT or PATCH, or an administrative or record-bearing path, with nothing in front of it (a POST is not a trigger in any reader). What the reader cannot see is never called authenticated and never called missing: a callback with `if:`/`unless:` or a list it cannot read, a superclass or concern from a gem, a controller or trait it cannot find or whose name says authentication, a constraint that is a lambda or a class, an engine's routes, a middleware list or alias it cannot read, a global `web`/`api` or global middleware that authenticates in `app/Http/Kernel.php` or `bootstrap/app.php`, and a routes file nothing maps (Koel loads its files through a computed path) are `unseen`: in the table, never a lead. A route to an action the controller does not define (`resources :tutorials` over a controller with two actions) answers 404 and is not a lead either. Measured offline against 1.55.11, which read none of these (leads are 0 unless stated): Rails realworld-example-app (a2ae4ff) 19 routes, RailsGoat (f5951f1) 150, Lobsters (cb2b283) 218, rubygems.org (5a641a1) 270, Forem (a7acb2d) 1,122 routes and 2 leads (`PATCH`/`PUT /page_views/:id`, an analytics beacon that does nothing for an anonymous caller), Chatwoot (b08081b) 823 routes and 12 leads (GET routes to `dashboard#index`, the Vue shell, which is public while the API behind it is guarded), Laravel skeleton (def7ce1) 1 route, Monica (dab7427) 333, Snipe-IT (e6dded3) 845, Firefly III (d65e916) 640 on top of its 17 JavaScript routes, Koel (7d139ac) 213 (all `unseen`), and the deliberately vulnerable apps vulnerable-laravel-app (12b6444) 6 routes and DVLA (d58269c) 9 (GET only). With the guards removed in a copy, Lobsters gives 7 leads, RailsGoat 34 and Monica 8. Routes, leads and findings are identical to 1.55.11 on the seven-repository Python/TypeScript corpus. Not read: gems' routes (`devise_for`, `mount`), `concerns` in routes, Rack-app and redirect routes, `Route::view`/`redirect`/`fallback`/`singleton`, PHP 8 attributes, Livewire and Inertia components, authentication done in a Rack middleware or by metaprogramming, the body of a custom Laravel middleware (an alias is read by its name), and webhook verification in these handlers (their delegates are not followed, so WEBHOOK-001 stays silent).
+- **Go (net/http, Gin, Echo, Chi) and ASP.NET Core routes join the route table, with AUTHN-001 over them.** Go has no declaration to read, so the reader runs the registration code in order: `gin.Default()`, `echo.New()`, `chi.NewRouter()` and `http.NewServeMux()` create routers; `Group`, `Route`, `With` and `Mount` derive them with a prefix and the middleware their parent has at that moment; a function that receives a router (`Register(rg *gin.RouterGroup)`, also in another scanned package) is run once per call site with the caller's router bound. `ServeMux` patterns with a method and `{id}` wildcards (`"GET /users/{id}"`) are read. A route is authenticated by middleware on the route (Gin's arguments before the handler, Echo's after it, `mux.Handle("/x", requireAuth(h))`), on its group or router *before it was registered* (a `Use` written after a route covers nothing in Gin and Chi, and Echo's group-level `Use` likewise; Echo's engine-level `Use` is applied at request time and covers every route), on a Chi router reached through `With`/`Route`/`Group`, by a server handler that wraps the mux (`http.ListenAndServe(addr, auth(mux))`, `Handler: auth(mux)`, `h := auth(mux)` then served), or by an inline check in the handler or middleware (a 401/403, the `Authorization` header). Middleware is judged by name; `AuthMiddleware(false)`, which takes the switch that lets anonymous callers through, and `jwtauth.Verifier`, which only decodes, are not evidence. A router the reader cannot trace to its construction (a parameter never bound, a struct field whose middleware is added in another function) is opaque: its routes are listed and never a lead. ASP.NET Core attribute-routed controllers (`[Route("api/[controller]")]` with `[controller]`/`[action]` tokens, `[HttpGet("{id}")]`, a base controller's `[Authorize]` and `[Route]`) and minimal APIs (`MapGet`/`MapPost`/`MapPut`/`MapDelete`/`MapPatch`/`MapMethods`, `MapGroup`, extension methods that take the builder as `this`) are read. `[Authorize]` (or an attribute named like an authenticator, or one the project derives from `AuthorizeAttribute`) on a method, class or base class, `.RequireAuthorization()` on an endpoint or a group (a group convention applies to every endpoint in it, whatever the order), and a handler that reads the caller authenticate a route; `[AllowAnonymous]` and `.AllowAnonymous()` mean public on purpose at any level and are never a lead. `UseAuthentication()` and `UseAuthorization()` alone authenticate nothing and are not evidence. A project-wide requirement (`FallbackPolicy`, `new AuthorizeFilter()`, `MapControllers().RequireAuthorization()`, a middleware named for authentication) is decided somewhere this reader does not evaluate: a route with no evidence of its own is unseen, never a lead; a project is the nearest directory holding a `.csproj`. Leads are the existing AUTHN-001 policy, unchanged. Not read: gorilla/mux, conventional MVC routing, Razor Pages, Web API 2, paths held in constants, and routes registered by code generated from an OpenAPI document or by reflection.
+- **Spring (Java and Kotlin) and JAX-RS routes join the route table, with AUTHN-001 over them.** `@RestController`/`@Controller` with a class `@RequestMapping` prefix, `@GetMapping`/`@PostMapping`/`@PutMapping`/`@DeleteMapping`/`@PatchMapping` and `@RequestMapping(method = …)` (value/path attributes, arrays, multi-line annotations, Kotlin `[...]`), and JAX-RS `@Path` + `@GET`/`@POST`/`@PUT`/`@DELETE`/`@PATCH` (with `@ApplicationPath`) are read; a path built from a constant, a concatenation or a `${placeholder}` is skipped, not guessed. A route is authenticated by `@PreAuthorize`, `@PostAuthorize`, `@Secured`, `@RolesAllowed`, `@Authenticated`, `@DenyAll` or an authenticator-named annotation on its method (which replaces the class's) or class, by an `@AuthenticationPrincipal`/`Principal`/`Authentication`/`SecurityContext`/`@Auth` parameter, or by a read of `SecurityContextHolder`/`getUserPrincipal`; `@PermitAll` and `@PreAuthorize("permitAll()")` mean public on purpose and are never a lead. Applications authenticate globally, so a naive reader would flag everything: when any file of the same project defines a Spring Security filter chain (`SecurityFilterChain`, `HttpSecurity`, `WebSecurityConfigurerAdapter`, `@EnableWebSecurity`, the WebFlux forms, Kotlin `http { authorizeHttpRequests { } }`) or a request filter (`ContainerRequestFilter`, a servlet `Filter`, `OncePerRequestFilter`, a `HandlerInterceptor`, unless named for logging, CORS and the like), a route with no evidence of its own is `unseen`: still in the route table, never claiming the chain, never a lead (`requestMatchers` are not evaluated). Configuration that authenticates without code is read per module: `spring-boot-starter-security` and the OAuth2 starters in a pom or Gradle file, and Quarkus `quarkus.http.auth.permission.*`, the Keycloak policy enforcer or `deny-unannotated-endpoints` in `application.properties`/`.yml`. AUTHN-001 is the existing shared rule, so the lead is the same: a DELETE, PUT or PATCH, or an administrative path, with nothing in front of it (a POST is not a trigger in any reader). Measured offline against 1.55.11, which read none of these: WebGoat (be2c186) 255 routes, 0 leads (it configures Spring Security; with its three security files removed the same tree gives 7 leads, so the silence is the filter chain's doing), spring-petclinic (500158f) 17 routes, spring-petclinic-kotlin (817dba3) 18 routes, no leads (no state-changing verb other than POST), dropwizard (37a9e77) 30 routes, 0 leads, quarkus-quickstarts (81a5844) 342 routes (340 JAX-RS, 2 Spring), 51 leads across 20 demo modules that configure no authentication (the one module guarded by the Keycloak policy enforcer, an earlier false lead, is silent). Routes, leads and findings are identical to 1.55.11 on the seven-repository Python/TypeScript corpus. Not read: context paths (`server.servlet.context-path`), JAX-RS resources declared on an interface, `RouterFunction` routes, Spring Security XML, and webhook verification in these handlers (their delegates are not followed, so WEBHOOK-001 stays silent).
+- `Package.resolved` (SwiftPM v1, v2 and v3), `mix.lock`, `gradle.lockfile`, `Podfile.lock` and `conan.lock` (2.x and the 1.x `graph_lock`) are read, and each governs its manifest (`Package.swift`, `mix.exs`, `libs.versions.toml`, `Podfile`, `conanfile.txt`/`conanfile.py`), which used to be reported as unread. Malformed input is a degradation, never a clean scan. On the built binary, online, a `mix.lock` pinning plug 1.10.0 and phoenix 1.5.0 gives 6 advisories and a `gradle.lockfile` pinning log4j-core and log4j-api 2.14.1 gives 9, both counts equal to `osv-scanner`'s (0 before). CocoaPods and Conan have no usable OSV ecosystem (OSV has none for CocoaPods, and its ConanCenter answers nothing even for zlib 1.2.11): their packages are inventoried and a degradation per ecosystem says they were NOT checked, where the lookup used to drop them without a word. Swift package names are the repository location in OSV's SwiftURL form (`github.com/vapor/vapor`: no scheme, no `.git`, case kept, since OSV matches names exactly), and nox-core v0.12.0 queries `swift` as SwiftURL (Nox-HQ/nox-core#18), so Swift is checked: a `Package.resolved` pinning vapor 4.40.0 and swift-nio-http2 1.18.0 gives 12 advisories, equal to `osv-scanner`'s. Real lockfiles agree too: Netflix/maestro's `gradle.lockfile` 11 and 11, phoenix_live_dashboard's `mix.lock` 7 and 7.
+- A JVM handler parameter that a web framework binds from the request by annotation is a taint source: Spring's `@RequestParam`, `@PathVariable`, `@MatrixVariable`, `@RequestHeader`, `@CookieValue`, `@RequestBody`, `@RequestPart` and `@ModelAttribute`; JAX-RS's `@QueryParam`, `@PathParam`, `@MatrixParam`, `@FormParam`, `@BeanParam`, `@HeaderParam` and `@CookieParam`; Micronaut's `@QueryValue`, `@Body` and `@Header`; and Quarkus REST's `@Rest*`, in Java and Kotlin. Such a value is as untrusted as `request.getParameter(...)`, but Spring and JAX-RS handlers passing one to a sink were silent. The parameter is bound from a per-kind source sentinel at method entry, so a direct `exec("ping " + host)`, an assignment chain and a sanitizer all behave as for any other source; an unannotated parameter is still not a source. On OWASP WebGoat this adds six findings: four SQL injections from `@RequestParam` in the SQL-injection lessons and challenge 5, a path traversal through an uploaded file's original name in WebWolf's file server, and a `PrintWriter.println` to a log file read as XSS. spring-petclinic, spring-petclinic-kotlin and OWASP BenchmarkJava (2,662 findings) are unchanged.
+- Prompt-injection call sites and the AI inventory reach Java, Kotlin, Ruby, PHP and Rust, and the inventory C#. User input flowing into Spring AI (`chatClient.prompt().user(q).call()`), langchain4j (`generate`, `chat`), openai-java and anthropic-java, ruby-openai (`client.chat(parameters:)`), openai-php (`$client->chat()->create`) and async-openai (`client.chat().create`) now reports AGENTFLOW-001; before, only Python, JavaScript/TypeScript, Go and C# did. The inventory names these SDKs and the models passed to them, with OpenAI .NET and Azure OpenAI for C#; `.php` files are read for it. A call chain split across lines (`chatClient.prompt()` then `.user(q)` on the next) is joined for Java, Kotlin and PHP, and for Rust only behind a `*Args::default()` request builder, since joining every Rust chain moved `Command::new` findings. Each language has a vulnerable case and a safe twin reading the same real source. OWASP BenchmarkJava findings are identical (2,662, by fingerprint; score 48.2), and so are the findings and inventories of the seven head-to-head repositories. Spring handlers whose input arrives through `@RequestParam` are still not a source.
+
+- **Maven versions managed by a published parent or BOM are resolved on an online scan.** `spring-boot-starter-parent`, `quarkus-bom` and the like are not in the repository, so their dependencies were reported unchecked. nox now asks NOX Intelligence for those files by coordinates (`POST /v1/maven/poms`; the service fetches them from Maven Central and serves bytes, never a resolution) and resolves the versions itself, following each fetched file's own parent and imports in rounds. Only `(groupId, artifactId, version)` of the parents and BOMs leaves the machine, under the same switches as the dependency lookup, and a `[network]` line counts them. Measured on the built binary against live Maven Central: unresolved Maven dependencies 25→0 on spring-petclinic, 23→0 on WebGoat, 354→0 on dropwizard, 635→1 on quarkus-quickstarts; new findings include CVE-2026-54291 in postgresql 42.7.11 (petclinic) and five jackson-databind 2.21.5 CVEs plus CVE-2025-48924 in commons-lang3 (WebGoat). What still cannot be read is reported with the reason: not on Maven Central (a private repository?), could not be fetched, or offline. A service that does not serve POMs is reported as such, never as "not on Central". Transitive dependencies are not resolved.
+
+### Fixed
+
+- A Gradle dependency with no version is no longer silently skipped. `build.gradle(.kts)` was matched for `group:artifact:version` only, so a Spring Boot build, whose dependencies take their versions from the plugin's dependency management, read as a project with two or three dependencies and nothing said otherwise; `$variable` versions were dropped the same way. Variables are now resolved from the file's own literals (`val`, `def`, `ext.x`, `extra["x"]`, `ext { }` blocks) and `gradle.properties`, `${project.version}` is recognised as the build's own artifact, and what is still versionless is reported in one degradation that names the Spring Boot plugin version and says a `gradle.lockfile` makes them checkable; a lockfile governing the build file suppresses it. Measured offline on six real Gradle builds: previously unreported versionless dependencies now reported — 19 spring-petclinic, 18 spring-petclinic-kotlin, 36 jhipster-sample-app-gradle; JVM packages read 0→9 RxJava, 0→3 spring-petclinic-kotlin, 1→3 okhttp; no false gaps on okhttp, RxJava or nowinandroid.
+- A Maven dependency whose version comes from a parent pom, an imported BOM or a `${property}` is no longer silently skipped. `pom.xml` was read for literal versions only, which on spring-petclinic, WebGoat, dropwizard and quarkus-quickstarts checked 0 of 28, 2 of 47, 2 of 713 and 4 of 654 declared dependencies and recorded nothing about the rest. Versions are now resolved offline from properties, from the `dependencyManagement` of parents in the repository and from BOMs imported from it; dependencies on the repository's own modules and imported BOMs are no longer listed as packages. A version managed by a parent or BOM published elsewhere (`spring-boot-starter-parent`, `quarkus-bom`) is not guessed: one degradation counts those dependencies, names where their versions live, and says they were not checked. WebGoat's online scan goes from 0 to 36 known vulnerabilities (xstream 1.4.5).
+- A project whose dependencies are declared only in a manifest nox did not read is no longer reported as clean. `Cargo.toml`, `pyproject.toml`, `composer.json`, `Gemfile`, `pubspec.yaml`, `.csproj`, `Package.swift`, `mix.exs`, `build.sbt` and Conan files without a lockfile gave "0 dependencies", "dependencies (none found)" and "No issues found in what was checked", with no degradation: pinned smallvec 1.6.0, django 2.2.0, nokogiri 1.8.0 and Newtonsoft.Json 12.0.1 were invisible. Only npm said so. One table now names every dependency manifest, its ecosystem and the lockfiles that govern it; manifest readers for `pyproject.toml` (PEP 621 and Poetry), `Cargo.toml`, `.csproj`/`.fsproj`/`.vbproj` with `Directory.Packages.props`, `composer.json`, `Gemfile` and `pubspec.yaml` read direct dependencies the way `package.json` already was, and a manifest nox cannot read is a degradation naming it. The summary no longer says "none found" or "No issues found" while such a degradation stands. On the built binary those four pins give 1, 43, 47 and 1 advisories. On the seven repositories of the 2026-09-27 head-to-head, online, this adds 46 advisories, all `torch==2.1.0a0` pinned in two llama_index `pyproject.toml` files with no lockfile, and one degradation for crewAI's Jinja-templated `pyproject.toml`; everything else is unchanged.
+- Printing a request value to the server's console is no longer reported as cross-site scripting. The Java and Kotlin XSS sinks are keyed by method name (`println`, `print`, `write`), so `System.out.println(request.getParameter("t"))`, `System.err.print(...)` and Kotlin's receiverless `println(t)`, which is stdout, all read as TAINT-003. A writer that reaches the response (`response.getWriter().println`, a local holding it, Kotlin `response.writer`) keeps the sink. OWASP BenchmarkJava (2,662 findings), WebGoat, spring-petclinic and spring-petclinic-kotlin are unchanged; none prints a request value to the console.
+- A Kotlin parameter with an annotation (`@RequestParam host: String`) is a parameter. Its name read as `@RequestParam host`, which is not an identifier, so the parameter was dropped from the function and from every interprocedural summary through it.
+- In Java and Kotlin, a method called on exactly `super` or `this` is the class's own method, not a library sink of the same name. WebGoat's path-traversal lesson calls `super.execute(file, fullName, username)`, which suffix matching read as JDBC `Statement.execute`: SQL injection, three times, in a lesson with no SQL. A field receiver (`this.statement.execute`) keeps the sink.
+- A type annotation on a local no longer loses its taint in Python and TypeScript. `host: str = request.args.get("host")` and `const host: string = req.query.host` bound nothing, so the flow into `os.system` or `exec` was silent where the same line without the annotation fired: the dominant idiom in typed Python (PEP 526) and in TypeScript. The annotation is now cut from the binding as it already was for Rust, Kotlin, Swift, Scala, Java, C#, Dart and Go; a clause keyword before the colon (`else:`, `default:`) binds nothing, and colons inside brackets are left alone. A cross-language test holds every language to the same rule, each case with its unannotated twin as the premise and a typed constant that must not fire. The seven repositories of the 2026-09-27 head-to-head contain no typed local read from a request, and their findings are unchanged.
+- The twelve ARN rules (SEC-414, SEC-465, SEC-466, SEC-511 to SEC-519) no longer report an ARN in one of AWS's documentation accounts: 123456789012, 111122223333 and 444455556666, the placeholders AWS's IAM, CLI and SDK guides use. Each rule claims a hard-coded identifier ties code to one environment, and these belong to none. On the seven repositories of the 2026-09-27 head-to-head this drops 50 findings, all of them role ARNs in test files under those accounts (25 SEC-465, 25 SEC-516 on the same lines), and adds none. 777788889999 is sometimes cited as one too; it was not found in AWS's documentation and is still reported. The positive test fixtures used 123456789012 and so asserted that an example ARN binds an environment; they now use an account AWS does not document.
+- An online scan of a monorepo no longer waits most of an hour after writing its reports. The terminal assessment, `nox fix` and the MCP `fix_plan` tool check each upgrade target against OSV, and since #899 they asked once per manifest directory and package, one request after another, with no deadline: on llama_index (about 600 lockfiles) that was at least 9,856 sequential requests for 139 distinct package versions, and the scan took 2,996 s against 23 s offline, all of it after the reports were written. A plan now asks each (ecosystem, package, version) once, resolves different packages eight at a time, and the assessment gives the lookups 30 s; a target not confirmed in time is printed as not checked, never as clearing everything. `fix_plan` shares one memo between its own plan and the assessment's, honours the request's context, and marks such a target `unverified`. Over the seven repositories of the 2026-09-27 head-to-head, online: llama_index 2,996 s to 32 s, vercel-ai 56 s to 39 s, agent-go 28 s to 6 s, with every target verified within the budget and findings identical, fingerprints included.
+
+## [1.55.11] - 2026-10-31
+
+DATA-001, the email-address rule and the costliest left in the engine, finds its matches back from the `@` instead of from every quote, `=` and `:`: over all crewAI files it takes 3.3 s instead of 8.0 s (five interleaved passes), its plan declining on 103 files instead of 4,450; AI-PI-002 and AI-PI-006 take the same path. No whole-scan figure is claimed: the host was too loaded to resolve one. Findings, fingerprints and the AI inventory are identical on crewAI. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.10, fingerprints included.
+
+### Changed
+
+- A pattern that opens with runs of character classes sharing no rune, before a literal, finds its starts back from the literal. DATA-001's email pattern, `(?i)["'=:]\s*[a-zA-Z0-9._%+\-]+@…`, was planned from its quote-or-`=` first byte, which is dense enough that the plan declined on 4,450 crewAI files and was costly where it ran; its `@` is rare. Walking back from an occurrence of the literal, each run takes every rune of its class up to its maximum, since no other class could hold one, which gives the one start the occurrence can have; the walk stops where the last match ended, as the search resumes there. A pattern keeps its first-byte plan, and each file takes whichever path is usable and within the limit. Over all crewAI files DATA-001 takes 3.3 s instead of 8.0 s (five interleaved passes), declining on 103 files; AI-PI-002 and AI-PI-006 gain the path too. The plan-equivalence test passed on all 30,992 crewAI files (1,440 of 1,455 patterns plan; 89,737 rule/file pairs with matches, all identical), and findings, fingerprints and the AI inventory are identical on crewAI. A seeded test and fixed cases compare the walk with `FindAll`; a walk that does not stop at the last match, takes less than a run's maximum, or crosses overlapping classes fails them (#736).
+
+## [1.55.10] - 2026-10-31
+
+Three rules that took the full regex scan now take the literal-prefix path, timed directly over crewAI: MCP-011 63 s to 31 s on the 9,184 files holding its keywords, IAC-351 4.9 s to 2.3 s on 8,423, and DATA-005's plan, which declined on 146 files, declines on 2 (the data analyzer 10-23% faster). A whole-scan A/B against 1.55.9 (4 interleaved rounds in a 4-CPU Linux container, host load up to 23) did not resolve a difference: medians 53.5 s and 54.1 s user CPU, rounds from +6% to -19%. Findings, fingerprints and the AI inventory were identical in every run. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.9, fingerprints included.
+
+### Changed
+
+- A pattern that opens with an optional group before its literals takes the literal-prefix path, from the group's literals and the rest's together: a match starts with one when the group is taken and with the other when it is not. MCP-011's `(?i)(?:(?:\bnot|\bnever|n't|\bwithout)\s+)?(?:exfiltrate|send|…)` is this shape, with `\b` opening some of the group's branches and not others. Rather than track a boundary per literal, the anchored match is tried from the byte before the candidate, which it consumes, so every assertion at the start sees the byte the full scan sees. MCP-011 had no plan; over the 9,184 crewAI files holding one of its keywords it takes 31 s instead of 63 s, with the same 28 matches. The plan-equivalence test passed on all 30,992 crewAI files (89,712 rule/file pairs with matches, all identical); findings, fingerprints and the AI inventory are identical on crewAI. A seeded test compares these plans with `FindAll`, putting literals after word bytes, at offset 0 and after invalid UTF-8; trying the match from the candidate itself, or leaving out the group's literals, fails it (#736).
+- A line-anchored pattern can reach its literal through an alternation whose branches open with a run, as IAC-351's `(?im)^[ \t]*(?:PASSWORD|SECRET_KEY|(?:[A-Z0-9_]*_)?TOKEN)[ \t]*:` does in its last branch. The line plan now follows such an alternation down each branch and takes every branch's literals, so a match's first line still holds one of them; a branch whose way to its literal could cross a newline keeps the full scan. IAC-351 was the costliest IaC rule left without a plan: over the 8,423 crewAI files holding one of its keywords it takes 2.3 s instead of 4.9 s, with the same 58 matches. The plan-equivalence test passed on all 30,992 crewAI files (89,706 rule/file pairs with matches, all identical); findings, fingerprints and the AI inventory are identical on crewAI (#736).
+- A literal-prefix plan drops an occurrence of its literal that the rest of the pattern cannot start after. When the plan's literals are exactly what the pattern's opening matches, a match is one of them followed by a match of the rest, so the byte after the literal must be one the rest can start with: whitespace, `=` or `:` for DATA-005's `(?i)(?:ip|host|server|addr)\s*[=:]…`. `ip` occurs all over prose and data, and its candidates outran the plan's cost limit on 146 crewAI files, which then took the full scan; with the filter it declines on 2. The data analyzer over all 30,301 crewAI files is 10-23% faster in each of three interleaved rounds against main, with identical findings; DATA-007, AI-031 and SEC-057 gain too. The plan-equivalence test passed on all of crewAI, and a seeded test compares filtered plans with `FindAll`, including literals that are prefixes of one another (#736).
+
+## [1.55.9] - 2026-10-31
+
+Scans cost about 12% less CPU: on crewAI, median user CPU fell from 74.1 s to 65.0 s against 1.55.8 (4 interleaved rounds in a 4-CPU Linux container on a loaded host, every round 7-25% lower), with findings, fingerprints and the AI inventory identical in every run. Short keywords are searched from their first byte, entropy candidates come from a byte scan, line-anchored patterns take the literal-prefix path, the taint engine skips its getter pass where the answer can only be no, Python imports resolve through an index (a cost that grew with imports times files: 39.4 s to 0.8 s on a 10,000-file tree), and the literal index rolls its window. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.8, fingerprints included.
+
+### Changed
+
+- The one-pass literal index keeps its three-byte window as a rolling value, lowering each byte once from a table instead of three times per window. The pass reads every byte of every file once per rule set, and was 7.9% of a crewAI scan profile; over all 30,296 crewAI files and the four rule sets it now takes 2.83 ns a byte instead of 3.96, finding the same occurrences in every file. Findings, fingerprints and the AI inventory are identical on crewAI; the index's seeded test and fuzz target, which hold it to the per-literal search, fail if the window is cut to two bytes (#736).
+- The route reader resolves a Python import by looking its module path up in an index instead of testing every Python file's path against it. The test ran for every import of every file, so the cost grew with imports times files: on a generated 10,000-file tree with 20 imports per file, building the Python index took 39.4 s, and now takes 0.8 s. On crewAI (1,342 Python files) it is 18-30% faster in every interleaved round (1.83-1.93 s to 1.36-1.50 s). The index files each module under its path and every part of it after a slash, which is exactly when the old test held, in the same order, so the same candidate is chosen; a seeded test and every module path of the fixtures and of crewAI compare it with the old test. Findings, fingerprints and the AI inventory are identical on crewAI (#736).
+- The taint engine answers whether a function is a getter of a source without its unseeded forward pass when the answer can only be no: the function has no return, or one of its returns names no source and reads no variable (`return None`, `return 1`). That pass ran for every function in every fixpoint round, 2.0 s of a 58 s crewAI scan profile in a Linux container; on crewAI it is now skipped for 12,461 of 15,982 functions, and computing the summaries of crewAI's 1,165 files with taint units takes 44-49% less time (3.2-3.8 s to 1.8-2.0 s per pass, two interleaved rounds). A test compares the answer with the pass's on every function of the repository's taint suites, and of crewAI when given its path; all 15,982 agree, the 146 getters included (#736).
+- A pattern anchored to a line, `(?m)^P R` with nothing in P able to match a newline and R opening with literals, takes the literal-prefix path. Every match starts at the start of a line holding one of R's literals, so those line starts are its candidates, tried in order with the pattern anchored there; at a line start the byte hidden by the slice is a newline, which `^` and `\b` see as they see the start of the text. Thirty-two catalog patterns and absence anchors gain a plan (1,437 of 1,455, from 1,405), among them the 18 IaC rules that open with `(?m)^` and have a literal to find the line by (IAC-001, IAC-128, IAC-503 and others; IAC-351 and three more open with a class and keep the full scan), and so do the IaC analyzer's three Ansible markers, which ran on every YAML file as full regexp scans: 1.8 s of a 58 s crewAI scan profile in a Linux container. Over crewAI's 783 YAML files the markers answer alike on every file (175 Ansible), in 0.45 s instead of 3.1 s. The equivalence test passed on all 30,991 crewAI files, now 89,681 rule/file pairs with matches, all identical; scan findings, fingerprints and the AI inventory are identical. A seeded test compares line plans with `FindAll`, including leads that can cross a newline, which must keep the full scan (#736).
+- The entropy matcher's base64 and hex tokenizers find their candidates with a byte scan instead of two regular expressions. `[A-Za-z0-9+/=]{30,}` and `[0-9a-fA-F]{32,}` were run over every line SEC-161 and SEC-162 examine, and with no literal to skip ahead with Go's regexp tries a match from every byte: 2.7 s of a 58 s crewAI scan profile, in a Linux container. Every match of a one-class pattern is a maximal run of that class, so the scan reports exactly the same candidates at the same columns. Over all 7,092,463 crewAI lines both give the same 137,036 candidates, in 2.3 s instead of 22.5 s. The whole-scan saving, about 4%, is below what a loaded host can resolve; findings, fingerprints and the AI inventory are identical on crewAI. The replaced expressions are kept as the test oracle, checked by a seeded test and in the CI fuzz job (#736).
+- A keyword under three bytes is searched for from the positions holding its first byte, found with `bytes.IndexByte`, instead of by comparing at every byte. Such keywords stay out of the one-pass literal index, and the catalog has 27 of them across its four rule sets (`sk`, `jd`, `de`, digits, `=`); a rare one read the whole file one comparison at a time, once per rule set: 3.7 s of a 58 s crewAI scan profile, in a Linux container. Over all 30,296 crewAI files and those 27 keywords the search takes 0.96 s instead of 5.7 s, with the same answer for every file and keyword. The whole-scan saving, about 5%, is below what a loaded host can resolve; findings, fingerprints and the AI inventory are identical on crewAI. The replaced loop is kept as the oracle, by a seeded test and in the CI fuzz job (#736).
+
+## [1.55.8] - 2026-10-31
+
+Scans cost about 19% less CPU: on crewAI, median user CPU fell from 112.7 s to 91.7 s against 1.55.7 (4 interleaved rounds on macOS, every round 18-19% lower), with findings, fingerprints and the AI inventory identical in every run. The keyword pre-filters come from the one-pass literal index, character-class openings check their fixed bytes before trying a start, alternations opening with `\b` take the literal-prefix path, and the AI inventory's extractors match through it. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.7, fingerprints included.
+
+### Changed
+
+- The AI inventory's extractors match their whole-file patterns through the rule engine's literal-prefix plan: the prompt templates, model references, tool lists, SDK invocations and tool registrations. Most are case-insensitive or open with an alternation, so regexp could not skip ahead to their literals and read every byte of every AI-flavoured source file, which on crewAI is most of them. Patterns that were compiled on every call, once per file or per template body, are compiled once, and a file is no longer copied into a string except for a `.prompt` file. crewAI scan CPU fell 11% (median user CPU 107.9 s to 96.1 s against main, 4 interleaved rounds on macOS on a busy host, every round 7-14% lower). Findings and the AI inventory were byte-identical on crewAI (1,506 components, 397 prompt templates, 258 model references), nox and NOX Intelligence. A test fails if one of these patterns loses its plan (#736).
+- An alternation every branch of which opens with `\b` takes the literal-prefix path, the boundary checked once at the candidate. SEC-254's `(?i)(?:\bkind:…|\bdata:…)` is not factored by the parser, so the plan saw no leading literal and the rule was scanned in full: 709 ms over the 1,492 crewAI files holding its keyword, 17 ms planned. A boundary is a property of the position, so a match of any branch needs `\b` there, and given it the pattern is the alternation of what follows. An alternation with `\b` in some branches only keeps the full scan. Findings, fingerprints and AI inventory identical on crewAI; a seeded test compares the plan with the full scan on such alternations (#736).
+- A rule whose pattern opens with a character class drops a candidate start unless the bytes after it fit the pattern's fixed opening. DATA-007's `\b[A-Z]{2}\d{2}…` made every capital letter a candidate, so on 12,137 of the 29,905 crewAI files it applied to, there were too many to try one by one and the full scan ran; a start must be followed by `[A-Z][0-9][0-9]`, and few are. Each position a match must fill with one ASCII byte is checked (literals and ASCII classes, through captures and concatenations); anything optional or variable ends the check. Eight rules gain one, among them SEC-059's Mailchimp key, whose plan declined on every file, and SEC-421's UUID. crewAI scan CPU fell 9% (median user CPU 104.4 s to 95.4 s against main, 4 interleaved rounds on macOS, every round 8-9% lower), findings, fingerprints and AI inventory identical. A first-byte plan is also no longer built for a pattern that can match the empty string at a boundary (`\b[0-9]*`), whose empty matches no first byte marks; no catalog rule has that shape (#736).
+- The keyword pre-filters are answered by the same one pass that finds the literal-prefix plans' literals, instead of a pass of their own over a lower-cased copy of every file. That pass and the copy cost 2.9 s over crewAI; holding the keywords as case-insensitive literals in the literal index adds 0.35 s. The answer is the one the lower-cased search gave: in a file holding neither of the two non-ASCII runes `bytes.ToLower` turns into ASCII letters (the dotted capital I and the Kelvin sign), an ASCII keyword occurs in the lower-cased file exactly where it occurs, ASCII case ignored, in the file itself. A file holding one, and a rule set with a non-ASCII keyword, take the lower-cased search as before. A seeded test and a CI fuzz target compare the two answers (#736).
+
+## [1.55.7] - 2026-10-30
+
+Scans cost about 8% less CPU: on crewAI, median user CPU fell from 105 s to 97 s against 1.55.6 (4 interleaved rounds in a 4-CPU Linux container on a busy host, 3 of 4 rounds lower), with findings, fingerprints and the AI inventory identical in every run. The literal-prefix plan searches case-insensitive literals from their rarest byte, rules scanning one file share their literal searches, and every plan's literals are found in one pass per file. Dogfooded on nox and NOX Intelligence (online): findings identical to 1.55.6, fingerprints included.
+
+### Changed
+
+- Every plan's literals are found in one pass per file. Even shared across rules, the literal searches read the file once per literal -- 1,255,315 searches over crewAI, 5.7 s of the engine's 33 s. A `literalIndex`, built once per rule set the way the keyword index is, files each literal of three or more bytes under a hash of its first three bytes, lower-cased, and one pass over the file compares only the literals whose hash it meets: 2.0 s for every occurrence of all 1,332 literals. It returns what the per-literal search returns -- every occurrence, overlapping ones included, in order -- held to it by a seeded test (with literals flush against either end of the file) and a fuzz target, and the equivalence test now runs every crewAI file through the index. On crewAI in a 4-CPU Linux container, four interleaved rounds on a quiet host: user CPU 1.5-3.7% lower in every round (median 99.5 s to 96.7 s); findings, fingerprints and the AI inventory identical (#736).
+- Rules scanning one file share the literal-prefix plan's questions about it: where each literal occurs, whether the file holds a fold outlier (the Kelvin sign or long s that case folding equates with `k` and `s`), and whether it is valid UTF-8. Each rule used to answer them afresh, though rules share literals -- `(?i)apiversion:` leads 37 IaC rules -- and every case-insensitive plan searched the whole file for both outliers. Over all 30,263 crewAI files the cache answered 157,491 of 1,412,806 literal searches (3.3 GB of the 22.7 GB they read) and 442,421 of 471,910 outlier checks. On crewAI in a 4-CPU Linux container, four interleaved rounds on a loaded host: user CPU 2-12% lower in every round (median 157 s to 144 s); findings, fingerprints and the AI inventory identical. The equivalence test now runs every rule on a file through one shared cache, as a scan does, and passed on all 30,989 crewAI files (#736).
+- A case-insensitive literal is searched for from its rarest byte instead of its first. The literal-prefix plan found each occurrence of `(?i)secret` by visiting every `s` and `S` in the file and comparing the window there; it now visits only the `c`s, and each occurrence still has that byte at one offset, so the same occurrences come back in the same order. Over 3,000 crewAI files and all 1,012 case-insensitive literals the plans search for, the search took 19.9 s instead of 32.5 s, finding the same 950,317 occurrences. In a scan this search was 13.5% of CPU, so the whole-scan saving is about 5%, below what a loaded machine can resolve; findings, fingerprints and the AI inventory are unchanged. A window-by-window oracle holds the search to its definition, by test and in the CI fuzz job (#736).
+
+## [1.55.6] - 2026-10-30
+
+Scans cost about 40% less CPU: on crewAI, median user CPU fell from 334 s to 198 s against 1.55.5 (4 interleaved rounds in a 4-CPU Linux container, every round 23-52% lower), with findings, fingerprints and the AI inventory identical. Encoded-secret candidates come from a linear scan, framework detection and more rule shapes go through the literal-prefix plan, and taint units are extracted once per file. Dogfooded on nox and NOX Intelligence (online, answered through the NOX Intelligence mirror): findings identical to 1.55.5, fingerprints included.
+
+### Changed
+
+- Three more pattern shapes take the literal-prefix path: an optional character before the literals (MCP-016's `(?i)"?(?:forward|relay|…)token`), a run of word characters after `\b` (SEC-469's `\b[A-Z0-9_]*(?:TOKEN|API_KEY|SECRET)=`), where only the furthest start of the run can have the boundary before it, and a literal followed by a class of up to four ASCII characters, which becomes one literal per character (AI-002's `f["']`). Over every crewAI file, MCP-016 went from 35.8 s to 9.6 s and SEC-469 from 15.9 s to 5.1 s with the same matches; AI-002's regex had cost 25.9 s. In a scan the keyword prefilter already keeps these rules off most files, so the whole-scan saving is small: findings, fingerprints and the AI inventory are unchanged. The equivalence test holds the new plans to FindAll on every built-in rule and on all of crewAI (#736).
+- Taint-unit extraction runs once per file instead of twice. taintflow and agentflow each walked every source file and extracted the same units, about ten seconds apiece on crewAI; a scan running both now walks once (`core/analyzers/flowunits`) and hands every file's units to each, into its own finding set, so each reports what it reported alone. Extraction is also cheaper: the keyed-container pass stops at once in a file with no empty-container initializer and skips lines that mention none, and the Python single-assignment pass looks for the `=`, keyword or `def` each pattern needs before running it. On crewAI, user CPU fell 6-12% and wall time 9-15% with identical findings, fingerprints and AI inventory. A file whose extraction panics is now counted once in the degradation note, not once per analyzer (#736).
+- Rules whose pattern opens with a character class instead of a literal take the literal-prefix path too, from the bytes a match can start with. The PII rules were the costliest in the engine -- card numbers (DATA-003), SSNs (DATA-002), IBANs (DATA-007) and email addresses (DATA-001) were 80 s of 263 s spent in rule matching on crewAI -- because their keywords (`4`, `-`, `de`, `@`) pass on nearly every file and their patterns gave Go's regexp nothing to skip ahead with. Every match starts at one of its first bytes, and with a leading `\b` most occurrences are ruled out by the byte before, so those are the candidates; patterns whose first bytes include whitespace, case folding or non-ASCII, or number more than 36, keep the full scan, as does any file where the candidates exceed one byte in 16. 1,401 of 1,455 patterns now have a plan (from 1,387), and the equivalence test that holds every plan to `FindAll` passed on the repository fixtures and on all 30,988 files of crewAI. Measured on crewAI at 894898f8 in a 4-CPU Linux container, four interleaved rounds: user CPU down 11-27% (median 220 s to 176 s), every round faster; findings, fingerprints and the AI inventory identical (#736).
+- The AI inventory's framework detection (LangChain, CrewAI, vector stores, MCP and the rest) goes through the literal-prefix plan the rule engine uses. Its eighteen patterns are alternations of import statements with no common literal, so each was a full-file regex scan of every source file: 17 s of a 186 s crewAI profile. A new `rules.PlannedRegexp` answers `Match` through the plan where that is exact and cheaper, and through regexp otherwise; a test fails if any framework pattern loses its plan. Measured on crewAI at 894898f8 in a 4-CPU Linux container, three interleaved rounds: user CPU down 8-17% (median 192 s to 166 s), every round faster; findings, fingerprints and the AI inventory identical (#736).
+- Encoded-secret detection finds its base64 and hex candidates with a linear scan instead of two regular expressions. `[A-Za-z0-9+/]{40,}={0,2}` and `(?i)[0-9a-f]{40,}` were run over every file, and with no literal to skip ahead with Go's regexp tries a match from every byte; on crewAI the two cost 67 s of a 373 s scan profile, while decoding and rescanning everything they found cost 0.3 s. Every match of a single-class pattern is a maximal run of that class, so a byte scan reports exactly the same spans; the replaced expressions are kept as the test oracle, checked on a seeded corpus of 20,000 generated files and by a new fuzz target in CI. Measured on crewAI at 894898f8 in a 4-CPU Linux container, three interleaved A/B rounds on a loaded host: user CPU down 15-26%, every round faster; findings identical, fingerprints included (#736).
+
+## [1.55.5] - 2026-10-29
+
+`--offline` no longer contacts the plugin registry, a retired required plugin is named on every scan, and absence rules cost a fraction of what they did (crewAI scan CPU down 13%). Dogfooded on nox and NOX Intelligence (online, answered by NOX Intelligence): findings identical to 1.55.4, fingerprints included.
+
+### Changed
+
+- Absence rules find their anchors through the literal-prefix plan regex rules already use. An anchor such as `(?i)containers\s*:` or `(?i)Microsoft\.Web/sites` was found with a full regex scan of every file the rule applies to, and under `(?i)` Go's regexp has no literal to skip ahead with; on crewAI that scan ran over 24 MB of YAML cassettes holding no anchor. It is now tried only where the anchor's literal occurs, falling back to the full scan where that is not exact (a Kelvin sign or long s in the file) or not cheaper. The equivalence test that holds the plan to `FindAll` for every regex rule now covers every absence anchor too. Measured on crewAI at 894898f8 in a 4-CPU Linux container, five interleaved A/B rounds: median CPU 284 s to 246 s (-13%), every round faster; findings identical, fingerprints included (#736).
+
+### Fixed
+
+- `nox scan --offline` no longer contacts the plugin registry. Scan-time auto-install compared a required plugin's installed version with its constraint as a string, so `nox/taint-analysis@^0.7.0` never matched an installed 0.7.3 and every scan resolved every required plugin again, refreshing the registry index whenever the one-hour cache had expired, `--offline` included. The installed version is now matched against the constraint, only the requirements it does not satisfy are installed, and under `--offline` nothing is: the missing plugins are named and the scan runs without them. Measured on tokenops with a stale index: 1.55.4 re-fetched it under `--offline`; this build does not (#936).
+- A required plugin the registry has retired is now named on every scan, from the cached index and without a request. `nox plugin install` warned, but the projects still running a retired plugin installed it before it was retired and never run that command again. tokenops requires `nox/taint-analysis`, retired since 1.33.0 because core supersedes it, and its findings change between identical scans because it walks Go maps: three runs on one tree gave 3, 5 and 3 TAINT findings, all on one file that core's taint engine reports nothing on. The scan now says so, with the registry's note to remove it (#936).
+
+## [1.55.4] - 2026-10-29
+
+MCP-018 no longer reports the addresses in a deny-list, plugin findings on gitignored paths are dropped, and rule file patterns are compiled once (about 6% less scan CPU on a large repository). Dogfooded on nox and NOX Intelligence (online, answered by NOX Intelligence): NOX Intelligence identical to 1.55.3; on nox the only change is MCP-018 2 to 0, both entries of nox's own metadata-hostname deny-list.
+
+### Fixed
+
+- MCP-018 (cloud metadata endpoint) no longer reports an address in a deny-list. pydantic-ai's SSRF guard lists the metadata addresses it blocks, and nothing near the entries says "block" in code (the set is `_CLOUD_METADATA_IPV4`; the word is in a comment, which the rule does not read), so all three entries were reported as SSRF targets. A metadata address that is one entry of a literal collection holding nothing but addresses (IPs, CIDRs, metadata hostnames), or of a map-as-set of them (`"169.254.169.254": true`), is now refuted. A URL, an assignment, a single-entry list, a call argument, a collection mixing in anything else, and an address keyed to a value all still fire. Measured on pydantic-ai's `_ssrf.py` at 9ac853b: 3 to 0. No rule-level change across the 26-repository rule-diff corpus (#929).
+- Plugin findings on gitignored paths are dropped, as nox's own walk drops those files. A plugin walks the workspace itself, so a directory the core walk skipped came back through it: on tokenops, `nox/triage-agent` reported 475 findings (and the taint plugin 2) from an agent worktree under the gitignored `.claude/`, each a duplicate of the real tree under a random directory name no waiver can stay ahead of. `scan.exclude` already bound plugins, which is why excluding `.claude/` was the workaround. The decision is the walker's own (root and nested `.gitignore`, the tracked-file override, linked-worktree pruning), so a tracked file in an ignored directory keeps its plugin findings. Measured on a tokenops clone with a worktree and no exclusion: 477 findings under `.claude/` to 0; nox's own findings unchanged (#830).
+
+### Changed
+
+- Rule file patterns are compiled once instead of globbed per file. The rule loop called `filepath.Match` twice per pattern, per rule, per file, which was 6.6% of scan CPU on crewAI (30,263 files, mostly `.mdx`). A literal pattern (`Dockerfile`) and a `*`-suffix pattern (`*.py`) are now decided by equality and suffix tests, exactly as `filepath.Match` decided them; anything else still uses it. Measured on crewAI at 894898f8 in a 4-CPU Linux container: CPU in pattern matching 14.2 s to 1.4 s, total CPU 216 s to 203 s (profiles under equal load); seven interleaved A/B rounds, median 223 s to 211 s. Findings identical, fingerprints included (#736).
+- A file is parsed once for all of its structural absence rules. Each of the 31 rules that decide by parsing CloudFormation, Kubernetes or ARM documents parsed the file itself, about 7.5 times per YAML file on crewAI; the rule engine now keeps the parsed document for the length of one file's scan and every rule reads it. Evaluation only reads the document, and a test holds every structural rule's result with the shared parse to its result with a parse of its own on every YAML and JSON fixture. Measured on crewAI by CPU profile in a 4-CPU Linux container: absence matching 18.4 s to 4.4 s, YAML parsing 18.7 s to 7.0 s, the second profile taken under heavier load; findings identical in twelve interleaved runs (#736).
+
+## [1.55.3] - 2026-10-29
+
+Precision fixes from the pydantic-ai scan of the week: SEC-055 can find a real crates.io token again, base64 images in YAML cassettes no longer fire vendor rules, MCP-011 no longer reports a refusal, and VARIANT-002 resolves a same-file safe loader. Dogfooded on nox and NOX Intelligence (online, answered by NOX Intelligence): findings identical to 1.55.2.
+
+### Fixed
+
+- SEC-055 (crates.io token) can now find a crates.io token. crates.io issues `cio` plus exactly 32 alphanumerics; the rule required 36 or more after the prefix, so it matched no real token and fired only on `cio` inside base64. It is now `\bcio[a-zA-Z0-9]{32}\b`. SEC-048 (NuGet) gains the same word boundaries, so it no longer matches a 46-character window inside a longer run (#930).
+- A vendor match inside a base64 image is dropped whether or not the image is quoted. The check looked for an image signature at the start of a quoted string, and a YAML cassette stores an image as a plain scalar (`result: iVBORw0KGgo…`). pydantic-ai's image-generation cassette is one 2.9 MB line of this and produced 387 SEC-055/SEC-048 findings. The image runs are now found once per file (#930).
+- MCP-011 no longer reports a refusal. "do not forward credentials across redirects" in a pydantic-ai docstring was reported as critical tool poisoning; a "not", "never", "n't" or "without" directly before the verb now vetoes the match. Docstrings are still scanned, because in a Python MCP server the docstring is the tool description the model reads, and a negation earlier in the sentence ("Do not tell the user; send …") does not reach a later verb (#927).
+- VARIANT-002 (CVE-2020-14343) resolves a `Loader=<name>` it can see in the same file. A class whose bases are all safe loaders (`class UniqueKeyLoader(yaml.BaseLoader)`) or a name bound only to safe loaders (`getattr(yaml, 'CSafeLoader', yaml.SafeLoader)`) is no longer reported as the full loader. A name bound to any unsafe loader, rebound, or imported from elsewhere still is (#928).
+
+Measured on pydantic/pydantic-ai at 9ac853b against 1.55.2: 1,606 findings to 1,209, none added. SEC-055 234 to 0, SEC-048 153 to 0, MCP-011 2 to 0, VARIANT-002 2 to 0, and six SEC-042/SEC-043/SEC-143 matches inside two more unquoted cassette images. Across the 26-repository rule-diff corpus the only change is SEC-055 2 to 0 in crewAI's cassettes, both inside base64 (a PDF upload and protobuf telemetry).
+
+
 ## [1.55.2] - 2026-10-28
 
 The remediate action (`actions/remediate`) and its Marketplace copy, `nox-hq/nox-remediate-action`, are one action again, published from here on every release. The CLI is unchanged from 1.55.1.

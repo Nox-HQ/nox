@@ -494,3 +494,34 @@ func TestNpmSymbolReferenceMeetsTheDefaultMergeGate(t *testing.T) {
 		t.Errorf("reason must cite the site and the limit: %s", d.Reason)
 	}
 }
+
+// The sentence is read in a pull request by someone who has never seen the
+// applicability ladder. symbol_used and unsupported are identifiers a program
+// reads from the finding's metadata; the sentence says what they mean.
+func TestRelevanceSentenceUsesNoIdentifier(t *testing.T) {
+	undetermined := adv("GHSA-u", "left-pad", "1.0.0", "1.0.1", findings.SeverityHigh, "undetermined", "affected_version")
+	refuted := adv("GHSA-r", "left-pad", "1.0.0", "1.0.1", findings.SeverityHigh, "not_impacting", "affected_version")
+	refuted.Metadata["applicability_stopped_at"] = "symbol_used"
+	tests := []struct {
+		name string
+		f    findings.Finding
+		r    Relevance
+		want string
+	}{
+		{"undetermined", undetermined, RelUndetermined, "whether this build links the affected package was not established"},
+		{"refuted", refuted, RelNotImpacting, "the affected package is not linked by this build"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := relevanceSentence(&tc.f, tc.r)
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("%q does not say %q", got, tc.want)
+			}
+			for _, id := range []string{"symbol_used", "affected_version", "call_reachable"} {
+				if strings.Contains(got, id) {
+					t.Errorf("%q prints the identifier %q", got, id)
+				}
+			}
+		})
+	}
+}

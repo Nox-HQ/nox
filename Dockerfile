@@ -1,7 +1,7 @@
 # Build stage
 # nox:ignore IAC-121 -- nox is a one-shot CLI; a HEALTHCHECK has nothing to poll
 # nox:ignore IAC-124 -- maintainer is carried by the OCI labels on the runtime stage
-FROM golang:1.27-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS builder
+FROM golang:1.27-alpine@sha256:eb61c3873c97416fff0116553fff65d67a3549f72e11d9758849a689cdd8b523 AS builder
 
 ARG VERSION=dev
 ARG COMMIT=none
@@ -19,7 +19,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -trimpath \
     -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
-    -o nox ./cli
+    -o nox ./cmd/nox
 
 # Runtime stage — distroless for minimal attack surface
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab

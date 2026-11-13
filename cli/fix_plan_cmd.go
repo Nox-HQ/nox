@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"context"
@@ -42,7 +42,7 @@ type fixSubOptions struct {
 func runFixSub(mode string, args []string) int {
 	fs := flag.NewFlagSet("fix "+mode, flag.ContinueOnError)
 	var o fixSubOptions
-	fs.StringVar(&o.input, "input", "findings.json", "path to findings.json from a previous scan")
+	fs.StringVar(&o.input, "input", scanReportPath(".", "findings.json"), "path to findings.json from a previous scan")
 	fs.StringVar(&o.root, "root", ".", "the directory that was scanned (finding paths are relative to it)")
 	fs.StringVar(&o.format, "format", "text", "output format: text or json")
 	fs.BoolVar(&o.offline, "offline", false, "re-run checks without any network call (dependency vulnerabilities then cannot be re-checked, and are reported as not verified)")

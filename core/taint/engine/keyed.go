@@ -109,15 +109,29 @@ func rewriteKeyedContainers(lang langKind, lines []logicalLine) {
 
 // keyedEligible returns the containers every occurrence of which is an empty
 // initializer, a literal-keyed store or read, or an allowed no-op.
+//
+// Only a name with an empty initializer can qualify, so those are found
+// first: a file with none -- most files -- is done, and a line that mentions
+// none of them cannot account for one. (The store rewrite below keeps only
+// text already on the line, so it brings in no name either.)
 func keyedEligible(kl *keyedLang, lines []logicalLine) map[string]bool {
 	inits := map[string]int{}
 	bad := map[string]bool{}
 	accounted := map[string]int{}
-	for _, ll := range lines {
-		raw := ll.raw
-		if m := kl.init.FindStringSubmatch(raw); m != nil {
+	isInit := make([]bool, len(lines))
+	for i, ll := range lines {
+		if m := kl.init.FindStringSubmatch(ll.raw); m != nil {
 			inits[m[kl.init.SubexpIndex("name")]]++
 			accounted[m[kl.init.SubexpIndex("name")]]++
+			isInit[i] = true
+		}
+	}
+	if len(inits) == 0 {
+		return nil
+	}
+	for i, ll := range lines {
+		raw := ll.raw
+		if isInit[i] || !mentionsAny(raw, inits) {
 			continue
 		}
 		matched := false
@@ -158,6 +172,16 @@ func keyedEligible(kl *keyedLang, lines []logicalLine) map[string]bool {
 		}
 	}
 	return out
+}
+
+// mentionsAny reports whether any of names occurs in s, as any substring.
+func mentionsAny(s string, names map[string]int) bool {
+	for name := range names {
+		if strings.Contains(s, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // rewriteKeyedLine rewrites one line's stores and reads of eligible

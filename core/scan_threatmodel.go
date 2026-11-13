@@ -3,7 +3,6 @@ package core
 import (
 	"fmt"
 
-	"github.com/nox-hq/nox/core/report/sbom"
 	"github.com/nox-hq/nox/core/threatmodel"
 )
 
@@ -31,7 +30,7 @@ func (r *ScanResult) ThreatModelInput(version string) (threatmodel.Input, error)
 	in.Artifacts = append(in.Artifacts, art)
 
 	if r.Scope.Has(ScopeDeps) {
-		raw, err := sbom.NewCycloneDXReporter(version).WithAIInventory(r.AIInventory).Generate(r.Inventory)
+		raw, err := r.CycloneDX(version).Generate(r.Inventory)
 		if err != nil {
 			return in, fmt.Errorf("serialising SBOM: %w", err)
 		}

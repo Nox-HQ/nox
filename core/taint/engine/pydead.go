@@ -47,22 +47,31 @@ var (
 func pySingleAssigned(lines []logicalLine) map[string]bool {
 	count := map[string]int{}
 	never := map[string]bool{}
+	// Each pattern needs a literal most lines lack (`=`, a keyword, `def`), so
+	// that is looked for first: these patterns ran on every line of every
+	// Python file, twice per scan (#736).
 	for _, ll := range lines {
 		code := ll.code
-		for _, m := range pyAssignedNameRe.FindAllStringSubmatch(code, -1) {
-			count[m[1]]++
-		}
-		for _, m := range pyAugmentedAnywhere.FindAllStringSubmatch(code, -1) {
-			never[m[1]] = true
-		}
-		for _, m := range pyBindingKwRe.FindAllStringSubmatch(code, -1) {
-			for _, n := range pyIdentRe.FindAllString(m[1], -1) {
-				never[n] = true
+		if strings.IndexByte(code, '=') >= 0 {
+			for _, m := range pyAssignedNameRe.FindAllStringSubmatch(code, -1) {
+				count[m[1]]++
+			}
+			for _, m := range pyAugmentedAnywhere.FindAllStringSubmatch(code, -1) {
+				never[m[1]] = true
 			}
 		}
-		for _, m := range pyDefParamsRe.FindAllStringSubmatch(code, -1) {
-			for _, n := range pyIdentRe.FindAllString(m[1], -1) {
-				never[n] = true
+		if hasPyBindingKeyword(code) {
+			for _, m := range pyBindingKwRe.FindAllStringSubmatch(code, -1) {
+				for _, n := range pyIdentRe.FindAllString(m[1], -1) {
+					never[n] = true
+				}
+			}
+		}
+		if strings.Contains(code, "def") {
+			for _, m := range pyDefParamsRe.FindAllStringSubmatch(code, -1) {
+				for _, n := range pyIdentRe.FindAllString(m[1], -1) {
+					never[n] = true
+				}
 			}
 		}
 		if strings.Contains(code, ":=") {
@@ -78,6 +87,17 @@ func pySingleAssigned(lines []logicalLine) map[string]bool {
 		}
 	}
 	return out
+}
+
+// hasPyBindingKeyword reports whether code contains a word pyBindingKwRe
+// opens with, as any substring.
+func hasPyBindingKeyword(code string) bool {
+	for _, kw := range [...]string{"for", "as", "global", "nonlocal", "del", "import"} {
+		if strings.Contains(code, kw) {
+			return true
+		}
+	}
+	return false
 }
 
 var (

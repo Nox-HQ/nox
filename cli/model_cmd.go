@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"flag"
@@ -37,9 +37,9 @@ func runModel(args []string) int {
 	var p threatmodel.Paths
 	var outDir, previous string
 	var jsonOut, noWrite, noDiagram bool
-	fs.StringVar(&p.Findings, "findings", "", "path to findings.json (default: <dir>/findings.json)")
-	fs.StringVar(&p.SBOM, "sbom", "", "path to a CycloneDX or SPDX JSON SBOM (default: <dir>/sbom.cdx.json, then sbom.spdx.json)")
-	fs.StringVar(&p.Inventory, "ai-inventory", "", "path to ai.inventory.json (default: <dir>/ai.inventory.json)")
+	fs.StringVar(&p.Findings, "findings", "", "path to findings.json (default: <dir>/.nox/reports/findings.json, or <dir>/findings.json from an older scan)")
+	fs.StringVar(&p.SBOM, "sbom", "", "path to a CycloneDX or SPDX JSON SBOM (default: sbom.cdx.json, then sbom.spdx.json, under <dir>/.nox/reports or <dir>)")
+	fs.StringVar(&p.Inventory, "ai-inventory", "", "path to ai.inventory.json (default: <dir>/.nox/reports/ai.inventory.json, or <dir>/ai.inventory.json)")
 	fs.StringVar(&p.Repo, "repo", "", "repository to read the commit from when scan outputs are kept elsewhere (default: <dir>)")
 	fs.StringVar(&outDir, "out", "threat-model", "directory to write model.md and model.json to")
 	fs.StringVar(&previous, "previous", "", "an earlier model.json: report the elements, flows, boundaries and STRIDE cells that changed since")
@@ -57,6 +57,17 @@ func runModel(args []string) int {
 	p.Dir = "."
 	if len(pos) > 0 {
 		p.Dir = pos[0]
+	}
+	// A scan writes under <dir>/.nox/reports; one from an older nox wrote
+	// into <dir> itself. Either is read.
+	if p.Findings == "" {
+		p.Findings = scanReportPath(p.Dir, "findings.json")
+	}
+	if p.SBOM == "" {
+		p.SBOM = firstExisting(scanReportPath(p.Dir, "sbom.cdx.json"), scanReportPath(p.Dir, "sbom.spdx.json"))
+	}
+	if p.Inventory == "" {
+		p.Inventory = firstExisting(scanReportPath(p.Dir, "ai.inventory.json"))
 	}
 
 	in, err := threatmodel.Load(p, version)

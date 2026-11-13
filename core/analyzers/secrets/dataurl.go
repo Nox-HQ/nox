@@ -128,27 +128,58 @@ var imageBase64Signatures = [][]byte{
 	[]byte("UklGR"),       // WebP (RIFF)
 }
 
-// inBase64ImageString reports whether a finding's match lies inside a quoted
-// string whose content is a base64-encoded image.
+// imageBase64Runs returns the span of every base64 run in content that begins
+// with an image signature: the image's own bytes, from its first character to
+// the first byte that cannot appear in base64.
 //
-// inDataURIPayload needs the `data:<mime>;base64,` prefix, and a notebook's
-// outputs and a recorded API response carry images without one:
-// "image/png": "iVBORw0KGgo…", "data": "/9j/4AAQ…". Any long enough base64 run
-// contains any short vendor prefix, so these fired vendor rules by the dozen.
-// The image's own signature at the start of the string is as unambiguous as
-// the data: marker, and a credential never starts with one.
-func inBase64ImageString(content []byte, f *findings.Finding) bool {
-	open := enclosingStringOpen(content, f)
-	if open < 0 {
-		return false
-	}
-	body := content[open+1:]
+// A notebook output or a recorded response carries images without a data:
+// prefix -- "image/png": "iVBORw0KGgo…" in JSON, `result: iVBORw0KGgo…` as a
+// plain YAML scalar. Any long enough base64 run contains any short vendor
+// prefix, so these fired vendor rules by the dozen. A run is the unit rather
+// than a quoted string, so the YAML form counts too: pydantic-ai's
+// image-generation cassette is one unquoted 2.9 MB line and fired 387 vendor
+// findings (#930). The image's signature at the start of a run is as
+// unambiguous as the data: marker, and a credential never starts with one.
+//
+// Computed once per file: asking per finding walked back over megabytes of
+// the same run for each of hundreds of matches.
+func imageBase64Runs(content []byte) []byteSpan {
+	workcount.Add(workcount.DataURISearch, len(content))
+	var runs []byteSpan
 	for _, sig := range imageBase64Signatures {
-		if bytes.HasPrefix(body, sig) {
-			return true
+		for off := 0; ; {
+			rel := bytes.Index(content[off:], sig)
+			if rel < 0 {
+				break
+			}
+			at := off + rel
+			off = at + len(sig)
+			// The signature must open the run; mid-run it is just bytes.
+			if at > 0 && isBase64Byte(content[at-1]) {
+				continue
+			}
+			end := payloadEnd(content, at)
+			if end-at >= minImageRun {
+				runs = append(runs, byteSpan{start: at, end: end})
+			}
+			off = max(off, end)
 		}
 	}
-	return false
+	return runs
+}
+
+// minImageRun is the shortest run treated as an image: the base64 of the
+// smallest valid PNG is 92 bytes. Requiring a real payload keeps a short
+// string that happens to start with "/9j/" from counting as a JPEG.
+const minImageRun = 64
+
+// inImageBase64Run reports whether a finding's match starts inside one of runs.
+func inImageBase64Run(content []byte, runs []byteSpan, f *findings.Finding) bool {
+	if len(runs) == 0 {
+		return false
+	}
+	start := lexctx.LineColToOffset(content, f.Location.StartLine, f.Location.StartColumn)
+	return start >= 0 && inSpan(runs, start)
 }
 
 // enclosingStringOpen returns the offset of the quote that opens the string a

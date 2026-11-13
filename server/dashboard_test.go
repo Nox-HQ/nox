@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/nox-hq/nox/core/dashboard"
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 func TestGenerateDashboardHTML_CleanScan(t *testing.T) {
@@ -35,7 +36,7 @@ func TestGenerateDashboardHTML_CleanScan(t *testing.T) {
 
 func TestGenerateDashboardHTML_WithFindings(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeFile(t, dir, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 
 	s := New("0.1.0", nil)
 	scanResult, err := s.handleScan(context.Background(), scanInput{Path: dir})

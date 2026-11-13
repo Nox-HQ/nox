@@ -1,9 +1,11 @@
-package main
+package cli
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 // Test comprehensive scan scenarios to increase runScan coverage.
@@ -104,7 +106,7 @@ func TestRunScan_MultipleFindings(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create multiple files with findings.
-	secret1 := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret1 := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 	secret2 := "GITHUB_TOKEN=ghp_1234567890abcdefghijklmnopqrstuvwxyz\n"
 	secret3 := "PRIVATE_KEY=-----BEGIN RSA PRIVATE KEY-----\n"
 
@@ -163,7 +165,7 @@ func TestRunScan_MixedContent(t *testing.T) {
 
 	// Create a mix of clean and vulnerable files.
 	clean := "package main\n\nfunc main() {}\n"
-	secret := "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"
+	secret := "AWS_KEY=" + testkey.AWSAccessKeyID() + "\n"
 
 	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(clean), 0o644); err != nil {
 		t.Fatalf("writing test file: %v", err)

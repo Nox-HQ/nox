@@ -52,15 +52,13 @@ package agentflow
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
+	"github.com/nox-hq/nox/core/analyzers/flowunits"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
-	"github.com/nox-hq/nox/core/lexctx"
 	"github.com/nox-hq/nox/core/rules"
-	"github.com/nox-hq/nox/core/source"
 	"github.com/nox-hq/nox/core/taint"
 	"github.com/nox-hq/nox/core/taint/engine"
 )
@@ -128,48 +126,18 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 // file's flows are sorted, so the FindingSet is reproducible.
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
 	fs := findings.NewFindingSet()
-
-	ordered := make([]discovery.Artifact, len(artifacts))
-	copy(ordered, artifacts)
-	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Path < ordered[j].Path })
-
-	for i := range ordered {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		art := ordered[i]
-		if art.Type != discovery.Source {
-			continue
-		}
-		lang := lexctx.LangFromPath(art.Path)
-		if lang == lexctx.LangUnknown {
-			// Any language core/lexctx lexes participates; only a file with no
-			// lexer is skipped. The gate was never Python-and-JS — that was the
-			// reach of the PROMPT SINK vocabulary below, which held only the
-			// Python/JS SDK spellings, so a Go file arrived here and then flowed
-			// from a recognised source to an unrecognised destination.
-			continue
-		}
-		content, err := os.ReadFile(art.AbsPath)
-		if err != nil {
-			continue
-		}
-		// A generated or minified file (a bundle, a vendored dist build) is
-		// not code this repository wrote, and the line recognizer reads a
-		// minified line as one enormous statement. The banner must lead the
-		// file: a hand-written tool that emits it as data is not generated.
-		if source.IsGeneratedHeader(content) {
-			continue
-		}
-		a.scanFile(fs, art.Path, lang, content)
+	err := flowunits.Walk(ctx, artifacts, func(path string, units []taint.Unit) {
+		a.ScanUnits(fs, units)
+	})
+	if err != nil {
+		return nil, err
 	}
 	return fs, nil
 }
 
-// scanFile extracts Units (reusing the taint engine's extractor) and runs both
-// flow analyses over each Unit, deduplicating per (rule, line).
-func (a *Analyzer) scanFile(fs *findings.FindingSet, path string, lang lexctx.Lang, content []byte) {
-	units := engine.ExtractUnits(path, lang, content)
+// ScanUnits runs both flow analyses over each of one file's Units (from
+// flowunits.Walk), deduplicating per (rule, line).
+func (a *Analyzer) ScanUnits(fs *findings.FindingSet, units []taint.Unit) {
 	seen := map[string]struct{}{}
 	add := func(f *findings.Finding) {
 		key := fmt.Sprintf("%s:%d", f.RuleID, f.Location.StartLine)
@@ -213,7 +181,7 @@ func (a *Analyzer) analyzeUnit(unit *taint.Unit) []findings.Finding {
 
 		// 1) AGENTFLOW-001: an untrusted variable reaching an LLM-prompt call.
 		for _, rawCall := range st.Calls {
-			if !isPromptCall(rawCall) {
+			if !isPromptCall(lang, st, rawCall) {
 				continue
 			}
 			// If a sanitizer wraps the value at the call site, treat it as cleared.
@@ -265,7 +233,7 @@ func (a *Analyzer) analyzeUnit(unit *taint.Unit) []findings.Finding {
 
 		// An LLM call assigned to a variable makes that variable LLM-output. This
 		// takes precedence: `r = client.chat.completions.create(...)` colors r.
-		if stmtCallsLLM(st) {
+		if stmtCallsLLM(lang, st) {
 			llmout[st.Assigns] = st.Line
 			// The prompt of that call may itself be untrusted, but the RESULT is
 			// not untrusted input — clear any inherited untrusted color on the LHS.
@@ -485,9 +453,9 @@ func sinkArgVars(st *taint.Statement, rawCall string) []string {
 
 // stmtCallsLLM reports whether st invokes an LLM call whose result is a model
 // response worth tracking as output taint.
-func stmtCallsLLM(st *taint.Statement) bool {
+func stmtCallsLLM(lang string, st *taint.Statement) bool {
 	for _, rawCall := range st.Calls {
-		if isPromptCall(rawCall) {
+		if isPromptCall(lang, st, rawCall) {
 			return true
 		}
 	}
@@ -541,14 +509,92 @@ var llmPromptCalls = map[string]struct{}{
 	"GetChatCompletionsAsync": {},
 }
 
-// isPromptCall reports whether a raw call chain is an LLM model invocation.
-func isPromptCall(rawCall string) bool {
+// promptCallSpec narrows a language-scoped LLM call spelling.
+type promptCallSpec struct {
+	// kwargParameters requires the call's first argument to be the `parameters:`
+	// keyword the Ruby SDKs take. A bare `.chat(` is far too common a method name
+	// (a chat room, a messenger) to be a model call on its own.
+	kwargParameters bool
+}
+
+// llmPromptCallsByLang holds spellings that are an LLM call only in one
+// language's SDKs. They are kept apart from llmPromptCalls because a name like
+// `generate` or `chat` is a model call on a JVM chat model and nothing in Python.
+//
+// The JVM spellings:
+//   - Spring AI: chatClient.prompt().user(x) / .system(x). The fluent chain
+//     flattens to prompt.user, prompt.system, and system.user / user.system when
+//     both roles are set; the value is an argument of the role call, not of
+//     .call().
+//   - langchain4j: ChatLanguageModel.generate(x) (0.x) and ChatModel.chat(x)
+//     (1.x), matched on the conventional receiver names so an unrelated
+//     `foo.generate(x)` does not become a model call.
+//   - openai-java and anthropic-java need no entry: client.chat().completions()
+//     .create(params) and client.messages().create(params) already end in a
+//     shared spelling.
+//
+// Ruby: ruby-openai's client.chat(parameters: {...}). PHP: openai-php's
+// $client->chat()->create([...]). Rust: async-openai's client.chat().create(req).
+var llmPromptCallsByLang = map[string]map[string]promptCallSpec{
+	"java":   jvmPromptCalls,
+	"kotlin": jvmPromptCalls,
+	"ruby": {
+		"chat":      {kwargParameters: true},
+		"responses": {kwargParameters: true},
+		"messages":  {kwargParameters: true}, // anthropic gem
+	},
+	"php": {
+		"chat.create":         {},
+		"chat.createStreamed": {},
+		"responses.create":    {},
+	},
+	"rust": {
+		"chat.create":        {},
+		"chat.create_stream": {},
+		"responses.create":   {},
+	},
+}
+
+var jvmPromptCalls = map[string]promptCallSpec{
+	"prompt.user":                 {},
+	"prompt.system":               {},
+	"system.user":                 {},
+	"user.system":                 {},
+	"chatLanguageModel.generate":  {},
+	"chatModel.generate":          {},
+	"languageModel.generate":      {},
+	"chatLanguageModel.chat":      {},
+	"chatModel.chat":              {},
+	"streamingChatModel.chat":     {},
+	"streamingChatModel.generate": {},
+}
+
+// isPromptCall reports whether a raw call chain is an LLM model invocation in
+// lang. st supplies the argument evidence for spellings that need it.
+func isPromptCall(lang string, st *taint.Statement, rawCall string) bool {
 	for _, key := range suffixKeys(rawCall) {
 		if _, ok := llmPromptCalls[key]; ok {
 			return true
 		}
+		if spec, ok := llmPromptCallsByLang[lang][key]; ok && spec.holds(st, rawCall) {
+			return true
+		}
 	}
 	return false
+}
+
+func (s promptCallSpec) holds(st *taint.Statement, rawCall string) bool {
+	if !s.kwargParameters {
+		return true
+	}
+	info, ok := st.SinkArgs[rawCall]
+	if !ok {
+		return false
+	}
+	// The recognizer records the Ruby keyword argument as one positional slot,
+	// literals blanked, keyword name kept: `parameters: { model:  , ... }`.
+	return len(info.PositionalArgs) > 0 &&
+		strings.HasPrefix(strings.TrimSpace(info.PositionalArgs[0]), "parameters:")
 }
 
 // suffixKeys returns the dotted suffixes of a call chain, longest first, so a

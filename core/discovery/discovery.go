@@ -123,6 +123,11 @@ var lockfileNames = map[string]bool{
 	"composer.lock":      true,
 	"bom.json":           true,
 	"sbom.json":          true,
+	"Package.resolved":   true,
+	"mix.lock":           true,
+	"gradle.lockfile":    true,
+	"Podfile.lock":       true,
+	"conan.lock":         true,
 }
 
 // containerNames contains exact file names that identify container files.
@@ -676,6 +681,53 @@ func (w *Walker) Walk() ([]Artifact, error) {
 	})
 
 	return artifacts, nil
+}
+
+// Ignores reports whether Walk would skip rel (root-relative, slash-separated)
+// under its ignore rules: the root patterns and every nested .gitignore on the
+// way down, with the tracked-file override and linked-worktree pruning applied
+// exactly as Walk applies them. scan.exclude and scan.include are not
+// consulted; callers filter those separately.
+//
+// It exists for findings nox did not walk to: a plugin walks the workspace
+// itself, and a gitignored file it reports must be judged by the decision the
+// core walk made, not by a second implementation of it (#830).
+func (w *Walker) Ignores(rel string) bool {
+	if !w.RespectGitignore || rel == "" || rel == "." {
+		return false
+	}
+	root, err := ResolveRoot(w.Root)
+	if err != nil {
+		return false
+	}
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return false
+	}
+	nested := map[string][]string{}
+	parts := strings.Split(rel, "/")
+	for i, part := range parts {
+		prefix := strings.Join(parts[:i+1], "/")
+		abs := filepath.Join(absRoot, filepath.FromSlash(prefix))
+		isDir := i < len(parts)-1
+		if isDir && part == ".git" {
+			return true
+		}
+		if w.isIgnored(absRoot, abs, filepath.FromSlash(prefix), nested) {
+			if !isDir {
+				return !w.TrackedPaths[prefix]
+			}
+			if !dirContainsAnyTracked(prefix, w.TrackedPaths) || IsLinkedWorktree(abs) {
+				return true
+			}
+		}
+		if isDir {
+			if pats, _ := LoadNestedGitignore(abs); len(pats) > 0 {
+				nested[abs] = pats
+			}
+		}
+	}
+	return false
 }
 
 // isIgnored reports whether a path should be skipped by the walker. It

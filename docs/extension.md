@@ -106,6 +106,12 @@ Nox provides generic MCP tools:
 - `plugin.list`
 - `plugin.call_tool`
 
+These are registered only when the server is constructed with a plugin host
+(`server.WithPluginHost`). `nox serve` attaches one when started with
+`--plugins`, hosting the installed plugins under the trust policy a scan of the
+same workspace applies; without the flag neither tool is offered. [The usage
+guide](usage.md#mcp-server) lists the tools.
+
 Additionally, Nox may expose **convenience aliases**:
 - `nox.dast.scan`
 - `nox.policy.evaluate`

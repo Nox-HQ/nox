@@ -9,6 +9,7 @@ import (
 
 	"github.com/nox-hq/nox-core/degrade"
 	"github.com/nox-hq/nox/core/mcpconfig"
+	"github.com/nox-hq/nox/core/rules"
 )
 
 // Connection represents a connection between AI components.
@@ -183,8 +184,7 @@ func extractAgentToolPermissions(path string, content []byte) []ToolPermissionSe
 	text := string(content)
 
 	// Pattern: tools: ["tool1", "tool2"] or allowed_tools: [...]
-	toolsRe := regexp.MustCompile(`(?i)(tools|allowed_tools|capabilities)\s*[:=]\s*\[([^\]]+)\]`)
-	for _, m := range toolsRe.FindAllStringSubmatch(text, -1) {
+	for _, m := range stringSubmatches(text, toolListRe.FindAllSubmatchIndex(content)) {
 		toolList := extractQuotedStrings(m[2])
 		if len(toolList) > 0 {
 			sets = append(sets, ToolPermissionSet{
@@ -243,10 +243,16 @@ func extractConnections(components []Component, toolSets []ToolPermissionSet) []
 	return conns
 }
 
+// toolListRe runs over whole files through the literal-prefix plan, as the
+// prompt patterns do; quotedStringRe only over a matched list.
+var (
+	toolListRe     = rules.MustCompilePlanned(`(?i)(tools|allowed_tools|capabilities)\s*[:=]\s*\[([^\]]+)\]`)
+	quotedStringRe = regexp.MustCompile(`['"]([^'"]+)['"]`)
+)
+
 func extractQuotedStrings(s string) []string {
-	re := regexp.MustCompile(`['"]([^'"]+)['"]`)
 	var result []string
-	for _, m := range re.FindAllStringSubmatch(s, -1) {
+	for _, m := range quotedStringRe.FindAllStringSubmatch(s, -1) {
 		result = append(result, m[1])
 	}
 	return result

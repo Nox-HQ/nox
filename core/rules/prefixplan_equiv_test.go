@@ -2,6 +2,7 @@ package rules_test
 
 import (
 	"bytes"
+	"hash/fnv"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -27,21 +28,32 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 	}
 	var planned []compiled
 	total := 0
+	// Every file's literals come from one index over the built-in rules, as
+	// ScanFile's do (literalindex.go).
+	index := rules.NewLiteralIndex(catalog.Rules())
 	for _, r := range catalog.Rules() {
-		if r.MatcherType != "regex" || r.Pattern == "" {
+		// An absence rule's anchor is located the same way (#736): its
+		// positions decide where a missing property is reported.
+		pattern := r.Pattern
+		if r.MatcherType == "absence" {
+			pattern = r.AbsenceAnchor
+		} else if r.MatcherType != "regex" {
+			continue
+		}
+		if pattern == "" {
 			continue
 		}
 		total++
-		if _, ok := rules.PrefixFindAll(r.Pattern, []byte("x"), false); !ok {
+		if _, ok := rules.PrefixFindAll(nil, pattern, []byte("x"), false); !ok {
 			continue
 		}
 		var kws [][]byte
 		for _, k := range r.Keywords {
 			kws = append(kws, []byte(strings.ToLower(k)))
 		}
-		planned = append(planned, compiled{r.ID, regexp.MustCompile(r.Pattern), kws})
+		planned = append(planned, compiled{r.ID, regexp.MustCompile(pattern), kws})
 	}
-	t.Logf("%d of %d regex rules take the literal-prefix path", len(planned), total)
+	t.Logf("%d of %d regex patterns and absence anchors take the literal-prefix path", len(planned), total)
 	if len(planned) == 0 {
 		t.Fatal("no rule has a plan; the equivalence below checks nothing")
 	}
@@ -50,7 +62,7 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 	if extra := os.Getenv("NOX_PREFIX_EQUIV_CORPUS"); extra != "" {
 		roots = append(roots, extra)
 	}
-	files, matched, seen := 0, 0, 0
+	files, matched := 0, 0
 	for _, root := range roots {
 		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -73,16 +85,18 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 			if err != nil || strings.IndexByte(string(content[:min(len(content), 8000)]), 0) >= 0 {
 				return nil
 			}
-			seen++
 			// Under -race the detector multiplies the cost of the full-scan
 			// reference by ~10 and finds nothing here: the property is about
-			// matching, not concurrency. Check a fixed tenth of the files so
-			// CI stays inside its timeout; every other run checks them all.
-			if raceEnabled && seen%10 != 0 {
+			// matching, not concurrency. Check a sample so CI stays inside its
+			// timeout; every other run checks every file.
+			if raceEnabled && !inRaceSample(p, len(content)) {
 				return nil
 			}
 			files++
 			lower := bytes.ToLower(content)
+			// One cache for the file, shared by every rule, as ScanFile
+			// shares it: a literal one rule searched must answer the next.
+			lits := rules.NewFileLiterals(index)
 			for _, c := range planned {
 				// Only where the engine would run the rule: its keyword
 				// pre-filter passes. That is every case the fast path can
@@ -93,7 +107,7 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 				}
 				// The submatch form carries the whole-match pair too, so it
 				// checks both shapes the matcher asks for.
-				got, ok := rules.PrefixFindAll(c.re.String(), content, true)
+				got, ok := rules.PrefixFindAll(lits, c.re.String(), content, true)
 				if !ok {
 					continue // a fold outlier in this file: the full scan runs
 				}
@@ -113,6 +127,28 @@ func TestPrefixPlanMatchesFindAll(t *testing.T) {
 	if matched == 0 {
 		t.Fatal("no rule matched any file; the equivalence was never exercised")
 	}
+}
+
+// raceSampleMaxBytes bounds a file checked under -race. The largest files
+// under the walked roots are rule tables of several hundred kilobytes; one of
+// them costs more under the race detector than the rest of the sample.
+const raceSampleMaxBytes = 64 << 10
+
+// inRaceSample chooses the files checked under -race: a tenth of them, picked
+// by each file's own path, and none above raceSampleMaxBytes.
+//
+// It used to take every tenth file in walk order. Which files that is depends
+// on how many sort ahead of them, so adding a file anywhere moved the sample:
+// eight new files in one pull request moved it onto secrets/rules.go (448 KB),
+// and core/rules went from under three minutes to past CI's ten-minute
+// timeout on macOS. Picked by path, a file is in or out whatever else exists.
+func inRaceSample(path string, size int) bool {
+	if size > raceSampleMaxBytes {
+		return false
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(filepath.ToSlash(path)))
+	return h.Sum32()%10 == 0
 }
 
 func containsAny(content []byte, keywords [][]byte) bool {

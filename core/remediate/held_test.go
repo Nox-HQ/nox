@@ -116,8 +116,13 @@ func TestTransitiveWithoutAReadableNPMLockfileIsNotPromised(t *testing.T) {
 	}
 	for name, files := range cases {
 		it := onlyItem(t, planFor(t, files, dep("qs", "6.13.0", "6.16.0", "GHSA-qs-1", "fp-qs", findings.SeverityMedium)))
-		if it.Class != ClassReview || it.Kind != KindHeldUpgrade {
-			t.Errorf("%s: got %s/%s, want needs_review/held_upgrade", name, it.Class, it.Kind)
+		// nox cannot tell beforehand: the command is offered for review, with
+		// why, and apply checks where it lands.
+		if it.Class != ClassReview || it.Kind != KindUpgrade || it.Command == "" {
+			t.Errorf("%s: got %s/%s command %q, want needs_review/upgrade with the command", name, it.Class, it.Kind, it.Command)
+		}
+		if !strings.Contains(it.Why, "cannot tell beforehand") {
+			t.Errorf("%s: why = %q, want it to say nox cannot tell beforehand", name, it.Why)
 		}
 		if !strings.Contains(it.Why, entry[name]) {
 			t.Errorf("%s: why = %q, want the entry %s", name, it.Why, entry[name])
@@ -125,33 +130,67 @@ func TestTransitiveWithoutAReadableNPMLockfileIsNotPromised(t *testing.T) {
 	}
 }
 
-func TestNPMRanges(t *testing.T) {
-	v := func(s string) npmVersion { x, _ := parseNPMVersion(s); return x }
-	cases := []struct {
-		version, rng string
-		in, known    bool
-	}{
-		{"6.16.0", "^6.11.0", true, true},
-		{"6.16.0", "6.13.0", false, true},
-		{"6.16.0", "~6.13.0", false, true},
-		{"6.13.5", "~6.13.0", true, true},
-		{"7.0.0", "^6.11.0", false, true},
-		{"0.2.5", "^0.2.0", true, true},
-		{"0.3.0", "^0.2.0", false, true},
-		{"1.20.9", "1.x", true, true},
-		{"1.20.9", "*", true, true},
-		{"1.20.9", ">=1.20.0 <1.20.5", false, true},
-		{"1.20.9", ">=1.20.0 <2", true, true},
-		{"1.20.9", "1.0.0 - 1.20.5", false, true},
-		{"1.20.9", "<1.0.0 || ^1.20.0", true, true},
-		{"1.20.9", "latest", false, false},
-		{"1.20.9", "git+https://example.com/x.git", false, false},
-		{"1.20.9", "^1.0.0-beta.1", false, false},
+// A major fix for a transitive package is held the same way a minor one is:
+// the parents' ranges decide whether npm can move it. Before this, the plan
+// said only "check the release notes" for minimatch 10.2.6 -> 11.0.1 in nox's
+// own VS Code extension, and apply --include-major ran npm update, which left
+// it at 10.2.6 because every vscode-languageclient release requires ^10.2.6.
+func TestHeldMajorTransitiveNamesItsParentInsteadOfReleaseNotes(t *testing.T) {
+	lock := `{"lockfileVersion":3,"packages":{
+"":{"dependencies":{"vscode-languageclient":"^10.1.2"}},
+"node_modules/vscode-languageclient":{"version":"10.1.2","dependencies":{"minimatch":"^10.2.6"}},
+"node_modules/minimatch":{"version":"10.2.6"}}}`
+	it := onlyItem(t, planFor(t, map[string]string{"package.json": `{"dependencies":{"vscode-languageclient":"^10.1.2"}}`, "package-lock.json": lock},
+		dep("minimatch", "10.2.6", "11.0.1", "GHSA-g3hv-75wg-m249", "fp-mm", findings.SeverityMedium)))
+	if it.Kind != KindHeldUpgrade || it.Command != "" {
+		t.Fatalf("got %s/%s command %q, want held_upgrade with no command; why=%s", it.Class, it.Kind, it.Command, it.Why)
 	}
-	for _, c := range cases {
-		in, known := satisfiesNPMRange(v(c.version), c.rng)
-		if in != c.in || known != c.known {
-			t.Errorf("%s in %q = (%v,%v), want (%v,%v)", c.version, c.rng, in, known, c.in, c.known)
+	for _, want := range []string{"vscode-languageclient@10.1.2 requires minimatch ^10.2.6", `"overrides": { "minimatch": "11.0.1" }`, "major"} {
+		if !strings.Contains(it.Why, want) {
+			t.Errorf("why = %q, want %q", it.Why, want)
 		}
+	}
+	if strings.Contains(it.Why, "same major version") {
+		t.Errorf("a major fix is described as same-major: %q", it.Why)
+	}
+}
+
+// A major fix that every parent's range admits stays an ordinary major
+// upgrade: release notes are then the right advice.
+func TestMajorTransitiveEveryParentAllowsStaysAMajorUpgrade(t *testing.T) {
+	lock := `{"lockfileVersion":3,"packages":{
+"":{"dependencies":{"glob":"^12.0.0"}},
+"node_modules/glob":{"version":"12.0.0","dependencies":{"minimatch":"^10.2.6 || ^11.0.0"}},
+"node_modules/minimatch":{"version":"10.2.6"}}}`
+	it := onlyItem(t, planFor(t, map[string]string{"package.json": `{"dependencies":{"glob":"^12.0.0"}}`, "package-lock.json": lock},
+		dep("minimatch", "10.2.6", "11.0.1", "GHSA-g3hv-75wg-m249", "fp-mm", findings.SeverityMedium)))
+	if it.Kind != KindMajorUpgrade || it.Command == "" {
+		t.Fatalf("got %s/%s command %q, want major_upgrade with a command; why=%s", it.Class, it.Kind, it.Command, it.Why)
+	}
+}
+
+func pyDep(file string) findings.Finding {
+	f := dep("requests", "2.31.0", "2.32.0", "GHSA-py", "fp-py", findings.SeverityMedium)
+	f.Location.FilePath = file
+	f.Metadata["ecosystem"] = "pypi"
+	return f
+}
+
+// A Python fix is an edit of the exact pin in the requirements file the
+// finding names; the plan shows that edit, not a pip command that installs
+// into some environment and leaves the file as it was.
+func TestPyPIExactPinIsAnEditInThePlan(t *testing.T) {
+	it := onlyItem(t, planFor(t, map[string]string{"requirements.txt": "requests==2.31.0\n"}, pyDep("requirements.txt")))
+	if it.Class != ClassSafe || it.Command != "set requests==2.32.0 in requirements.txt" {
+		t.Fatalf("got %s/%s command %q", it.Class, it.Kind, it.Command)
+	}
+}
+
+// A lockfile is its resolver's to move: manual, with the reason and the
+// resolver's own command, and nothing offered for apply to run.
+func TestPyPILockfileIsManualInThePlan(t *testing.T) {
+	it := onlyItem(t, planFor(t, map[string]string{"poetry.lock": ""}, pyDep("poetry.lock")))
+	if it.Kind != KindManualUpgrade || it.Command != "" || !strings.Contains(it.Needs, "poetry update requests") {
+		t.Fatalf("got %s/%s command %q needs %q", it.Class, it.Kind, it.Command, it.Needs)
 	}
 }

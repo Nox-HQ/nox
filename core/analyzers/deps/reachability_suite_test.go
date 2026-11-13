@@ -76,7 +76,7 @@ func TestReachabilitySuiteMatchesGroundTruth(t *testing.T) {
 	for name, exp := range loadCases(t) {
 		t.Run(name, func(t *testing.T) {
 			dir := filepath.Join(suiteDir(), name)
-			linked, linkedKnown := goImportedPackages(context.Background(), dir)
+			linked, linkedKnown, _ := goImportedPackages(context.Background(), dir)
 			reachable, determined := goVulnReachable(exp.AdvisoryImports, linked, linkedKnown)
 
 			if determined != exp.WantDetermined {
@@ -108,7 +108,7 @@ func TestSuiteStatesReachTheCapabilityMatrix(t *testing.T) {
 				t.Fatal("expect.json declares no want_state")
 			}
 			dir := filepath.Join(suiteDir(), name)
-			linked, linkedKnown := goImportedPackages(context.Background(), dir)
+			linked, linkedKnown, _ := goImportedPackages(context.Background(), dir)
 			r, _ := goSymbolReferenced(exp.AdvisoryImports, linked, linkedKnown)
 
 			// unsupported_ecosystem never reaches the Go path at all: the
@@ -143,7 +143,7 @@ func TestUndeterminedOutcomesReachTheFinding(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			dir := filepath.Join(suiteDir(), name)
-			linked, linkedKnown := goImportedPackages(context.Background(), dir)
+			linked, linkedKnown, _ := goImportedPackages(context.Background(), dir)
 			r, _ := goSymbolReferenced(exp.AdvisoryImports, linked, linkedKnown)
 
 			meta := map[string]string{}
@@ -178,7 +178,7 @@ func TestGateB(t *testing.T) {
 	var suppressible []string
 	for name, exp := range loadCases(t) {
 		dir := filepath.Join(suiteDir(), name)
-		linked, linkedKnown := goImportedPackages(context.Background(), dir)
+		linked, linkedKnown, _ := goImportedPackages(context.Background(), dir)
 		reachable, determined := goVulnReachable(exp.AdvisoryImports, linked, linkedKnown)
 
 		// The only honest basis for hiding a finding: the analysis ran, and it

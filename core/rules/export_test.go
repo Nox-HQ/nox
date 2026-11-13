@@ -5,14 +5,27 @@ import (
 	"strings"
 )
 
+// FileLiterals is the per-file literal cache ScanFile shares across rules.
+type FileLiterals = fileLiterals
+
+// LiteralIndex is the one-pass index of every plan's literals.
+type LiteralIndex = literalIndex
+
+// NewLiteralIndex builds the index ScanFile would for rules.
+func NewLiteralIndex(rules []*Rule) *LiteralIndex { return newLiteralIndex(rules) }
+
+// NewFileLiterals returns a per-file cache answering from x, as ScanFile's.
+func NewFileLiterals(x *LiteralIndex) *FileLiterals { return &fileLiterals{index: x} }
+
 // PrefixFindAll exposes the literal-prefix path to the equivalence test:
 // the locations it returns for pattern, and whether the pattern has a plan.
-func PrefixFindAll(pattern string, content []byte, submatch bool) ([][]int, bool) {
+// lits, when not nil, is shared with the other patterns run on content.
+func PrefixFindAll(lits *FileLiterals, pattern string, content []byte, submatch bool) ([][]int, bool) {
 	p := planFor(pattern)
-	if p == nil || !p.usable(content) {
+	if p == nil || !p.usableIn(lits, content) {
 		return nil, false
 	}
-	return p.findAll(content, submatch), true
+	return p.findAll(lits, content, submatch), true
 }
 
 // KeywordsPresent exposes the keyword index to the fixture test: for each of
@@ -27,6 +40,18 @@ func KeywordsPresent(keywords []string, content []byte) []bool {
 	out := make([]bool, len(keywords))
 	for i, k := range keywords {
 		out[i] = present[at[strings.ToLower(k)]]
+	}
+	return out
+}
+
+// AbsenceMatchShared runs each rule through one AbsenceMatcher sharing one
+// file scope, as ScanFile does, and returns each rule's results in order.
+func AbsenceMatchShared(rules []*Rule, content []byte) [][]MatchResult {
+	m := NewAbsenceMatcher()
+	var scope fileScope
+	out := make([][]MatchResult, len(rules))
+	for i, r := range rules {
+		out[i] = m.matchScoped(&scope, content, r)
 	}
 	return out
 }

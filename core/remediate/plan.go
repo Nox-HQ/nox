@@ -18,7 +18,6 @@
 package remediate
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -28,6 +27,8 @@ import (
 	"github.com/nox-hq/nox/core/catalog"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
+	"github.com/nox-hq/nox/core/npmtree"
+	"github.com/nox-hq/nox/core/pypipin"
 	"github.com/nox-hq/nox/core/rules"
 )
 
@@ -213,7 +214,7 @@ func classify(is *assess.Issue, in Input, reader *fileReader) Item {
 	case assess.KindUpgrade:
 		classifyUpgrade(&it, is, in.Root)
 	case assess.KindMajorUpgrade:
-		classifyMajor(&it, is)
+		classifyMajor(&it, is, in.Root)
 	case assess.KindNoFix:
 		classifyNoFix(&it, is)
 	default:
@@ -224,56 +225,80 @@ func classify(is *assess.Issue, in Input, reader *fileReader) Item {
 
 func classifyUpgrade(it *Item, is *assess.Issue, root string) {
 	a := is.Upgrade
-	it.Class, it.Kind, it.Upgrade, it.Command = ClassSafe, KindUpgrade, a, a.Command()
+	it.Class, it.Kind, it.Upgrade, it.Command = ClassSafe, KindUpgrade, a, a.CommandIn(root)
 	it.Why = "The fix is published and stays on the same major version (" + versionStep(a) +
 		"), so it should not change how your code uses the package."
-	if !transitiveNPM(root, a) {
+	if manualPyPI(it, a, root) {
 		return
 	}
-	// A transitive package moves only as far as every package that needs it
-	// allows. Promising "safe to apply" for one a parent pins is a plan apply
-	// cannot keep, so the lockfile decides.
-	reach := analyzeNPMReach(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.To)
-	if reach.Established && len(reach.Holds) == 0 {
+	if transitiveNPM(root, a) && !holdTransitive(it, a, root, false) {
 		it.Why += " It is not a package you list yourself; the packages that use it allow the fixed version, " +
 			"so nox asks npm to move it within their ranges."
-		return
+	}
+}
+
+// holdTransitive marks it held when a is a transitive npm upgrade that a
+// parent's declared range keeps below the fix, and reports whether it did. It
+// reports false, leaving it unchanged, for a package the project lists itself
+// and for one every parent allows; the caller's own wording then stands.
+//
+// A transitive package moves only as far as every package that needs it
+// allows, whatever the size of the step. Promising a move for one a parent pins
+// is a plan apply cannot keep, so the lockfile decides: for a minor fix and a
+// major one alike.
+func holdTransitive(it *Item, a *fix.UpgradeAction, root string, major bool) bool {
+	if !transitiveNPM(root, a) {
+		return false
+	}
+	reach := npmtree.ReachOf(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.To)
+	if reach.Movable() {
+		return false
+	}
+	if !reach.Established {
+		// nox cannot tell beforehand. The command is offered, as the finding
+		// and apply offer it, for a person to look at first: apply reads the
+		// lockfile back and reports a copy a parent kept below the fix.
+		it.Class = ClassReview
+		it.Why = uncertainReason(upgradePlan{pkg: a.Package, step: versionStep(a), to: a.To, major: major}, reach)
+		return true
 	}
 	it.Class, it.Kind, it.Command = ClassReview, KindHeldUpgrade, ""
-	it.Why = heldReason(upgradePlan{pkg: a.Package, step: versionStep(a), to: a.To}, reach)
+	it.Why = heldReason(upgradePlan{pkg: a.Package, step: versionStep(a), to: a.To, major: major}, reach)
+	return true
+}
+
+// manualPyPI marks it manual when a is a Python fix nox does not make itself
+// (a range, hashes, a lockfile: core/pypipin), and reports whether it did.
+func manualPyPI(it *Item, a *fix.UpgradeAction, root string) bool {
+	if a.Ecosystem != "pypi" || root == "" {
+		return false
+	}
+	adv := pypipin.AdviceFor(filepath.Join(root, a.Manifest), a.Package, a.From, a.To)
+	if adv.Command != "" {
+		return false
+	}
+	it.Class, it.Kind, it.Command = ClassInfo, KindManualUpgrade, ""
+	it.Needs = adv.Manual
+	return true
 }
 
 // transitiveNPM reports whether an npm upgrade targets a package the project's
-// package.json does not declare. False when that cannot be read: nothing is
+// package.json does not list. False when that cannot be read: nothing is
 // claimed about a manifest nox did not see.
 func transitiveNPM(root string, a *fix.UpgradeAction) bool {
 	if root == "" || a.Ecosystem != "npm" {
 		return false
 	}
-	data, err := os.ReadFile(filepath.Join(root, filepath.Dir(a.Manifest), "package.json"))
-	if err != nil {
-		return false
-	}
-	var manifest map[string]json.RawMessage
-	if json.Unmarshal(data, &manifest) != nil {
-		return false
-	}
-	for _, section := range []string{"dependencies", "devDependencies", "optionalDependencies"} {
-		var deps map[string]string
-		if json.Unmarshal(manifest[section], &deps) != nil {
-			continue
-		}
-		if _, ok := deps[a.Package]; ok {
-			return false
-		}
-	}
-	return true
+	return npmtree.Transitive(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package)
 }
 
-func classifyMajor(it *Item, is *assess.Issue) {
+func classifyMajor(it *Item, is *assess.Issue, root string) {
 	a := is.Upgrade
-	it.Class, it.Kind, it.Upgrade, it.Command = ClassReview, KindMajorUpgrade, a, a.Command()
+	it.Class, it.Kind, it.Upgrade, it.Command = ClassReview, KindMajorUpgrade, a, a.CommandIn(root)
 	it.Title = strings.TrimSuffix(it.Title, assess.MajorNote)
+	if manualPyPI(it, a, root) || holdTransitive(it, a, root, true) {
+		return
+	}
 	it.Why = "The fix is a new major version (" + versionStep(a) +
 		"). A major release is allowed to break code that uses the package, so check its release notes and run your tests."
 }
@@ -283,7 +308,7 @@ func versionStep(a *fix.UpgradeAction) string {
 	if from == "" {
 		from = "installed"
 	}
-	return from + " -> " + a.To
+	return from + " -> " + fix.SpelledLike(a.From, a.To)
 }
 
 func classifyNoFix(it *Item, is *assess.Issue) {
@@ -402,24 +427,49 @@ func classifyPatch(it *Item, is *assess.Issue, in Input, reader *fileReader) {
 // rule's own entry, the taint class, then the rule family's missing piece
 // joined to the rule's remediation guidance.
 func needsFor(is *assess.Issue, rs *rules.RuleSet) string {
+	if is.ValueClass == findings.ValueClassPublishedExample {
+		return needsPublishedExample
+	}
 	if n, ok := needsByRule[is.RuleID]; ok {
 		return n
 	}
 	if n, ok := needsByClass[is.VulnClass]; ok {
 		return n
 	}
-	missing := needsByFamily[catalog.Family(is.RuleID).Key]
+	family := catalog.Family(is.RuleID).Key
+	missing := needsByFamily[family]
 	if missing == "" {
 		missing = "Whether this is deliberate: the code alone does not say, and nox does not guess intent."
 	}
 	if rs != nil {
-		if r, ok := rs.ByID(is.RuleID); ok && strings.TrimSpace(r.Remediation) != "" {
-			return missing + " To supply it: " + strings.TrimSpace(r.Remediation)
+		if r, ok := rs.ByID(is.RuleID); ok {
+			if family == "secrets" && r.Severity == findings.SeverityInfo {
+				missing = needsNoCredential
+			}
+			if guidance := strings.TrimSpace(r.Remediation); guidance != "" {
+				return missing + " To supply it: " + guidance
+			}
 		}
 	}
 	return missing + " To supply it: open the flagged location and run nox explain " + is.RuleID +
 		" for what the rule looks for."
 }
+
+// needsNoCredential is what nox is missing for a rule in the secrets family
+// that reports something other than a credential: a resource identifier, a
+// public key. Every such rule is declared at info severity. The family's own
+// sentence tells the reader to treat the value as compromised and rotate it,
+// which is work that does not exist when nothing secret was exposed.
+const needsNoCredential = "A decision about whether this value belongs in the file. " +
+	"It is not a credential, so nothing was exposed and there is nothing to rotate."
+
+// needsPublishedExample is what nox is missing for a value its vendor prints in
+// documentation. The rule that matched is a credential rule, and its guidance
+// (rotate, treat as compromised) describes a leak that did not happen.
+const needsPublishedExample = "A decision about whether the example stays in the file. " +
+	"The vendor publishes this value in its documentation and it authenticates nothing, " +
+	"so nothing was exposed and there is nothing to rotate. " +
+	"To stop it being reported, replace it with a placeholder such as <your-key>, or add it to the baseline."
 
 // needsByFamily is what nox is missing for a rule that has no entry of its own,
 // by rule family. Each states the information, not the edit.

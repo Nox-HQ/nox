@@ -33,6 +33,30 @@ const (
 	arnResource = `[A-Za-z0-9_.:/+=,@$*-]+`
 )
 
+// documentationAccounts are the account IDs AWS's own documentation uses as
+// placeholders (IAM identifiers reference, AWS CLI and SDK guides). An ARN
+// under one is an example: it ties code to no environment, which is the claim
+// every ARN rule makes. 777788889999 is sometimes cited too; it was not found
+// in AWS's documentation, so it is not here.
+var documentationAccounts = map[string]bool{
+	"123456789012": true,
+	"111122223333": true,
+	"444455556666": true,
+}
+
+// issuedAccount wraps an ARN validator so an ARN in a documentation account is
+// not reported. An ARN without an account segment (S3) is judged by valid
+// alone.
+func issuedAccount(valid func(string) bool) func(string) bool {
+	return func(arn string) bool {
+		// arn:partition:service:region:account:resource
+		if parts := strings.SplitN(arn, ":", 6); len(parts) == 6 && documentationAccounts[parts[4]] {
+			return false
+		}
+		return valid(arn)
+	}
+}
+
 // regionalARN is the candidate pattern for service svc's ARNs whose resource
 // segment begins with resPrefix: arn:partition:svc:region:account:resPrefix...
 func regionalARN(svc, resPrefix string) string {

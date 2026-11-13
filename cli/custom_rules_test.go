@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"encoding/json"
@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 // writeFile creates a file in the given directory with the specified content.
@@ -136,7 +138,7 @@ func TestScan_MergedRules(t *testing.T) {
 	// Create a target that triggers both a built-in rule (SEC-001, AWS key)
 	// and a custom rule.
 	scanDir := t.TempDir()
-	writeFile(t, scanDir, "secrets.env", `AWS_KEY=AKIAIOSFODNN7EXAMPLE
+	writeFile(t, scanDir, "secrets.env", `AWS_KEY=`+testkey.AWSAccessKeyID()+`
 CUSTOM_SECRET_abcdef0123456789=leaked
 `)
 

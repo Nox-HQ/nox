@@ -13,6 +13,7 @@ import (
 
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/deps"
+	"github.com/nox-hq/nox/core/image"
 	"github.com/nox-hq/nox/core/report"
 )
 
@@ -22,19 +23,37 @@ import (
 
 // CDXReport is the top-level CycloneDX BOM structure.
 type CDXReport struct {
-	BOMFormat       string             `json:"bomFormat"`
-	SpecVersion     string             `json:"specVersion"`
-	SerialNumber    string             `json:"serialNumber"`
-	Version         int                `json:"version"`
-	Metadata        CDXMetadata        `json:"metadata"`
-	Components      []CDXComponent     `json:"components"`
+	BOMFormat    string         `json:"bomFormat"`
+	SpecVersion  string         `json:"specVersion"`
+	SerialNumber string         `json:"serialNumber"`
+	Version      int            `json:"version"`
+	Metadata     CDXMetadata    `json:"metadata"`
+	Components   []CDXComponent `json:"components"`
+	// Dependencies is set for an artifact's BOM: the artifact depends on each
+	// component it contains.
+	Dependencies    []CDXDependency    `json:"dependencies,omitempty"`
 	Vulnerabilities []CDXVulnerability `json:"vulnerabilities,omitempty"`
+}
+
+// CDXDependency says one component depends on others, by bom-ref.
+type CDXDependency struct {
+	Ref       string   `json:"ref"`
+	DependsOn []string `json:"dependsOn"`
+}
+
+// CDXHash is a component's digest.
+type CDXHash struct {
+	Alg     string `json:"alg"`
+	Content string `json:"content"`
 }
 
 // CDXMetadata holds tool and timestamp information.
 type CDXMetadata struct {
 	Timestamp string    `json:"timestamp"`
 	Tools     []CDXTool `json:"tools"`
+	// Component is what the BOM describes, for an artifact's BOM: the
+	// artifact, named, with its digest.
+	Component *CDXComponent `json:"component,omitempty"`
 }
 
 // CDXTool identifies the tool that generated the BOM.
@@ -66,6 +85,7 @@ type CDXComponent struct {
 	// PURL is omitted when the component has no package-URL type, as a model
 	// served by an API provider has none.
 	PURL     string              `json:"purl,omitempty"`
+	Hashes   []CDXHash           `json:"hashes,omitempty"`
 	Licenses []CDXLicenseWrapper `json:"licenses,omitempty"`
 }
 
@@ -76,6 +96,9 @@ type CDXVulnerability struct {
 	Ratings     []CDXRating `json:"ratings,omitempty"`
 	Description string      `json:"description,omitempty"`
 	Affects     []CDXAffect `json:"affects"`
+	// Analysis is set when nox decided the vulnerability does not affect
+	// this product (see WithFindings).
+	Analysis *CDXAnalysis `json:"analysis,omitempty"`
 }
 
 // CDXSource identifies the vulnerability database source.
@@ -100,6 +123,22 @@ type CycloneDXReporter struct {
 	// aiInventory supplies the machine-learning-model components (the
 	// ML-BOM). Nil writes a dependency-only SBOM.
 	aiInventory *ai.Inventory
+	// verdicts are the not-impacting decisions from the scan's findings,
+	// written as each vulnerability's analysis. Nil writes none.
+	verdicts map[verdictKey]*CDXAnalysis
+	// subject is the artifact the BOM describes. Zero for a scan's BOM.
+	subject spdxSubject
+}
+
+// cdxSubjectRef is the subject's bom-ref.
+const cdxSubjectRef = "subject"
+
+// WithSubject makes the BOM describe one artifact, such as a release archive:
+// metadata.component names it with its SHA-256, it depends on each component,
+// and the serial number derives from its digest.
+func (r *CycloneDXReporter) WithSubject(name, sha256Hex string) *CycloneDXReporter {
+	r.subject = spdxSubject{name: name, sha256: sha256Hex}
+	return r
 }
 
 // NewCycloneDXReporter returns a reporter configured with the given tool version.
@@ -206,11 +245,12 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 		type vulnEntry struct {
 			origIdx int
 			vuln    deps.Vulnerability
+			pkg     deps.Package
 		}
 		var entries []vulnEntry
 		for idx, vulns := range allVulns {
 			for _, v := range vulns {
-				entries = append(entries, vulnEntry{origIdx: idx, vuln: v})
+				entries = append(entries, vulnEntry{origIdx: idx, vuln: v, pkg: pkgs[idx]})
 			}
 		}
 		sort.Slice(entries, func(i, j int) bool {
@@ -239,6 +279,7 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 				},
 				Description: e.vuln.Summary,
 				Affects:     []CDXAffect{{Ref: ref}},
+				Analysis:    r.analysisFor(e.pkg, e.vuln),
 			}
 			if e.vuln.Severity != "" {
 				cdxVuln.Ratings = []CDXRating{{Severity: string(e.vuln.Severity)}}
@@ -247,10 +288,29 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 		}
 	}
 
+	serial := deterministicSerialURN(components)
+	var subject *CDXComponent
+	var dependencies []CDXDependency
+	if r.subject.name != "" {
+		subject = &CDXComponent{
+			Type:    "file",
+			BOMRef:  cdxSubjectRef,
+			Name:    r.subject.name,
+			Version: "",
+			Hashes:  []CDXHash{{Alg: "SHA-256", Content: r.subject.sha256}},
+		}
+		refs := make([]string, 0, len(components))
+		for i := range components {
+			refs = append(refs, components[i].BOMRef)
+		}
+		dependencies = []CDXDependency{{Ref: cdxSubjectRef, DependsOn: refs}}
+		serial = serialFromDigest(r.subject.sha256)
+	}
+
 	doc := CDXReport{
 		BOMFormat:    "CycloneDX",
 		SpecVersion:  "1.5",
-		SerialNumber: deterministicSerialURN(components),
+		SerialNumber: serial,
 		Version:      1,
 		Metadata: CDXMetadata{
 			Timestamp: report.GeneratedAt(),
@@ -263,8 +323,10 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 			},
 		},
 		Components:      components,
+		Dependencies:    dependencies,
 		Vulnerabilities: cdxVulns,
 	}
+	doc.Metadata.Component = subject
 
 	return json.MarshalIndent(doc, "", "  ")
 }
@@ -308,8 +370,19 @@ type SPDXPackage struct {
 	DeclaredLicense  string            `json:"licenseDeclared"`
 	DownloadLocation string            `json:"downloadLocation"`
 	FilesAnalyzed    bool              `json:"filesAnalyzed"`
+	Checksums        []SPDXChecksum    `json:"checksums,omitempty"`
+	PrimaryPurpose   string            `json:"primaryPackagePurpose,omitempty"`
 	ExternalRefs     []SPDXExternalRef `json:"externalRefs,omitempty"`
 }
+
+// SPDXChecksum is a package checksum.
+type SPDXChecksum struct {
+	Algorithm     string `json:"algorithm"`
+	ChecksumValue string `json:"checksumValue"`
+}
+
+// spdxSubjectID is the SPDX element for the artifact a document describes.
+const spdxSubjectID = "SPDXRef-Subject"
 
 // SPDXExternalRef is a reference to an external resource.
 type SPDXExternalRef struct {
@@ -328,6 +401,19 @@ type SPDXRelationship struct {
 // SPDXReporter generates SPDX 2.3 JSON SBOMs.
 type SPDXReporter struct {
 	ToolVersion string
+	subject     *spdxSubject
+}
+
+type spdxSubject struct{ name, sha256 string }
+
+// WithSubject makes the document describe one artifact, such as a release
+// archive: it is named after the artifact, the artifact is a package carrying
+// its SHA-256, and every inventoried package is CONTAINED by it. Without a
+// subject the document describes the packages themselves, as a scan of a
+// working tree does.
+func (r *SPDXReporter) WithSubject(name, sha256Hex string) *SPDXReporter {
+	r.subject = &spdxSubject{name: name, sha256: sha256Hex}
+	return r
 }
 
 // NewSPDXReporter returns a reporter configured with the given tool version.
@@ -423,19 +509,38 @@ func (r *SPDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, error
 
 		spdxPkgs = append(spdxPkgs, pkg)
 
-		relationships = append(relationships, SPDXRelationship{
-			SPDXElementID:      "SPDXRef-DOCUMENT",
-			RelationshipType:   "DESCRIBES",
-			RelatedSPDXElement: spdxID,
-		})
+		rel := SPDXRelationship{SPDXElementID: "SPDXRef-DOCUMENT", RelationshipType: "DESCRIBES", RelatedSPDXElement: spdxID}
+		if r.subject != nil {
+			rel = SPDXRelationship{SPDXElementID: spdxSubjectID, RelationshipType: "CONTAINS", RelatedSPDXElement: spdxID}
+		}
+		relationships = append(relationships, rel)
+	}
+
+	name, namespace := "nox-scan", spdxNamespace("scan", spdxPkgs)
+	if s := r.subject; s != nil {
+		name = s.name
+		// The artifact's digest identifies it, which is what the namespace is for.
+		namespace = "https://github.com/nox-hq/nox/spdx/" + s.sha256
+		spdxPkgs = append([]SPDXPackage{{
+			SPDXID:           spdxSubjectID,
+			Name:             s.name,
+			VersionInfo:      "NOASSERTION",
+			DeclaredLicense:  "NOASSERTION",
+			DownloadLocation: "NOASSERTION",
+			Checksums:        []SPDXChecksum{{Algorithm: "SHA256", ChecksumValue: s.sha256}},
+			PrimaryPurpose:   "ARCHIVE",
+		}}, spdxPkgs...)
+		relationships = append([]SPDXRelationship{{
+			SPDXElementID: "SPDXRef-DOCUMENT", RelationshipType: "DESCRIBES", RelatedSPDXElement: spdxSubjectID,
+		}}, relationships...)
 	}
 
 	doc := SPDXDocument{
 		SPDXVersion:       "SPDX-2.3",
 		DataLicense:       "CC0-1.0",
 		SPDXID:            "SPDXRef-DOCUMENT",
-		Name:              "nox-scan",
-		DocumentNamespace: "https://github.com/nox-hq/nox/scans",
+		Name:              name,
+		DocumentNamespace: namespace,
 		CreationInfo: SPDXCreationInfo{
 			Created:  report.GeneratedAt(),
 			Creators: []string{fmt.Sprintf("Tool: nox-%s", r.ToolVersion)},
@@ -462,29 +567,119 @@ func (r *SPDXReporter) WriteToFile(inventory *deps.PackageInventory, path string
 
 // purlEcosystems maps internal ecosystem names to PURL type prefixes.
 var purlEcosystems = map[string]string{
-	"go":       "golang",
-	"npm":      "npm",
-	"pypi":     "pypi",
-	"rubygems": "gem",
-	"cargo":    "cargo",
-	"maven":    "maven",
-	"gradle":   "maven",
-	"nuget":    "nuget",
+	// OpenSSL linked statically into a binary in an image: no package
+	// manager installed it, and purl's generic type is the spec's own
+	// example for exactly this ("pkg:generic/openssl@1.1.10g").
+	"openssl":   "generic",
+	"go":        "golang",
+	"npm":       "npm",
+	"pypi":      "pypi",
+	"rubygems":  "gem",
+	"cargo":     "cargo",
+	"maven":     "maven",
+	"gradle":    "maven",
+	"nuget":     "nuget",
+	"composer":  "composer",
+	"packagist": "composer",
+	"pub":       "pub",
+	"hex":       "hex",
+	"swift":     "swift",
+	"cocoapods": "cocoapods",
+	"conan":     "conan",
 }
 
 // buildPURL constructs a Package URL (purl) for the given package.
 // See https://github.com/package-url/purl-spec for the format.
 func buildPURL(p deps.Package) string {
+	if purl, ok := distroPURL(p); ok {
+		return purl
+	}
+	if p.Ecosystem == "docker" {
+		return dockerPURL(p)
+	}
 	purlType, ok := purlEcosystems[p.Ecosystem]
 	if !ok {
 		return ""
 	}
+	version := purlVersion(p.Version)
 	// Maven PURLs use namespace/name format for groupId:artifactId.
 	if (p.Ecosystem == "maven" || p.Ecosystem == "gradle") && strings.Contains(p.Name, ":") {
 		parts := strings.SplitN(p.Name, ":", 2)
-		return fmt.Sprintf("pkg:%s/%s/%s@%s", purlType, parts[0], parts[1], p.Version)
+		return fmt.Sprintf("pkg:%s/%s/%s@%s", purlType, parts[0], parts[1], version)
 	}
-	return fmt.Sprintf("pkg:%s/%s@%s", purlType, p.Name, p.Version)
+	return fmt.Sprintf("pkg:%s/%s@%s", purlType, p.Name, version)
+}
+
+// distroPURL is the purl of a distribution package read from an image
+// ("alpine:v3.22", "debian:12", "ubuntu:24.04:LTS"). nox records the source
+// package, which advisories name, so arch is "source"; distro names the
+// release.
+func distroPURL(p deps.Package) (string, bool) {
+	name, release, ok := strings.Cut(p.Ecosystem, ":")
+	if !ok {
+		return "", false
+	}
+	release, _, _ = strings.Cut(release, ":") // "24.04:LTS" -> "24.04"
+	var purlType string
+	switch name {
+	case "alpine":
+		purlType, release = "apk", strings.TrimPrefix(release, "v")
+	case "debian", "ubuntu":
+		purlType = "deb"
+	case "almalinux", "rocky":
+		// rpm advisories name binary packages, which nox records; the
+		// epoch is a qualifier in an rpm purl, not part of the version.
+		version, epoch := p.Version, ""
+		if e, rest, ok := strings.Cut(version, ":"); ok {
+			version, epoch = rest, "&epoch="+e
+		}
+		return fmt.Sprintf("pkg:rpm/%s/%s@%s?distro=%s-%s%s", name, p.Name, purlVersion(version), name, release, epoch), true
+	default:
+		return "", false
+	}
+	return fmt.Sprintf("pkg:%s/%s/%s@%s?arch=source&distro=%s-%s", purlType, name, p.Name, purlVersion(p.Version), name, release), true
+}
+
+// dockerPURL is the purl of a base image: Docker Hub's official images live
+// under library/, and another registry is named by repository_url.
+func dockerPURL(p deps.Package) string {
+	ref := image.ParseRef(p.Name)
+	purl := fmt.Sprintf("pkg:docker/%s@%s", ref.Repository, purlVersion(p.Version))
+	if ref.Registry != "registry-1.docker.io" {
+		purl += "?repository_url=" + ref.Registry
+	}
+	return purl
+}
+
+// purlVersion percent-encodes a version as the purl spec requires: "+" in
+// 2.36-9+deb12u14 is %2B, while ":" (a dpkg epoch, a digest's algorithm)
+// stays.
+func purlVersion(v string) string {
+	var b strings.Builder
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.IndexByte(".-_~:", c) >= 0 {
+			b.WriteByte(c)
+			continue
+		}
+		fmt.Fprintf(&b, "%%%02X", c)
+	}
+	return b.String()
+}
+
+// spdxNamespace derives a document namespace from the package set. SPDX 2.3
+// requires the namespace to be unique per document; the constant nox used
+// before made every nox SBOM claim the same identity. A content hash keeps
+// output reproducible, like deterministicSerialURN does for CycloneDX.
+func spdxNamespace(kind string, pkgs []SPDXPackage) string {
+	h := sha256.New()
+	for i := range pkgs {
+		_, _ = fmt.Fprintf(h, "%s\x00%s\n", pkgs[i].Name, pkgs[i].VersionInfo)
+		for _, ref := range pkgs[i].ExternalRefs {
+			_, _ = fmt.Fprintf(h, "\x00%s", ref.ReferenceLocator)
+		}
+	}
+	return fmt.Sprintf("https://github.com/nox-hq/nox/spdx/%s-%x", kind, h.Sum(nil))
 }
 
 // deterministicSerialURN returns a valid RFC-4122 UUID URN derived from the
@@ -498,7 +693,17 @@ func deterministicSerialURN(components []CDXComponent) string {
 	for i := range components {
 		_, _ = fmt.Fprintf(h, "%s\x00%s\x00%s\n", components[i].Name, components[i].Version, components[i].PURL)
 	}
-	sum := h.Sum(nil)
+	return uuidURNFrom(h.Sum(nil))
+}
+
+// serialFromDigest is an artifact BOM's serial: the artifact's own digest as a
+// UUID, so one file always gets the same serial and two files never share one.
+func serialFromDigest(sha256Hex string) string {
+	h := sha256.Sum256([]byte("nox-artifact-bom\x00" + sha256Hex))
+	return uuidURNFrom(h[:])
+}
+
+func uuidURNFrom(sum []byte) string {
 	// Format 16 bytes as a UUID, stamping the version (4) and variant (RFC 4122)
 	// nibbles so the result is a syntactically valid UUID.
 	var u [16]byte

@@ -54,26 +54,26 @@ func TestAudit_ResourceIdentifiersAreNotCredentials(t *testing.T) {
 	arn := "arn:" + "aws:"
 	cases := []struct{ id, file, src string }{
 		{"SEC-413", "main.tf", `resource "aws_s3_bucket" "b" {}` + "\nurl = \"https://assets.s3" + ".amazonaws.com/logo.png\"\n"},
-		{"SEC-414", "main.tf", `resource "aws_rds_cluster" "db" {}` + "\nsource = \"" + arn + "rds:eu-west-1:123456789012:cluster:db\"\n"},
+		{"SEC-414", "main.tf", `resource "aws_rds_cluster" "db" {}` + "\nsource = \"" + arn + "rds:eu-west-1:402918375610:cluster:db\"\n"},
 		{"SEC-418", "gke.tf", "# gke\nname = \"projects/my-proj-123/locations/europe-west1/" + "clusters/prod\"\n"},
 		{"SEC-419", "azure.tf", "azure_subscription_id = var.sub\nscope = \"/" + "subscriptions/0b1f6471-1bf0-4dda-aec3-111122223333/resourceGroups/rg\"\n"},
 		{"SEC-420", "azure.tf", "azure_tenant_id = var.t\nauthority = \"https://login.example/" + "tenants/72f988bf-86f1-41af-91ab-2d7cd011db47\"\n"},
 		{"SEC-422", "kv.tf", "azure_keyvault_uri = \"https://myvault.vault" + ".azure.net/\"\n"},
 		{"SEC-425", "auth.py", "ms_oauth_authority = \"https://login." + "microsoftonline.com/common\"\n"},
 		{"SEC-434", "app.properties", "# kafka\nbootstrap" + ".servers=broker1:9092\n"},
-		{"SEC-465", "iam.tf", `resource "aws_iam_role" "r" {}` + "\nrole = \"" + arn + "iam::123456789012:role/deploy\"\n"},
-		{"SEC-466", "sm.tf", `resource "aws_secretsmanager_secret" "s" {}` + "\nsecret = \"" + arn + "secretsmanager:eu-west-1:123456789012:secret:db-AbCdEf\"\n"},
-		{"SEC-511", "ecs.tf", `resource "aws_ecs_service" "s" {}` + "\ntask = \"" + arn + "ecs:eu-west-1:123456789012:task-definition/web:3\"\n"},
-		{"SEC-512", "fn.tf", `resource "aws_lambda_permission" "p" {}` + "\nfn = \"" + arn + "lambda:eu-west-1:123456789012:function:worker\"\n"},
+		{"SEC-465", "iam.tf", `resource "aws_iam_role" "r" {}` + "\nrole = \"" + arn + "iam::402918375610:role/deploy\"\n"},
+		{"SEC-466", "sm.tf", `resource "aws_secretsmanager_secret" "s" {}` + "\nsecret = \"" + arn + "secretsmanager:eu-west-1:402918375610:secret:db-AbCdEf\"\n"},
+		{"SEC-511", "ecs.tf", `resource "aws_ecs_service" "s" {}` + "\ntask = \"" + arn + "ecs:eu-west-1:402918375610:task-definition/web:3\"\n"},
+		{"SEC-512", "fn.tf", `resource "aws_lambda_permission" "p" {}` + "\nfn = \"" + arn + "lambda:eu-west-1:402918375610:function:worker\"\n"},
 		{"SEC-513", "s3.tf", `resource "aws_s3_bucket_policy" "p" {}` + "\nres = \"" + arn + "s3:::my-bucket/*\"\n"},
-		{"SEC-514", "rds.tf", `resource "aws_rds_cluster" "c" {}` + "\ndb = \"" + arn + "rds:eu-west-1:123456789012:db:main\"\n"},
-		{"SEC-515", "ec2.tf", `resource "aws_ec2_tag" "t" {}` + "\nid = \"" + arn + "ec2:eu-west-1:123456789012:instance/i-0123456789abcdef0\"\n"},
-		{"SEC-517", "ddb.tf", `resource "aws_dynamodb_table" "t" {}` + "\ntable = \"" + arn + "dynamodb:eu-west-1:123456789012:table/orders\"\n"},
-		{"SEC-518", "sqs.tf", `resource "aws_sqs_queue" "q" {}` + "\nqueue = \"" + arn + "sqs:eu-west-1:123456789012:jobs\"\n"},
+		{"SEC-514", "rds.tf", `resource "aws_rds_cluster" "c" {}` + "\ndb = \"" + arn + "rds:eu-west-1:402918375610:db:main\"\n"},
+		{"SEC-515", "ec2.tf", `resource "aws_ec2_tag" "t" {}` + "\nid = \"" + arn + "ec2:eu-west-1:402918375610:instance/i-0123456789abcdef0\"\n"},
+		{"SEC-517", "ddb.tf", `resource "aws_dynamodb_table" "t" {}` + "\ntable = \"" + arn + "dynamodb:eu-west-1:402918375610:table/orders\"\n"},
+		{"SEC-518", "sqs.tf", `resource "aws_sqs_queue" "q" {}` + "\nqueue = \"" + arn + "sqs:eu-west-1:402918375610:jobs\"\n"},
 		// SEC-519 matched a misspelt service segment and could never fire. Fixing
 		// the spelling alone would have made this ordinary subscription a High
 		// credential finding; it lands with the corrected claim instead.
-		{"SEC-519", "sns.tf", `resource "aws_sns_topic_subscription" "s" {` + "\n  topic_arn = \"" + arn + "sns:us-east-1:123456789012:ops-alerts\"\n}\n"},
+		{"SEC-519", "sns.tf", `resource "aws_sns_topic_subscription" "s" {` + "\n  topic_arn = \"" + arn + "sns:us-east-1:402918375610:ops-alerts\"\n}\n"},
 		{"SEC-532", "oci.py", "# oracle\nendpoint = \"https://objectstorage.eu-frankfurt-1.oraclecloud" + ".com/n/ns/b/bucket\"\n"},
 		// The same claim, outside the 31 the deviance research listed: identifier
 		// rules whose pattern contains `://`, which its family classifier filed
@@ -85,7 +85,7 @@ func TestAudit_ResourceIdentifiersAreNotCredentials(t *testing.T) {
 		{"SEC-417", "load.py", "# gcp_bucket\nsrc = \"gs" + "://my-data-bucket/2026/10/\"\n"},
 		{"SEC-461", "settings.py", "# amqp\nBROKER = \"amqp" + "://rabbit.internal:5672/vhost\"\n"},
 		{"SEC-462", "settings.py", "# smtp\nMAIL = \"smtp" + "://mail.internal:587\"\n"},
-		{"SEC-516", "iam.tf", "# aws_iam_role\nrole_arn = \"arn:" + "aws:iam::123456789012:role/deploy\"\n"},
+		{"SEC-516", "iam.tf", "# aws_iam_role\nrole_arn = \"arn:" + "aws:iam::402918375610:role/deploy\"\n"},
 		{"SEC-520", "gcp.py", "# gcp\nparent = \"projects/my-proj-123/" + "locations/europe-west1\"\n"},
 		{"SEC-521", "gke.py", "# gcp_gke\nAPI = \"https://container.googleapis" + ".com/v1/projects/my-proj/zones/z/clusters\"\n"},
 		{"SEC-522", "gcs.py", "# gcp_storage\nAPI = \"https://storage.googleapis" + ".com/storage/v1/b/my-bucket\"\n"},

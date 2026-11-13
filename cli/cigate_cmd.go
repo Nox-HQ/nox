@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"flag"
@@ -26,7 +26,7 @@ drift, not a clean repository, and treating it like an absent baseline silently
 deletes the gate.
 
 Flags:
-  --input     findings.json to read (default "findings.json")
+  --input     findings.json to read (default .nox/reports/findings.json, or ./findings.json from an older scan)
   --baseline  path the baseline would be at (default ".nox/baseline.json")
   --strict    gate a repository that has committed no baseline
   --github    emit ::error:: / ::warning:: annotations
@@ -47,7 +47,7 @@ Exit codes:
 // green check.
 func runCIGate(args []string) int {
 	fs := flag.NewFlagSet("ci-gate", flag.ContinueOnError)
-	input := fs.String("input", "findings.json", "findings.json to read")
+	input := fs.String("input", scanReportPath(".", "findings.json"), "findings.json to read")
 	baseline := fs.String("baseline", filepath.Join(".nox", "baseline.json"), "baseline path")
 	strict := fs.Bool("strict", false, "gate a repository with no committed baseline")
 	github := fs.Bool("github", false, "emit GitHub Actions annotations")

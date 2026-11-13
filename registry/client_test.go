@@ -685,3 +685,44 @@ func TestClientInvalidSchemaVersionV99(t *testing.T) {
 		t.Error("expected error for unsupported schema version 99")
 	}
 }
+
+// TestClientCachedEntryNeverFetches is #936: `nox scan --offline` reads the
+// registry to warn about a deprecated required plugin, and --offline promises
+// no network. CachedEntry answers from the cache at any age and otherwise not
+// at all.
+func TestClientCachedEntryNeverFetches(t *testing.T) {
+	idx := testIndex()
+	idx.Plugins[1].Deprecated = true
+	idx.Plugins[1].DeprecationNote = "superseded by core"
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		_ = json.NewEncoder(w).Encode(idx)
+	}))
+	defer srv.Close()
+
+	c := NewClient(WithCacheDir(t.TempDir()), WithCacheTTL(0)) // every cache is stale
+	_ = c.AddSource(Source{Name: "test", URL: srv.URL})
+
+	if _, ok := c.CachedEntry("nox/sbom"); ok {
+		t.Fatal("found an entry with nothing cached")
+	}
+	if hits != 0 {
+		t.Fatalf("CachedEntry with no cache made %d request(s)", hits)
+	}
+
+	if err := c.Refresh(context.Background()); err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	hits = 0
+	p, ok := c.CachedEntry("nox/sbom")
+	if !ok || !p.Deprecated || p.DeprecationNote != "superseded by core" {
+		t.Fatalf("CachedEntry(nox/sbom) = %+v, %v; want the deprecated entry", p, ok)
+	}
+	if _, ok := c.CachedEntry("nox/absent"); ok {
+		t.Error("found an entry for a plugin the index does not list")
+	}
+	if hits != 0 {
+		t.Errorf("CachedEntry over a stale cache made %d request(s)", hits)
+	}
+}

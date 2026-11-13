@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"context"
@@ -60,7 +60,7 @@ func runConfirm(args []string) int {
 		authorize  bool
 	)
 	fs.StringVar(&target, "target", "", "base URL of the running target app (required)")
-	fs.StringVar(&findingsIn, "findings", "findings.json", "path to findings.json from a prior nox scan")
+	fs.StringVar(&findingsIn, "findings", scanReportPath(".", "findings.json"), "path to findings.json from a prior nox scan")
 	fs.StringVar(&route, "route", "", "HTTP route to probe (e.g. /chat)")
 	fs.StringVar(&fieldsCSV, "fields", "", "comma-separated request fields to inject (e.g. persona,message)")
 	fs.StringVar(&appSrc, "app-src", "", "Flask app source to recover route/fields from")

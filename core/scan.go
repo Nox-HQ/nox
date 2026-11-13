@@ -28,6 +28,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
 	"github.com/nox-hq/nox/core/analyzers/fileperms"
+	"github.com/nox-hq/nox/core/analyzers/flowunits"
 	"github.com/nox-hq/nox/core/analyzers/hardening"
 	"github.com/nox-hq/nox/core/analyzers/iac"
 	"github.com/nox-hq/nox/core/analyzers/memsafe"
@@ -56,6 +57,7 @@ import (
 	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/rules"
 	"github.com/nox-hq/nox/core/suppress"
+	"github.com/nox-hq/nox/core/taint"
 	taintengine "github.com/nox-hq/nox/core/taint/engine"
 	"github.com/nox-hq/nox/core/vex"
 )
@@ -113,6 +115,12 @@ type ScanResult struct {
 	// or no dependency scope). Its advisories are then absent because it did not
 	// ask, and a comparison with a scan that did must not read that as a change.
 	AdvisoryLookupSkipped bool
+
+	// FeedsRequested is the URL of every signed feed this scan asked the
+	// network for (the slopsquat feed, the MCP advisory feed), sorted. A feed
+	// the local cache answered is not in it; a request that went unanswered
+	// is, because it still left the machine. Nil when no request was made.
+	FeedsRequested []string
 
 	// Capabilities is what this installation can establish at all, and
 	// Coverage is what each capability actually concluded about each subject.
@@ -191,7 +199,7 @@ type ScanResult struct {
 	Leads []Lead
 	// LeadChecks names each check that produces leads or opt-in findings and
 	// had something to read, in words that do not overclaim:
-	// "authorization and authentication (Express, Fastify, Flask, FastAPI, Next.js, NestJS and Django routes; ...; leads only)".
+	// "authorization and authentication (Express, Fastify, Flask, FastAPI, Next.js, NestJS, Django, Spring, JAX-RS, Go, ASP.NET Core, Rails and Laravel routes; ...; leads only)".
 	// Empty when, for example, the scan saw no such routes: it then says nothing about
 	// authorization.
 	LeadChecks []string
@@ -546,6 +554,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// distinguished from "did not look". Created before discovery, which
 	// records the files it deliberately did not read.
 	degradations := &degrade.Degradations{}
+	feedsRequested := &feedRequests{}
 
 	// Stage 1: Discover artifacts.
 	artifacts, err := discoverArtifacts(target, cfg, opts, degradations)
@@ -620,6 +629,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	if !vulnLookupEnabled {
 		depsOpts = append(depsOpts, deps.WithOSVDisabled())
 	}
+	if r := imageReader(cfg.Scan.Images, opts, vulnLookupEnabled); r != nil {
+		depsOpts = append(depsOpts, deps.WithImages(r))
+	}
 
 	// The advisory cache holds hydrated advisory documents between scans, keyed
 	// on the publisher's own `modified` stamp. It is a pure speed win with no
@@ -688,6 +700,11 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			src = newIntel(degradations)
 		}
 		depsOpts = append(depsOpts, deps.WithSource(src))
+		// Maven parents and BOMs the repository does not contain are fetched
+		// through the same service, under the same switch: offline, or with
+		// intelligence disabled, nothing is asked and those dependencies are
+		// reported unresolved.
+		depsOpts = append(depsOpts, deps.WithPOMSource(intelPOMSource{intel.NewClient(endpoint, intelHTTPClient())}))
 	}
 
 	depsAnalyzer := deps.NewAnalyzer(depsOpts...)
@@ -695,7 +712,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// signed feed by default, or from the feed .nox.yaml names. A misconfigured
 	// or tampered feed fails closed — the predictive dimension stays off and the
 	// failure is recorded as a visible degradation.
-	slopOpts := resolveSlopFeed(ctx, target, cfg, opts, degradations)
+	slopOpts := resolveSlopFeed(ctx, target, cfg, opts, degradations, feedsRequested)
 	slopAnalyzer := slop.NewAnalyzer(slopOpts...)
 	slopAnalyzer.RecordReasoningTo(reasons)
 	cryptoAnalyzer := weakcrypto.NewAnalyzer()
@@ -742,6 +759,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// Each analyzer is wrapped as a uniform task so sequential and parallel
 	// execution share one code path. The ai/deps tasks also capture their
 	// inventories into the shared collectors.
+	// Both flow analyzers read the same files' taint units, and extracting
+	// them is most of what either costs, so a scan running both extracts once.
+	flowsTogether := opts.Scopes.RunsAnalyzer("taintflow") && opts.Scopes.RunsAnalyzer("agentflow")
 	all := []struct {
 		analyzer string
 		run      analyzerTask
@@ -841,6 +861,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			return nil
 		}},
 		{"taintflow", func(c context.Context) error {
+			if flowsTogether {
+				return scanFlowsTogether(c, artifacts, taintflowAnalyzer, agentflowAnalyzer, addFindings)
+			}
 			fs, err := taintflowAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
@@ -849,6 +872,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			return nil
 		}},
 		{"agentflow", func(c context.Context) error {
+			if flowsTogether {
+				return nil // the taintflow task ran it
+			}
 			fs, err := agentflowAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
@@ -1025,11 +1051,13 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}
 		if out != nil {
 			kept, dropped := filterPluginFindingsByScope(out.Findings, target, cfg.Scan.Exclude, cfg.Scan.Include)
+			kept, ignored := dropGitignoredPluginFindings(kept, target, opts)
+			dropped += ignored
 			for i := range kept {
 				allFindings.Add(kept[i])
 			}
 			if dropped > 0 {
-				slog.DebugContext(ctx, "plugin findings dropped by scan.exclude",
+				slog.DebugContext(ctx, "plugin findings dropped by scan.exclude, scan.include or .gitignore",
 					"dropped", dropped, "kept", len(kept))
 			}
 			pluginEnrichments = out.Enrichments
@@ -1078,7 +1106,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		runMCPRelationalPass(ctx, target, artifacts, allFindings, degradations)
 		// Advisories for the registry packages those servers launch, from the
 		// signed MCP feed, when it can be checked (docs/mcp-advisory-feed.md).
-		runMCPFeedPass(ctx, target, cfg, opts, artifacts, allFindings, degradations)
+		runMCPFeedPass(ctx, target, cfg, opts, artifacts, allFindings, degradations, feedsRequested)
 	}
 
 	// Stage 3: Refine findings — apply rule config, generated/noise filters,
@@ -1122,6 +1150,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// last, over the refined findings, so what is shared is what the scan
 	// actually concluded rather than an intermediate state.
 	contributeObservations(ctx, cfg, opts, allFindings.Findings(), degradations)
+	contributeOutcomes(ctx, cfg, opts, target, allFindings.Findings(), degradations)
 
 	var leads []Lead
 	var leadChecks []string
@@ -1162,6 +1191,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		SASTProfile:        cfg.Scan.SAST.ResolvedProfile(),
 	}
 	res.AdvisoryLookupSkipped = !vulnLookupEnabled
+	res.FeedsRequested = feedsRequested.list()
 	return res, nil
 }
 
@@ -1179,7 +1209,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 // dimension and records a degradation rather than trusting the feed. When
 // offline is set, a URL feed never touches the network — it is served from the
 // verified cache or the load fails closed.
-func loadSlopFeed(ctx context.Context, target string, cfg SlopConfig, offline bool) (*slopfeed.Loaded, error) {
+func loadSlopFeed(ctx context.Context, target string, cfg SlopConfig, offline bool, requests *feedRequests) (*slopfeed.Loaded, error) {
 	opts := slopfeed.VerifyOptions{RequireSignature: cfg.RequireSignature}
 	if cfg.SignatureKeyPath != "" {
 		keyPath := cfg.SignatureKeyPath
@@ -1229,6 +1259,8 @@ func loadSlopFeed(ctx context.Context, target string, cfg SlopConfig, offline bo
 			TTL:      ttl,
 			Offline:  offline,
 			Verify:   opts,
+
+			OnRequest: requests.note,
 		})
 	}
 
@@ -1436,18 +1468,7 @@ func walkArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]discover
 	// ScanOptions.OutputDir.
 	walker.ExcludePatterns = append(walker.ExcludePatterns, outputArtifactPatterns(target, opts.OutputDir)...)
 	walker.IncludePatterns = cfg.Scan.Include
-	if opts.NoRespectGitignore {
-		walker.RespectGitignore = false
-	} else if tracked, err := git.TrackedFiles(target); err == nil {
-		// git never ignores a tracked file, so a source committed into an
-		// otherwise-ignored directory (e.g. `mobile/` in .gitignore) must still
-		// be scanned. Best-effort: outside a git repo this errors and the walker
-		// applies ignore rules as before.
-		walker.TrackedPaths = make(map[string]bool, len(tracked))
-		for _, f := range tracked {
-			walker.TrackedPaths[f] = true
-		}
-	}
+	applyGitignore(walker, target, opts)
 
 	// --tracked-only: restrict the walk to git-tracked files by seeding the
 	// allow-list with `git ls-files`. Untracked working-tree files and
@@ -1492,6 +1513,48 @@ func walkArtifacts(target string, cfg *ScanConfig, opts ScanOptions) ([]discover
 	}
 
 	return filterArtifactsByType(artifacts, excludeArtifactTypes(cfg)), nil
+}
+
+// applyGitignore sets the walker's .gitignore handling for a scan of target.
+// The core walk and the plugin-finding filter both take it from here, so a
+// path is ignored or not by one decision whichever analyzer reports it.
+func applyGitignore(walker *discovery.Walker, target string, opts ScanOptions) {
+	if opts.NoRespectGitignore {
+		walker.RespectGitignore = false
+	} else if tracked, err := git.TrackedFiles(target); err == nil {
+		// git never ignores a tracked file, so a source committed into an
+		// otherwise-ignored directory (e.g. `mobile/` in .gitignore) must still
+		// be scanned. Best-effort: outside a git repo this errors and the walker
+		// applies ignore rules as before.
+		walker.TrackedPaths = make(map[string]bool, len(tracked))
+		for _, f := range tracked {
+			walker.TrackedPaths[f] = true
+		}
+	}
+}
+
+// dropGitignoredPluginFindings removes plugin findings on paths the core walk
+// skips under .gitignore. A plugin walks the workspace itself, so without this
+// a gitignored directory came back through it: on tokenops, 475 findings from
+// an agent worktree under .claude/ (#830). Paths are root-relative here, as
+// filterPluginFindingsByScope leaves them; a repository-scoped finding (empty
+// path) or one outside the root is kept.
+func dropGitignoredPluginFindings(in []findings.Finding, target string, opts ScanOptions) (kept []findings.Finding, dropped int) {
+	if len(in) == 0 || opts.NoRespectGitignore {
+		return in, 0
+	}
+	walker := discovery.NewWalker(ConfigRoot(target))
+	applyGitignore(walker, target, opts)
+	kept = make([]findings.Finding, 0, len(in))
+	for i := range in {
+		p := in[i].Location.FilePath
+		if p != "" && !filepath.IsAbs(p) && !strings.HasPrefix(p, "../") && walker.Ignores(p) {
+			dropped++
+			continue
+		}
+		kept = append(kept, in[i])
+	}
+	return kept, dropped
 }
 
 // excludeArtifactTypes flattens the configured artifact-type exclusions.
@@ -1750,6 +1813,23 @@ func policyBudget(in map[string]int) map[findings.Severity]int {
 // each analyzer as a uniform task lets sequential and parallel execution share
 // a single runner.
 type analyzerTask func(context.Context) error
+
+// scanFlowsTogether runs taintflow and agentflow over one walk of the source
+// files (see flowunits), each into its own FindingSet, so the findings are
+// what each would report on its own.
+func scanFlowsTogether(ctx context.Context, artifacts []discovery.Artifact, tf *taintflow.Analyzer, af *agentflow.Analyzer, addFindings func(*findings.FindingSet)) error {
+	taintFS, agentFS := findings.NewFindingSet(), findings.NewFindingSet()
+	err := flowunits.Walk(ctx, artifacts, func(path string, units []taint.Unit) {
+		tf.ScanUnits(taintFS, path, units)
+		af.ScanUnits(agentFS, units)
+	})
+	if err != nil {
+		return err
+	}
+	addFindings(taintFS)
+	addFindings(agentFS)
+	return nil
+}
 
 // runAnalyzerTasks executes tasks sequentially (deterministic, for debugging)
 // or in parallel via errgroup, returning the first error and canceling

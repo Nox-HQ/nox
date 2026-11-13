@@ -344,15 +344,20 @@ func (p *Plugin) Close() error {
 			// Process may have already exited.
 			_ = p.cmd.Process.Kill()
 		} else {
-			done := make(chan error, 1)
-			go func() { done <- p.cmd.Wait() }()
+			// Wait's error is not reported: after SIGTERM it is the signal
+			// ("signal: terminated"), which is how the process was asked to
+			// stop, not a failure.
+			exited := make(chan struct{})
+			go func() {
+				_ = p.cmd.Wait()
+				close(exited)
+			}()
 
 			select {
-			case <-done:
-				// Exited cleanly.
+			case <-exited:
 			case <-time.After(5 * time.Second):
 				_ = p.cmd.Process.Kill()
-				<-done
+				<-exited
 			}
 		}
 	}

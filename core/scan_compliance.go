@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/nox-hq/nox/core/compliance/iso27001"
-	"github.com/nox-hq/nox/core/report/sbom"
 )
 
 // ISO27001Input packages a completed scan as the evidence an ISO/IEC 27001
@@ -31,7 +30,7 @@ func (r *ScanResult) ISO27001Input(version string) (iso27001.Input, error) {
 	in.Artifacts = append(in.Artifacts, art)
 
 	if r.Scope.Has(ScopeDeps) {
-		raw, err := sbom.NewCycloneDXReporter(version).WithAIInventory(r.AIInventory).Generate(r.Inventory)
+		raw, err := r.CycloneDX(version).Generate(r.Inventory)
 		if err != nil {
 			return in, fmt.Errorf("serialising SBOM: %w", err)
 		}

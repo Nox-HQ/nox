@@ -1,10 +1,12 @@
-package main
+package cli
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 // Flag-efficacy guards for the top-level flags — the ones that apply before a
@@ -143,7 +145,7 @@ func TestTopLevelFlagInventoryMatchesRegistrations(t *testing.T) {
 // the scanned repository, which is both surprising and, in CI, a dirty tree.
 func TestScanOutputFlagRedirectsArtifacts(t *testing.T) {
 	target := t.TempDir()
-	writeScanFixture(t, target, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeScanFixture(t, target, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 	out := t.TempDir()
 
 	if code := runScan([]string{target}, "json", out, "", true, false); code > 1 {
@@ -163,7 +165,7 @@ func TestScanOutputFlagRedirectsArtifacts(t *testing.T) {
 // the file it gated on was never written.
 func TestScanFormatFlagSelectsArtifacts(t *testing.T) {
 	target := t.TempDir()
-	writeScanFixture(t, target, "config.env", "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n")
+	writeScanFixture(t, target, "config.env", "AWS_KEY="+testkey.AWSAccessKeyID()+"\n")
 
 	jsonOut := t.TempDir()
 	if code := runScan([]string{target}, "json", jsonOut, "", true, false); code > 1 {

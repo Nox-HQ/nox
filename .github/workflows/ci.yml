@@ -60,7 +60,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.12.2
+          version: v2.15.0
           only-new-issues: true
 
   # Decide which operating systems the test matrix covers.
@@ -124,8 +124,18 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # The fix oracle runs real pnpm against a test-served registry
+      # (cli/fix_promise_e2e_test.go). npm ships on the runners; pnpm does not.
+      - name: Install pnpm for the fix oracle
+        if: matrix.os == 'ubuntu-latest'
+        run: npm install --global --ignore-scripts pnpm@10.24.0
+
       - name: Run tests with coverage
         shell: bash
+        env:
+          # The pnpm fix oracle fails rather than skips where pnpm was
+          # installed for it (the step above, Linux only).
+          NOX_REQUIRE_PNPM: ${{ matrix.os == 'ubuntu-latest' && '1' || '' }}
         run: go test -race -coverprofile=coverage.out ./...
 
       - name: Coverage summary
@@ -377,14 +387,14 @@ jobs:
       # branch-protection rule that blocks GITHUB_TOKEN pushes to main.
 
       - name: Upload SARIF to GitHub
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         if: always()
         with:
           sarif_file: nox-results/results.sarif
         continue-on-error: true # nox:ignore IAC-018,IAC-310 -- best-effort SARIF upload
 
       - name: Upload scan results
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2 # nox:ignore IAC-153 -- CI scan artifact, not a released binary; release artifacts are signed and attested in release.yml
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: nox-results
@@ -446,7 +456,7 @@ jobs:
             .
 
       - name: Upload SARIF (PR-scoped)
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         if: always()
         with:
           sarif_file: nox-pr/results.sarif
@@ -487,6 +497,24 @@ jobs:
 
       - name: Fuzz secrets analyzer
         run: go test -run '^$' -fuzz '^FuzzScanArtifacts$' -fuzztime 30s -timeout 120s ./core/analyzers/secrets/
+
+      - name: Fuzz encoded-segment spans against the regex they replaced
+        run: go test -run '^$' -fuzz '^FuzzSpansMatchRegex$' -fuzztime 30s -timeout 120s ./core/analyzers/secrets/
+
+      - name: Fuzz literal search against the window-by-window oracle
+        run: go test -run '^$' -fuzz '^FuzzIndexAllMatchesTheOracle$' -fuzztime 30s -timeout 120s ./core/rules/
+
+      - name: Fuzz the one-pass literal index against the per-literal search
+        run: go test -run '^$' -fuzz '^FuzzLiteralIndexMatchesIndexAll$' -fuzztime 30s -timeout 120s ./core/rules/
+
+      - name: Fuzz the one-pass keyword pre-filter against the lower-cased search
+        run: go test -run '^$' -fuzz '^FuzzKeywordsPresentMatchesKeywordIndex$' -fuzztime 30s -timeout 120s ./core/rules/
+
+      - name: Fuzz the short-keyword search against the window-by-window oracle
+        run: go test -run '^$' -fuzz '^FuzzAsciiFoldContainsMatchesTheOracle$' -fuzztime 30s -timeout 120s ./core/rules/
+
+      - name: Fuzz the entropy tokenizers' class-run scan against the regexps it replaced
+        run: go test -run '^$' -fuzz '^FuzzClassRunsMatchTheRegexp$' -fuzztime 30s -timeout 120s ./core/rules/
 
   deps-audit:
     name: Nox dependency CVE audit

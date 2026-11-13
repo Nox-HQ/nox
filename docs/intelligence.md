@@ -11,13 +11,21 @@ the scan. If a sentence here is not true of the binary, that is a bug.
 |---|---|---|
 | every online scan with a lockfile | `(ecosystem, package, version)` per dependency, as one `/v1/querybatch` request — byte-for-byte the request OSV.dev has always received | the intelligence service, then the reference database (verification) |
 | `scan.intelligence.contribute: true` **only** | redacted observations: per finding, the fields in `nox intel allowlist` — fingerprint, rule id, ecosystem/package/version range, verdict — never a path, a line, a snippet, a secret, or a prompt | the intelligence service |
+| every online scan of a Maven project whose parent POM or imported BOM is not in the repository | `(groupId, artifactId, version)` of each such parent and BOM, as `/v1/maven/poms` requests; the service returns the published `pom.xml` from Maven Central and nox resolves the versions itself. A separate `[network]` line counts them | the intelligence service, which fetches from Maven Central |
+| every online scan, when a signed feed is not cached or has expired (24h) | two plain `GET`s of public files: `/v1/feeds/slopsquat` and, when the scan found registry-launched MCP servers, `/v1/feeds/mcp`. Nothing about the project is sent. A separate `[network]` line names each feed URL requested | the intelligence service |
+| every online scan of a Dockerfile whose `FROM` names an image by digest, when the image is not already in `~/.nox/cache/oci` | an anonymous pull of that image: its name and digest, to fetch the manifest and the layers. Nothing about the project is sent. A separate `[network]` line names every host asked | not the intelligence service: the image's registry, the token service the registry names and the storage host it redirects to (for Docker Hub, `registry-1.docker.io`, `auth.docker.io` and Docker's CDN) |
+| every online scan of a Go module, when the Go module cache does not hold every module the build needs | nox runs `go list -deps` to learn which packages the build links, and the go command fetches the missing modules as `go build` would: module paths and versions from `go.mod`. A separate `[network]` line names where it was allowed to fetch from | not the intelligence service: whatever `GOPROXY` names (`proxy.golang.org`, then the modules' own source hosts, unless your Go environment says otherwise) |
 | never | source code, file paths, file contents, prompts, credentials, customer data | — |
-
-| every online scan, when a signed feed is not cached or has expired (24h) | two plain `GET`s of public files: `/v1/feeds/slopsquat` and, when the scan found registry-launched MCP servers, `/v1/feeds/mcp`. Nothing about the project is sent | the intelligence service |
 
 A scan that made the lookup says so once, in a `[network]` line after the
 results: how many dependencies, where they went, and how to opt out. A scan that
 made no lookup (`--offline`, `--no-osv`, no dependencies) prints no such line.
+Signed-feed requests, image pulls and Go module fetches each get a `[network]`
+line of their own, and only on a scan that made them: one whose feed cache,
+image cache or module cache already held what was needed asked nobody and says
+nothing. The feed line names each feed URL requested, so a project with no
+dependency, which makes no lookup, still says that it asked for the slopsquat
+feed.
 
 `nox intel preview <path>` prints exactly what a contribution from `<path>`
 would carry, without sending it. `nox intel allowlist` prints every field an
@@ -69,6 +77,17 @@ does not compare its advisories against a full scan. A plain OSV.dev response
 carries no coverage statement and raises nothing: it claims neither
 completeness nor its absence.
 
+Each advisory may also carry `nox_priority`: how likely the advisory is to be
+weaponised (a public exploit, or exploitation in the wild), by a named rule
+(`epss-first-severity-cwe/v1`: EPSS where it is at least 1%, otherwise the
+advisory's severity and CWE weighted by how often such advisories were
+weaponised). nox records it on the finding (`priority_score`, `priority_rule`,
+`priority_band`, `priority_why`, `priority_epss`, `priority_epss_percentile`)
+and uses it only to order findings that tie on severity, reachability and
+confidence in reports. It never changes a severity, gates a build, or hides a
+finding, and it ranks the advisory, not whether your code reaches the
+vulnerable function. Offline scans and plain OSV.dev answers carry none.
+
 ## The signed feeds, and the key built into nox
 
 Two feeds come from the service, both signed with one Ed25519 key:
@@ -119,6 +138,21 @@ nox scan --offline       # no lookups at all: zero outbound connections (TestSca
 nox scan --no-osv        # same, for the vulnerability lookup only
 ```
 
+The two requests that do not go to an advisory source have switches of their
+own, and `--offline` covers both:
+
+```yaml
+scan:
+  images:
+    enabled: false       # read no base image; --offline and --no-osv read cached images only
+```
+
+```sh
+GOPROXY=off nox scan     # the go command fetches nothing; Go advisories are then
+                         # not narrowed to the packages the build links
+GOPRIVATE=git.example.com/* nox scan   # those module paths never reach a public proxy
+```
+
 Resolution order for the endpoint:
 
 ```text
@@ -147,10 +181,10 @@ next to the reporter salt (or beside `scan.intelligence.reporter_salt_path`).
 | command | does |
 |---|---|
 | `nox intel consent show` | prints the contribution terms (the single source: `core/intel/terms.go`) |
-| `nox intel consent accept` | shows the terms and records acceptance after you type `yes`; `--accept-terms 2026-10` does it non-interactively and must name the current version |
+| `nox intel consent accept` | shows the terms and records acceptance after you type `yes`; `--accept-terms 2026-11` does it non-interactively and must name the current version |
 | `nox intel consent status` / `withdraw` | report / remove the acceptance (no network) |
 | `nox intel preview <path>` | the terms, your consent status, and the exact observations a scan would send |
-| `nox intel forget` | posts your reporter id and deletion key to `/v1/reporters/erase`, prints the counts the service returns, then withdraws consent and discards the reporter salt, so consenting again is a new, unlinkable reporter. Unreachable or refused: it exits non-zero and changes nothing locally |
+| `nox intel forget` | posts your reporter id and deletion key to `/v1/reporters/erase`, prints the counts the service returns (outcome reports included), then withdraws consent (and outcome consent) and discards the reporter salt, so consenting again is a new, unlinkable reporter. Unreachable or refused: it exits non-zero and changes nothing locally |
 
 Observations are contribution schema 2: the allowlisted fields plus
 `schema_version`, `consent_version` (the terms version you accepted) and
@@ -158,7 +192,16 @@ Observations are contribution schema 2: the allowlisted fields plus
 HMAC of the private salt under a fixed label; the key is sent only to the erase
 endpoint, so only this machine can erase its id once the service has bound the
 verifier. If the terms version changes, contribution pauses until you accept the
-new one, and each scan says so. With contribution off, a scan makes no
+new one, and each scan says so.
+
+Every terms version is published, unchanged, at
+`https://nox-hq.dev/terms/<version>` (`/terms/2026-11`, `/terms/outcomes-2026-11`,
+`/terms/attack-2026-11`; earlier versions stay at their own address), and each
+text names its page. The page shows the text's SHA-256, the value
+`core/intel` pins, so you can check that the page is the text the CLI showed
+you. The texts name who runs the service at intel.klarlabs.de (Felix Geelhaar,
+klarlabs-studio; nox@felixgeelhaar.de), where it is hosted (Hetzner, Germany and
+Finland), the legal basis (consent) and your rights. With contribution off, a scan makes no
 contribution request and says nothing about it. An observation without a
 `consent_version` is never sent.
 
@@ -170,6 +213,48 @@ Why contribute: independence is counted in distinct reporters, not
 observations. One organisation scanning itself a thousand times is one source.
 Every reporter that joins makes corroboration — and everything derived from
 it — possible for everyone else.
+
+### Outcome reports
+
+A finding nox could not decide is ordered by what is known about the advisory,
+never about your application. Learning which undecided findings matter needs to
+see what happened next (a finding gone after an upgrade) across many projects.
+An outcome report is one scan's dependency findings for one project, sent so the
+service can learn that (nox-intelligence `docs/design/learning-loop.md`).
+
+It is a third decision, on top of contribution: `scan.intelligence.outcomes:
+true`, **and** contribution on with its terms accepted, **and** the separate
+outcome terms accepted on this machine (`nox intel consent outcomes show |
+accept | status | withdraw`; current version `outcomes-2026-11`, text in
+`core/intel/outcome.go`). Any gate that is not met sends nothing, and the scan
+says which.
+
+| command | does |
+|---|---|
+| `nox intel allowlist --outcomes` | every field a report may carry |
+| `nox intel preview --outcomes <path>` | the outcome terms and the exact report a scan of `<path>` would send; sends nothing |
+
+The project is named by a **pseudonym**: an HMAC, under the private reporter
+salt, of the repository's root commit (the smallest, where histories were
+merged). The same repository scanned on this machine always gives the same
+pseudonym; another installation gets a different one; it cannot be turned back
+into a repository. A shallow clone has no root commit of its own (its apparent
+root is the depth boundary, new on every CI run), so it sends nothing and says
+so: in CI, check out with full history (`actions/checkout` `fetch-depth: 0`). A
+directory outside git sends nothing either.
+
+Per finding, a report carries the ecosystem, package, exact version, advisory
+id, the applicability verdict with its reason tokens (`reached`, `stopped_at`,
+`because`) and `imported` (`yes`/`no`, from `dependency_imported`). Not the
+finding's severity: a not-impacting finding is demoted to info, so its severity
+is the verdict again, and the service has the advisory's own. Never file names,
+paths, the repository's name or URL, commit hashes, routes or symbol names.
+
+Outcome reports are always anonymous, even with `scan.intelligence.attested`: a
+pseudonym joined to an organisation would name whose project it is. The service
+keeps one report per project and day, deletes it after its retention window,
+and publishes nothing per project. `nox intel forget` deletes them with
+everything else and withdraws both consents.
 
 ## Operator accounts
 
@@ -254,8 +339,7 @@ it and shows it as a triage signal but **never counts it as an independent sourc
 Two ways to be counted, both **attributed to your organisation**: the service
 authenticates your token and can link the contribution to your organisation, which an
 anonymous contribution never allows. That is the price of counting, so both are off by
-default. The scan contribution terms (2026-10) describe the anonymous case and are
-unchanged; attributed scanning is disclosed here and in the attack-evidence terms
+default. The scan contribution terms (2026-11) describe the anonymous case; attributed scanning is disclosed here and in the attack-evidence terms
 (`nox intel consent attack show`), and you opt in to it separately with
 `scan.intelligence.attested: true`.
 
@@ -268,7 +352,7 @@ unchanged; attributed scanning is disclosed here and in the attack-evidence term
 - Attack evidence from your CI: `nox attack run|replay ... --contribute --candidate
   <fingerprint>`. Needs `NOX_INTEL_TOKEN` and the separate attack-evidence terms
   (`nox intel consent attack show|accept|withdraw`, or `--accept-attack-terms
-  attack-2026-10`). `nox intel allowlist --attack` prints every field. Nothing about
+  attack-2026-11`). `nox intel allowlist --attack` prints every field. Nothing about
   the target leaves: no URL, host, route, field names, payloads, responses or
   canaries; only the nox-core `RunReport` fields and a one-way digest of the trace.
   Only runs that actually executed against a target with a sound control and no

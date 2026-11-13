@@ -1,4 +1,4 @@
-package main
+package cli
 
 import "testing"
 
@@ -48,7 +48,7 @@ func TestResolveOutputFormat(t *testing.T) {
 // The output directory carried the identical defect, comparing against ".".
 func TestResolveOutputDir(t *testing.T) {
 	cases := []struct{ name, flagValue, configVal, want string }{
-		{"neither", "", "", "."},
+		{"neither", "", "", defaultReportDir},
 		{"config only", "", "nox-out", "nox-out"},
 		{"explicit flag beats config", "reports", "nox-out", "reports"},
 		{"explicit value equal to the default still wins", ".", "nox-out", "."},

@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/nox-hq/nox-core/degrade"
+
+	"github.com/nox-hq/nox/internal/testkey"
 )
 
 // UnknownConfigKeys already reports keys nox does not understand, on the
@@ -242,7 +244,7 @@ func TestScanReportsConfigItCannotActOn(t *testing.T) {
 		t.Fatalf("writing config: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "app.env"),
-		[]byte("AWS_KEY=AKIAIOSFODNN7EXAMPLE\n"), 0o600); err != nil {
+		[]byte("AWS_KEY="+testkey.AWSAccessKeyID()+"\n"), 0o600); err != nil {
 		t.Fatalf("writing fixture: %v", err)
 	}
 

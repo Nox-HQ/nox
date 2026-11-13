@@ -112,21 +112,32 @@ func EvaluateCompanion(content []byte, subjectTypes []string, c Companion) Verdi
 // EvaluateCompanionWithSubject is EvaluateCompanion with a precondition on the
 // subject. See EvaluateWithSubject.
 func EvaluateCompanionWithSubject(content []byte, subjectTypes []string, c Companion, subjectMinInt map[string]int) Verdict {
+	if v, ok := companionDescriptorInvalid(subjectTypes, c); ok {
+		return v
+	}
+	return Load(content).EvaluateCompanionWithSubject(subjectTypes, c, subjectMinInt)
+}
+
+func companionDescriptorInvalid(subjectTypes []string, c Companion) (Verdict, bool) {
 	if len(subjectTypes) == 0 || len(c.Types) == 0 || c.Link == "" {
-		return Verdict{Reason: "rule carries no companion descriptor"}
+		return Verdict{Reason: "rule carries no companion descriptor"}, true
 	}
 	if c.Link == LinkRef && c.Path == "" {
-		return Verdict{Reason: "a ref companion needs the path holding the reference"}
+		return Verdict{Reason: "a ref companion needs the path holding the reference"}, true
 	}
+	return Verdict{}, false
+}
 
-	docs, err := Parse(content)
-	if err != nil {
-		return Verdict{Reason: fmt.Sprintf("not parseable as YAML or JSON: %v", err)}
+// EvaluateCompanionWithSubject is the package function of that name, over a
+// parsed Document.
+func (d *Document) EvaluateCompanionWithSubject(subjectTypes []string, c Companion, subjectMinInt map[string]int) Verdict {
+	if v, ok := companionDescriptorInvalid(subjectTypes, c); ok {
+		return v
 	}
-	all := Resources(docs)
-	if len(all) == 0 {
-		return Verdict{Reason: "no CloudFormation, Kubernetes or ARM resources in the document"}
+	if d.reason != "" {
+		return Verdict{Reason: d.reason}
 	}
+	all := d.all
 
 	subjects := OfTypes(all, subjectTypes)
 	companions := OfTypes(all, c.Types)

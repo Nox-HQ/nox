@@ -155,6 +155,18 @@ func BestFix(candidates []string) string {
 	return best
 }
 
+// SpelledLike returns version written the way installed is. Go writes a
+// module version with a leading "v" and its advisory database writes fixed
+// versions without one, so a line built from both reads "v0.58.0 to 0.58.1":
+// two spellings of one scheme, the second of which `go get` rejects. The
+// installed version is the one the project's own files use, so it decides.
+func SpelledLike(installed, version string) string {
+	if version == "" || strings.HasPrefix(version, "v") || !strings.HasPrefix(installed, "v") {
+		return version
+	}
+	return "v" + version
+}
+
 // IsMajorBump reports whether the fix version's leading numeric component
 // differs from the current version's. A non-numeric or empty leading segment is
 // treated as same-major, to be conservative: nox does not skip an upgrade over

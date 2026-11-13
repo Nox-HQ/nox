@@ -1,6 +1,10 @@
 - id: nox
   name: nox security scan
-  entry: nox scan --staged --severity-threshold high --quiet .
+  # Reports go to a directory the entry removes. A scan writes findings.json and
+  # ai.inventory.json to its output directory, which defaults to the working
+  # directory: two untracked files in the repository after every commit. The
+  # entry exits with the scan's own status (0 clean, 1 findings, 2 not completed).
+  entry: sh -c 'out=$(mktemp -d "${TMPDIR:-/tmp}/nox-hook.XXXXXX") || exit 2; trap "rm -rf \"$out\"" EXIT; nox scan --staged --severity-threshold high --quiet --output "$out" .'
   language: system
   stages: [pre-commit]
   pass_filenames: false

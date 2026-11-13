@@ -1,10 +1,11 @@
-package main
+package cli
 
 import (
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -21,12 +22,15 @@ import (
 
 // runPlugin dispatches plugin subcommands.
 func runPlugin(args []string) int {
+	const pluginUsage = "Usage: nox plugin <search|info|install|update|list|remove|call|init|test|entry>"
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Usage: nox plugin <search|info|install|update|list|remove|call|init|test|entry>")
+		fmt.Fprintln(os.Stderr, pluginUsage)
 		return 2
 	}
 
 	switch args[0] {
+	case "-h", "-help", "--help", "help":
+		return printGroupHelp(pluginUsage)
 	case "search":
 		return runPluginSearch(args[1:])
 	case "info":
@@ -49,7 +53,7 @@ func runPlugin(args []string) int {
 		return runPluginEntry(args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown plugin command: %s\n", args[0])
-		fmt.Fprintln(os.Stderr, "Usage: nox plugin <search|info|install|update|list|remove|call|init|test|entry>")
+		fmt.Fprintln(os.Stderr, pluginUsage)
 		return 2
 	}
 }
@@ -251,14 +255,18 @@ func warnIfIndexIsStale(ctx context.Context, client *registry.Client, now time.T
 // retired plugins. The warning is advisory and never blocks: existing installs
 // must keep working.
 func warnIfDeprecated(p *registry.PluginEntry) {
+	printDeprecation(os.Stderr, p)
+}
+
+func printDeprecation(w io.Writer, p *registry.PluginEntry) {
 	if p == nil || !p.Deprecated {
 		return
 	}
 	if p.DeprecationNote != "" {
-		fmt.Fprintf(os.Stderr, "warning: %s is deprecated — %s\n", p.Name, p.DeprecationNote)
+		_, _ = fmt.Fprintf(w, "warning: %s is deprecated — %s\n", p.Name, p.DeprecationNote)
 		return
 	}
-	fmt.Fprintf(os.Stderr, "warning: %s is deprecated and no longer maintained\n", p.Name)
+	_, _ = fmt.Fprintf(w, "warning: %s is deprecated and no longer maintained\n", p.Name)
 }
 
 // runPluginInfo shows detailed information about a plugin.

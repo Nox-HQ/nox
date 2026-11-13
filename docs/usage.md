@@ -62,7 +62,7 @@ nox scan <path> [flags]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--format` | `json` | Output formats: `json`, `sarif`, `cdx`, `spdx`, `all` (comma-separated) |
-| `--output` | `.` | Output directory for report files |
+| `--output` | `.nox/reports` | Output directory for report files. The default directory carries its own `.gitignore`, so reports stay out of git; a directory you name is left as it is |
 | `--quiet`, `-q` | `false` | Suppress all output except errors |
 | `--verbose`, `-v` | `false` | Enable verbose output |
 | `--only` | all scopes | Scan only these scopes, comma-separated (see [Scopes](#scopes)) |
@@ -71,7 +71,7 @@ nox scan <path> [flags]
 **Examples:**
 
 ```bash
-# Basic scan, writes findings.json to current directory
+# Basic scan, writes findings.json to .nox/reports/ (which git ignores)
 nox scan .
 
 # Generate SARIF for GitHub Code Scanning
@@ -526,9 +526,12 @@ nox annotate [flags]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--input` | `findings.json` | Path to findings.json |
+| `--input` | `.nox/reports/findings.json` | Path to findings.json (`./findings.json` from an older scan is still read) |
 | `--pr` | (auto) | PR number (auto-detected from `GITHUB_REF`) |
 | `--repo` | (auto) | Repository owner/name (auto-detected from `GITHUB_REPOSITORY`) |
+| `--summary` | `false` | Also post a comment counting every finding in the report by severity |
+| `--max-comments` | `0` | Post at most this many inline comments, most severe first (`0`: no limit) |
+| `--min-severity` | — | Post inline comments only at or above this severity |
 
 **Examples:**
 
@@ -538,6 +541,11 @@ nox annotate --input nox-results/findings.json
 
 # Explicit PR and repo
 nox annotate --input findings.json --pr 42 --repo myorg/myrepo
+
+# Also post a comment counting every finding by severity, and post at most
+# 25 inline comments at low or above, most severe first (the Action's
+# pr-comment input)
+nox annotate --input findings.json --summary --max-comments 25 --min-severity low
 ```
 
 Requires the `gh` CLI to be installed and authenticated. Each finding is posted as an inline comment with severity badge, rule ID, and message.
@@ -922,6 +930,7 @@ nox serve [flags]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--allowed-paths` | the working directory | Comma-separated workspace roots the server may scan |
+| `--plugins` | off | Host the installed plugins and add the `plugin.list` and `plugin.call_tool` tools |
 
 The server confines itself to its own working directory unless you widen it.
 That matters because the caller is usually an agent: without a boundary, a
@@ -945,6 +954,21 @@ nox serve --allowed-paths /
 
 Paths are resolved through symlinks before the check, so a symlink inside an
 allowed root that points outside it is refused.
+
+`--plugins` makes the installed plugins callable by the agent. It is off by
+default because a plugin call starts the plugin's process on the agent's
+behalf. Each plugin passes the checks a scan applies before running one: its
+binary exists and matches the digest recorded at install, and its track's
+safety profile is enforced under the `plugin_policy` in the first allowed
+root's `.nox.yaml`. A plugin that fails a check is named on stderr and the
+others are still hosted. `plugin.call_tool` runs a plugin against a root under
+the allowed ones (the first allowed root when none is given, and the same root
+in `workspace_root` and `input.workspace_root`) and is rate-limited like
+`scan`.
+
+```bash
+nox serve --plugins
+```
 
 See [MCP Server](#mcp-server) for details on available tools and resources.
 
@@ -1056,7 +1080,7 @@ scan:
     # verification recommended" as a two-account test, and no machine output,
     # exit code or gate sees them. Named here, each is a finding. Its body
     # analysis covers Express, Fastify, Flask and FastAPI. AUTHN-001 is the
-    # same arrangement, over Express, Fastify, Flask, FastAPI, Next.js, NestJS and Django
+    # same arrangement, over Express, Fastify, Flask, FastAPI, Next.js, NestJS, Django, Spring, JAX-RS, Go, ASP.NET Core, Rails and Laravel
     # routes, for a route with no visible authentication (an
     # administrative or account route, or any DELETE, PUT or PATCH, with no
     # auth middleware, decorator, dependency or check on the caller): a lead
@@ -1184,6 +1208,63 @@ For estate-wide blast radius (a paid capability), `nox intel components` and
 `nox intel evidence` describe a service and bind `nox attack` runs to a
 candidate. They print what they would send and upload only with `--upload`.
 See [Blast radius across the estate](intelligence.md#blast-radius-across-the-estate).
+
+### Base images
+
+A Dockerfile's `FROM` line names software nox does not otherwise see. nox
+reads what a **digest-pinned** base image has installed and checks it like any
+other dependency:
+
+```yaml
+scan:
+  images:
+    enabled: false  # on by default; false turns image reading off
+    cache_dir: ""   # default ~/.nox/cache/oci, blobs by digest
+```
+
+Only an image advisory with a fix released gates a build. One the image's
+distribution or upstream has not fixed yet is recorded at `info`, with its
+real severity in `original_severity` and the reason in the message: there is
+nothing to install, and failing CI on it would only teach people to turn the
+check off. An advisory the distribution rates unimportant (Debian) or
+negligible (Ubuntu) is recorded at `info` the same way. A scan that makes no
+lookups (`--offline`, `scan.osv.disabled`) reads images from the cache only
+and downloads nothing.
+
+For each `FROM name@sha256:…` nox fetches the manifest and layers by digest
+(anonymous pulls only; a registry that wants credentials is reported as not
+read), checks every blob against its digest, applies the layers' whiteouts,
+and reads only the files that list installed software: `os-release`, Alpine's
+apk database, Debian's dpkg status (and distroless `status.d`), the Go
+toolchain's `VERSION`, and the build info of Go executables (Go 1.18 and
+later), which names the Go release and every module linked. Nothing in the image is executed. The packages are
+inventoried at the `FROM` line and reported with the image they came from;
+their advisories are not judged by this tree's code, which is not what the
+image runs. A tag-only reference is reported as not checked: a tag names no
+fixed content, so nox does not resolve it. An offline scan reads the cache
+only.
+
+Alpine, Debian and Ubuntu packages are checked against OSV's advisories for
+that release, compared in apk's and dpkg's own version order; for Ubuntu the
+standard-archive stream (`24.04:LTS`) comes from the image's os-release.
+An advisory the distribution rates unimportant (Debian) or negligible
+(Ubuntu) is recorded at info. AlmaLinux and Rocky Linux (EL9 and later) are
+read from rpm's sqlite database and compared in rpm's version order. Red Hat
+and UBI images are not checked: Red Hat publishes advisories per product
+repository, and rpm does not record which one a package came from. Nor are
+rpm's Berkeley DB (EL8 and earlier) or SUSE.
+
+OpenSSL linked statically into a binary (Node.js bundles its own) is read
+from the version text OpenSSL compiles in, and checked against OSV's OpenSSL
+advisories with the fixed release derived from the series. The text alone is
+not enough: a program built against the system libcrypto carries it too, and
+runs whatever the distribution installed. So a binary counts as bundling
+OpenSSL only when its dynamic section names neither libcrypto nor libssl; a
+libcrypto in the system library directories is the distribution's own,
+already checked from its package database. A binary whose libraries cannot
+be established, a development build, or an OpenSSL before 3 is reported as
+not checked. See
+[docs/design/container-image-advisories.md](design/container-image-advisories.md).
 
 ### Predictive Slopsquat Feed (SLOP-002)
 
@@ -1867,6 +1948,23 @@ to the next line of code.
 
 Suppressed findings are marked with `status: "suppressed"` in the output and do not count toward policy failure.
 
+**Recording a verified "verify intent" finding.** Some rules report a setting
+that is fine once someone has checked it: IAC-309 (`cancel-in-progress: true`)
+and IAC-245 (a Kustomize patch that removes a field) say "verify intent". A
+comment explaining the setting is not read as that record; a waiver with a
+reason is, and it keeps the reason next to the setting:
+
+```yaml
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # nox:ignore IAC-309 -- superseded runs of the same ref are safe to cancel
+  cancel-in-progress: true
+```
+
+The finding stays in the report as `suppressed`, with the reason, and stops
+counting toward policy failure. If the setting moves or is removed, nox reports
+the waiver as suppressing nothing.
+
 ---
 
 ## Output Formats
@@ -1934,18 +2032,113 @@ Software Bill of Materials in two formats:
 - **`sbom.cdx.json`** — CycloneDX JSON (primary)
 - **`sbom.spdx.json`** — SPDX JSON (secondary)
 
-Generated from dependency lockfile analysis. Supported ecosystems:
+Generated from dependency lockfile analysis. Lockfiles nox reads:
 
 | Lockfile | Ecosystem |
 |----------|-----------|
 | `go.mod` (with `go.sum`) | Go |
-| `package-lock.json` | npm |
-| `requirements.txt` | PyPI |
+| `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml` | npm |
+| `requirements.txt`, `poetry.lock`, `uv.lock`, `Pipfile.lock` | PyPI |
 | `Gemfile.lock` | RubyGems |
 | `Cargo.lock` | Cargo |
 | `pom.xml` | Maven |
 | `build.gradle`, `build.gradle.kts` | Gradle |
 | `packages.lock.json` | NuGet |
+| `composer.lock` | Packagist |
+| `pubspec.lock` | Pub |
+| `mix.lock` | Hex |
+| `gradle.lockfile` | Gradle (queried as Maven) |
+| `Package.resolved` | Swift Package Manager (inventory only, see below) |
+| `Podfile.lock` | CocoaPods (inventory only, see below) |
+| `conan.lock` | Conan (inventory only, see below) |
+| `bom.json` (CycloneDX), `sbom.json` (SPDX) | any |
+| compiled Go executables (ELF, Mach-O, PE) | Go, including `stdlib` |
+
+A Go executable is read from the build information the Go toolchain embeds in
+it (what `go version -m` prints), with no execution: its modules at the
+versions it was built with, the main module when it carries a version, and the
+standard library as `stdlib` at the exact Go release, which no `go.mod` states.
+Its packages are located at the binary and marked `package_origin: go-binary`.
+Applicability for them stays undetermined: build info names modules, not the
+packages a binary linked, and the source tree's link set is not the binary's.
+A module replaced by a local directory has no recorded version and is reported
+as a degradation.
+
+#### `nox sbom`: the SBOM of a built artifact
+
+```bash
+nox sbom nox_1.58.0_darwin_arm64.tar.gz -output nox_1.58.0_darwin_arm64.tar.gz.sbom.json
+nox sbom nox_1.58.0_darwin_arm64.tar.gz -format cyclonedx -output nox.cdx.json
+```
+
+Writes the SBOM of one release archive (`.tar.gz`, `.tgz`, `.tar`, `.zip`) or
+single file, as SPDX 2.3 (the default) or CycloneDX 1.5 (`-format cyclonedx`).
+The document's subject is the artifact: named after it, with its SHA-256, and
+containing every package found inside. In SPDX that is the described package
+and its CONTAINS relationships; in CycloneDX it is `metadata.component` (type
+`file`, with a SHA-256 hash) and a `dependencies` entry for it, and the serial
+number derives from the artifact's digest. It is offline and
+dependency-only, so the same artifact yields the same document; set
+`SOURCE_DATE_EPOCH` to fix its creation time too. Archive entries that would
+land outside the extraction directory, links and special files fail the
+artifact rather than being skipped, and extraction is bounded (2 GiB, 100,000
+files). nox's own release SBOMs are written this way.
+
+`Package.resolved`, `Podfile.lock` and `conan.lock` are read into the dependency
+inventory and the SBOM, but the advisory pipeline has no OSV ecosystem for
+Swift, CocoaPods or Conan, so those packages are **not** checked for
+vulnerabilities: the scan records a degradation per ecosystem saying so. A
+lockfile that cannot be parsed is also a degradation. Pods are read at their
+root pod (`Firebase/Core` is `Firebase`); `conan.lock` build requirements are
+included.
+
+A `pom.xml` dependency usually has no version of its own. nox takes it, offline,
+from what the repository holds: a `${property}` the pom or an ancestor defines,
+the `dependencyManagement` of a parent pom in the repository (found by
+`relativePath`, default `../pom.xml`, or by coordinates), and BOMs imported from
+the repository. Dependencies on the repository's own modules are not
+dependencies, and an imported BOM is not a package.
+
+A version managed by a parent or BOM published elsewhere
+(`spring-boot-starter-parent`, `quarkus-bom`) needs that file. On an online
+scan with NOX Intelligence enabled, nox asks the service for it by coordinates
+(`POST /v1/maven/poms`); the service fetches it from Maven Central and returns
+the file, and nox resolves the version itself exactly as it would from a file
+in the repository, following the fetched file's own parent and imports in
+further rounds. Only the coordinates leave the machine, and the scan's
+`[network]` lines say how many. Offline, with `scan.intelligence.disabled`, or
+for a file Central does not have (a company parent), the version is not
+guessed: the scan records one degradation counting those dependencies, naming
+where their versions live and why that file could not be read, and they are
+**not** checked. Measured on five public Maven projects: unresolved dependencies
+went from 25 to 0 (spring-petclinic), 23 to 0 (WebGoat), 354 to 0 (dropwizard)
+and 635 to 1 (quarkus-quickstarts, whose last one names a Testcontainers
+artifact no BOM manages). Transitive dependencies are not resolved.
+
+A Gradle build file is read for string coordinates after a configuration
+(`implementation("g:a:1.0")`, `api 'g:a:1.0'`). A `$name` or `${name}` version
+is taken from a literal the file defines (`val`, `var`, `def`, `ext.name`,
+`extra["name"]`, an `ext { }` block) or from `gradle.properties` beside it; a
+version at `${project.version}` is the build's own artifact and is not a
+dependency. A declaration with no version nox can determine (the Spring Boot
+plugin's dependency management, a `platform()` BOM, a variable defined in
+another project) is not guessed: the scan records one degradation counting
+them, naming the Spring Boot plugin version when the plugin is applied, and
+they are **not** checked. A `gradle.lockfile` in the build file's directory or
+above pins every version and governs it.
+
+Without a lockfile, nox reads the manifest's direct dependencies (exact pins
+as written, ranges at their lower bound) and records a degradation saying the
+versions came from the manifest: `package.json`, `pyproject.toml`,
+`Cargo.toml`, `composer.json`, `Gemfile`, `pubspec.yaml`, `*.csproj` /
+`*.fsproj` / `*.vbproj` and `Directory.Packages.props`. A lockfile beside the
+manifest always wins.
+
+A manifest nox cannot read at all — `Package.swift`, `mix.exs`, `build.sbt`,
+Conan, vcpkg, `Podfile`, `Cartfile`, a Gradle version catalog, rebar3, Stack,
+Cabal, Julia, R and Perl — is never reported as "no dependencies": the scan
+records a degradation naming the file, and the summary says the dependencies
+it declares were not checked.
 
 > **Go:** versions come from `go.mod`, which records what Minimal Version
 > Selection actually chose. `go.sum` is not used as the version source — it
@@ -2032,7 +2225,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Run Nox security scan
-        uses: nox-hq/nox@24c7f00916ad15e99b6c44cdda8e55f05b869e43 # v0.4.2
+        uses: nox-hq/nox@8983bb0c789c5b9d711442ebfd141e0789af248a # v1.66.0
         with:
           path: '.'
           format: sarif
@@ -2060,9 +2253,9 @@ jobs:
 | `vex` | — | Path to an OpenVEX waiver document |
 | `changed-since` | — | Scan only files changed since this git ref (e.g. `origin/main`) |
 | `offline` | `false` | Guarantee zero network: no API, no token, no telemetry |
-| `pr-comment` | `false` | Post inline PR review comments with finding details |
-| `max-comments` | `25` | Maximum number of inline PR comments to post |
-| `min-severity` | `low` | Minimum severity for PR comments |
+| `pr-comment` | `false` | Also post a summary comment counting every finding by severity, and bound the inline comments |
+| `max-comments` | `25` | With `pr-comment`, the most inline comments to post, most severe first |
+| `min-severity` | `low` | With `pr-comment`, the lowest severity posted inline |
 
 `fail-on-degraded` is worth setting on a gate you actually rely on. Without it,
 an OSV outage, a required plugin that failed to install, or a lockfile nox
@@ -2072,7 +2265,7 @@ outranks the findings verdict, and reports are written before it, so the job
 still uploads its SARIF:
 
 ```yaml
-      - uses: nox-hq/nox@v1
+      - uses: nox-hq/nox@8983bb0c789c5b9d711442ebfd141e0789af248a # v1.66.0
         with:
           format: sarif
           fail-on-degraded: 'true'
@@ -2091,7 +2284,7 @@ still uploads its SARIF:
 
 ```yaml
       - name: Run Nox security scan
-        uses: nox-hq/nox@24c7f00916ad15e99b6c44cdda8e55f05b869e43 # v0.4.2
+        uses: nox-hq/nox@8983bb0c789c5b9d711442ebfd141e0789af248a # v1.66.0
         with:
           format: all
           output: reports
@@ -2114,7 +2307,7 @@ still uploads its SARIF:
 
 ```yaml
       - name: Run Nox security scan
-        uses: nox-hq/nox@24c7f00916ad15e99b6c44cdda8e55f05b869e43 # v0.4.2
+        uses: nox-hq/nox@8983bb0c789c5b9d711442ebfd141e0789af248a # v1.66.0
         with:
           fail-on-findings: 'false'
 ```
@@ -2134,10 +2327,10 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
-          go-version: '1.25'
+          go-version: '1.27'
 
       - name: Install nox
-        run: go install github.com/nox-hq/nox/cli@latest
+        run: go install github.com/nox-hq/nox/cmd/nox@latest
 
       - name: Run security scan
         run: nox scan . --format sarif,json --output results/
@@ -2203,7 +2396,7 @@ waivers, gating) lives in
 
 ```bash
 # Install
-go install github.com/nox-hq/nox/cli@latest
+go install github.com/nox-hq/nox/cmd/nox@latest
 
 # Scan (exit code 1 if findings detected)
 nox scan . --format all --output results/ -q
@@ -2233,32 +2426,59 @@ nox serve --allowed-paths /path/to/project
 
 | Tool | Description | Input |
 |------|-------------|-------|
-| `scan` | Scan a directory | `path` (absolute path, must be under an allowed root — the working directory unless `--allowed-paths` widens it); optional `only`, `skip` (lists of [scopes](#scopes)) |
+| `scan` | Scan a directory | `path` (absolute path, must be under an allowed root — the working directory unless `--allowed-paths` widens it); optional `only`, `skip` (lists of [scopes](#scopes)); `previous` (a findings.json from an earlier run, to report what changed) |
+| `summary` | Counts for the last scan by severity, confidence and rule family, with dependency and AI-component totals. The place to start | (none) |
+| `analysis_capabilities` | What this installation can establish, and what the last scan actually established, per analysis capability. A capability that was available and answered nothing was not asked | (none) |
+| `list_findings` | List findings with filters | `severity`, `rule`, `file`, `include_suppressed`, `limit` (default: 50, max: 500), `offset` |
 | `get_findings` | Get findings from last scan | `format` (`json` or `sarif`, default: `json`) |
-| `get_sbom` | Get SBOM from last scan (an error if that scan left out `deps`) | `format` (`cdx` or `spdx`, default: `cdx`) |
 | `get_finding_detail` | Get enriched detail for a finding | `finding_id` (required), `context_lines` (default: 5) |
-| `list_findings` | List findings with filters | `severity`, `rule`, `file`, `limit` (default: 50) |
-| `baseline_status` | Show baseline statistics | `path` (absolute path to project root) |
-| `baseline_add` | Add a finding to the baseline | `path`, `fingerprint` (required), `reason` |
+| `get_finding_by_fingerprint` | Look up one finding by fingerprint and report its status (new, baselined, suppressed, VEX) | `fingerprint` (full, or its first 12 characters) |
+| `why` | Explain a finding: what was observed, what supports it, what argues against it, what was not evaluated, the impact and what to do. Derived from the scan, not written by a model | `fingerprint` |
+| `fix_plan` | Plan the fixes for the last scan: each issue as safe to apply, needs review or needs information, plus the dependency upgrades. Changes nothing; a person applies it with `nox fix apply` | `path`, `include_major` |
 | `advisories` | Decide what to do about the dependency advisories in the last scan, as `nox advisories` does (new vs. a previous run, relevance, what the policy permits). Never opens a pull request or merges | `previous` (findings.json of the last run), `policy` (`report`, `prepare`, `remediate`) |
-| `plugin.list` | List registered plugins | (none) |
-| `plugin.call_tool` | Invoke a plugin tool | `tool`, `input` (object), `workspace_root` |
+| `get_sbom` | Get SBOM from last scan (an error if that scan left out `deps`) | `format` (`cdx` or `spdx`, default: `cdx`) |
+| `diff` | Scan only the files changed between two git refs | `path`, `base`, `head`, `offline` |
+| `rules` | List every rule with its ID, description, severity, CWE and remediation | (none) |
+| `baseline_status` | Show baseline statistics | `path` (absolute path to project root) |
+| `baseline_add` | Add a finding to the baseline, which stops nox reporting it | `path`, `fingerprint`, `reason`, `confirmed: true` (all required); `owner` |
+| `baseline_add_many` | Add several findings to the baseline in one call | `path`, `fingerprints`, `reason`, `confirmed: true` (all required); `owner` |
+| `vex_status` | Load a VEX document and summarise its statuses | `path` |
+| `protect_status` | Report whether the nox pre-commit hook is installed in a repository | `path` |
+| `annotate` | Build a GitHub pull request review payload from the last scan's findings. Builds it; does not post it | (none) |
+| `badge` | Render the last scan's security grade as an SVG badge | `label` |
+| `dashboard` | Render the last scan as a standalone HTML dashboard | `path` |
+| `agent_graph` | Render which tools each detected agent can call | `format` (`mermaid` or `dot`, default: `mermaid`) |
+| `data_sensitivity_report` | Summarise the PII and sensitive-data findings (`DATA-*` rules) of the last scan | (none) |
+| `threat_model` | Assemble a threat model from the last scan: elements, data flows, trust boundaries and a STRIDE table with the evidence for each entry | `previous` |
+| `compliance_iso27001` | Map the last scan's evidence to ISO/IEC 27001:2022 Annex A controls: what the scan shows, what it cannot show, and the organisational evidence still needed | (none) |
+| `attack_plan` | Build exploit hypotheses from the last scan. Offline: contacts no target and executes nothing | `path` |
+| `plugin_install` | Install a plugin from a configured registry: fetches the binary, verifies its digest, registers it | `name`, `confirmed: true` (required); `version` |
+| `version` | Report the nox version, commit and build date | (none) |
 
 Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
 `idempotentHint`, `openWorldHint`), so a client can decide what to ask a person
 about without calling it. Almost all are **read-only** and closed-world;
-`scan`, `diff` and `plugin.call_tool` are read-only but open-world (they may
-look up advisories on the network). The exceptions: `baseline_add` and
+`scan` and `diff` are read-only but open-world (they may look up advisories on
+the network). The exceptions: `baseline_add` and
 `baseline_add_many` write the baseline file (additive, idempotent, not
 destructive), and `plugin_install` fetches and registers code that runs on your
-machine (open-world, destructive, requires `confirmed: true`). Output is
-truncated at **1 MB**.
+machine (open-world, destructive). Output is truncated at **1 MB**.
+
+The annotations are advice to the client. What the server itself enforces:
+
+- `plugin_install`, `baseline_add` and `baseline_add_many` refuse without
+  `confirmed: true`. The MCP host is expected to collect that from a person
+  before forwarding the call.
+- The two baseline tools also refuse without a `reason`. The entry they write
+  records it, the optional `owner`, and `"source": "mcp"`, so a reviewer reading
+  `.nox/baseline.json` can tell a suppression an agent asked for from one typed
+  at a terminal.
+- A tool that fails or refuses returns its message with `isError` set.
 
 Requests are rate-limited in two tiers, so a runaway or steered agent cannot
 turn the host into a scanning farm. Every request shares a ceiling of 20 per
 second (burst 50). The tools whose cost scales with the workspace — `scan`,
-`diff`, `plugin.call_tool`, `plugin_install` — additionally share 1 per second
-(burst 3). Reading results back is never charged against the scan budget. A
+`diff`, `plugin_install` — additionally share 1 per second (burst 3). Reading results back is never charged against the scan budget. A
 refused call returns JSON-RPC error `-32003` (rate limited); wait and retry.
 
 ### Resources
@@ -2270,6 +2490,25 @@ refused call returns JSON-RPC error `-32003` (rate limited); wait and retry.
 | `nox://sbom/cdx` | `application/json` | CycloneDX SBOM |
 | `nox://sbom/spdx` | `application/json` | SPDX SBOM |
 | `nox://ai-inventory` | `application/json` | AI component inventory |
+| `nox://rules` | `application/json` | Every rule, with its metadata |
+| `nox://dashboard` | `text/html` | HTML dashboard of the last scan |
+| `nox://project/{project}/findings` | `application/json` | Findings of one project |
+| `nox://project/{project}/sarif` | `application/json` | SARIF 2.1.0 of one project |
+| `nox://project/{project}/sbom/cdx` | `application/json` | CycloneDX SBOM of one project |
+| `nox://project/{project}/sbom/spdx` | `application/json` | SPDX SBOM of one project |
+| `nox://project/{project}/ai-inventory` | `application/json` | AI component inventory of one project |
+| `nox://project/{project}/dashboard` | `text/html` | HTML dashboard of one project |
+
+In the per-project URIs, `{project}` is the URL-encoded absolute path of a
+directory the server has scanned.
+
+With `--plugins`, two more tools are offered (see [the extension
+design](extension.md)):
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `plugin.list` | The hosted plugins and the tools each provides | — |
+| `plugin.call_tool` | Call one plugin tool | `tool` (`<plugin>.<tool>`), `input`, `workspace_root` (under an allowed root; default the first one) |
 
 ### Claude Desktop
 
@@ -2383,6 +2622,14 @@ See [`docs/plugin-authoring.md`](plugin-authoring.md) for the full SDK guide and
 | `2` | Error (invalid arguments, scan failure, config error) |
 
 When policy is configured via `.nox.yaml`, the exit code reflects the policy evaluation result rather than raw finding count. Findings below the `fail_on` threshold do not cause exit code 1.
+
+Without a policy, any active finding gives exit code 1, with one exception: a
+dependency vulnerability (VULN-001) nox decided is **not impacting** (its
+`applicability` is `not_impacting`, because the scan established that the
+affected package is not linked, or its code not reached, by this build). It
+stays in every report at info severity and is written to the CycloneDX SBOM as
+a VEX analysis, `state: not_affected` with justification `code_not_present` or
+`code_not_reachable`, but it does not fail the scan on its own.
 
 Use exit codes in CI to gate deployments:
 

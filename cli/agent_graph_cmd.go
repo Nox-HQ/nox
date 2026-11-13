@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"encoding/json"
@@ -24,7 +24,7 @@ func runAgentGraph(args []string) int {
 		format    string
 		output    string
 	)
-	fs.StringVar(&inputPath, "input", "ai.inventory.json", "path to ai.inventory.json from a previous scan")
+	fs.StringVar(&inputPath, "input", scanReportPath(".", "ai.inventory.json"), "path to ai.inventory.json from a previous scan")
 	fs.StringVar(&format, "format", "mermaid", "render format: mermaid or dot")
 	fs.StringVar(&output, "output", "", "destination path (defaults to stdout)")
 	if err := fs.Parse(args); err != nil {

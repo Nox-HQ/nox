@@ -177,6 +177,12 @@ func (a *Analyzer) scanFile(fs *findings.FindingSet, path string, content []byte
 						"shape of the fix rather than of the vulnerability")
 				continue
 			}
+			if r, ok := lineRefuters[s.ID]; ok && r.check(string(content), line) {
+				a.reasoning.Refute(
+					reasoning.Candidate(s.ID, path, ln+1, 1),
+					evidence.KindStatic, "nox-scan", "variants", r.reason)
+				continue
+			}
 			meta := map[string]string{"cve": s.CVE}
 			if s.VulnClass != "" {
 				meta["vuln_class"] = s.VulnClass

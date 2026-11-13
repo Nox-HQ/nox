@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/nox-hq/nox/core/textual"
+
 	"github.com/nox-hq/nox/core/findings"
 )
 
@@ -18,20 +20,20 @@ type Engine struct {
 	// optIn holds the IDs of OptIn rules this scan enabled. An OptIn rule not
 	// in it is skipped outright, so a rule nobody enabled costs nothing.
 	optIn map[string]bool
-	// keywords answers every rule's keyword pre-filter in one pass per file
-	// (see keywordindex.go). Built on first use, and again if rules were
-	// added since.
-	keywords atomic.Pointer[keywordIndex]
+	// literals finds every plan's literals, and answers every rule's keyword
+	// pre-filter, in one pass per file (see literalindex.go). Built on first
+	// use, and again if rules were added since.
+	literals atomic.Pointer[literalIndex]
 }
 
-// keywordIndex returns the index for rules, building it when the rule set has
+// literalIndex returns the index for rules, building it when the rule set has
 // grown since the last build.
-func (e *Engine) keywordIndex(rules []*Rule) *keywordIndex {
-	if x := e.keywords.Load(); x != nil && x.rules == len(rules) {
+func (e *Engine) literalIndex(rules []*Rule) *literalIndex {
+	if x := e.literals.Load(); x != nil && x.rules == len(rules) {
 		return x
 	}
-	x := newKeywordIndex(rules)
-	e.keywords.Store(x)
+	x := newLiteralIndex(rules)
+	e.literals.Store(x)
 	return x
 }
 
@@ -71,7 +73,8 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 
 	var out []findings.Finding
 
-	// Pre-compute a lowercase copy of content for keyword filtering.
+	// A lowercase copy of content, for KeywordTokens rules and for a file the
+	// one pass cannot answer the keyword pre-filters for.
 	var contentLower []byte
 	// Lazily split lines for the comment / context precision filters.
 	var lines []string
@@ -81,8 +84,10 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 	// Which keywords the file contains, computed once when the first rule
 	// with keywords gets that far.
 	var present []bool
-	var index *keywordIndex
+	// What every rule can share about this file, worked out at most once.
+	var scope fileScope
 	all := e.rules.Rules()
+	scope.literals.index = e.literalIndex(all)
 	for i, rule := range all {
 		if rule.OptIn && !e.optIn[rule.ID] {
 			continue
@@ -92,7 +97,7 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 		}
 
 		if len(rule.Keywords) > 0 {
-			if contentLower == nil {
+			if contentLower == nil && rule.KeywordTokens {
 				contentLower = bytes.ToLower(content)
 			}
 			if rule.KeywordTokens {
@@ -108,10 +113,15 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 				}
 			} else {
 				if present == nil {
-					index = e.keywordIndex(all)
-					present = index.present(contentLower)
+					present = scope.literals.keywordsPresent(content)
 				}
-				if !index.anyPresent(present, i) {
+				if present == nil {
+					if contentLower == nil {
+						contentLower = bytes.ToLower(content)
+					}
+					present = scope.literals.index.keywords.present(contentLower)
+				}
+				if !scope.literals.index.keywords.anyPresent(present, i) {
 					continue
 				}
 			}
@@ -122,7 +132,12 @@ func (e *Engine) ScanFile(path string, content []byte) ([]findings.Finding, erro
 			return nil, fmt.Errorf("no matcher registered for type %q (rule %s)", rule.MatcherType, rule.ID)
 		}
 
-		results := matcher.Match(content, rule)
+		var results []MatchResult
+		if sm, ok := matcher.(scopedMatcher); ok {
+			results = sm.matchScoped(&scope, content, rule)
+		} else {
+			results = matcher.Match(content, rule)
+		}
 		for _, mr := range results {
 			if rule.KeywordTokens {
 				if lineStarts == nil {
@@ -496,11 +511,8 @@ func loweredKeywords(keywords []string) [][]byte {
 func fileMatchesRule(path string, rule *Rule) bool {
 	base := filepath.Base(path)
 
-	for _, pattern := range rule.IgnoreFilePatterns {
-		if matched, _ := filepath.Match(pattern, path); matched {
-			return false
-		}
-		if matched, _ := filepath.Match(pattern, base); matched {
+	for _, p := range compiledFor(rule.ignorePatterns, rule.IgnoreFilePatterns) {
+		if p.matches(path, base) {
 			return false
 		}
 	}
@@ -508,33 +520,17 @@ func fileMatchesRule(path string, rule *Rule) bool {
 	if len(rule.FilePatterns) == 0 {
 		return true
 	}
-	for _, pattern := range rule.FilePatterns {
-		if matched, _ := filepath.Match(pattern, path); matched {
-			return true
-		}
-		if matched, _ := filepath.Match(pattern, base); matched {
+	for _, p := range compiledFor(rule.filePatterns, rule.FilePatterns) {
+		if p.matches(path, base) {
 			return true
 		}
 	}
 	return false
 }
 
-// isBinary reports whether content appears to be a binary file by checking for
-// null bytes in the first 512 bytes. Text files (source, config, YAML, JSON)
-// do not contain null bytes, so this is a reliable heuristic that prevents
-// false positives when scanning compiled binaries that embed rule patterns.
-func isBinary(content []byte) bool {
-	limit := 512
-	if len(content) < limit {
-		limit = len(content)
-	}
-	for _, b := range content[:limit] {
-		if b == 0 {
-			return true
-		}
-	}
-	return false
-}
+// isBinary reports whether content is binary; see textual.IsBinary, which
+// the waiver parser applies to the same files.
+func isBinary(content []byte) bool { return textual.IsBinary(content) }
 
 // matchLocation converts a match into a Location that describes the span the
 // match actually covers. The engine matches whole documents, so a pattern can

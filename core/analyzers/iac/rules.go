@@ -1558,13 +1558,20 @@ func builtinBaseIaCRules() []rules.Rule {
 			// Anchored to a real LABEL instruction at line start: an unanchored
 			// match let `# LABEL maintainer is deprecated` in a comment satisfy
 			// the rule. Same false-negative class as IAC-121.
-			absenceProperty: `(?im)^\s*LABEL\s+maintainer`,
+			//
+			// Either the OCI key (org.opencontainers.image.authors) or Docker's
+			// older `maintainer` satisfies it, as a key anywhere in the
+			// instruction: after other keys, quoted, or on a `\` continuation
+			// line. A key is preceded by whitespace or starts a line, and is
+			// followed by `=`, so `description=maintainer=x` and a value that
+			// merely mentions "the maintainer" do not count (#1009).
+			absenceProperty: `(?im)^[ \t]*LABEL\b(?:[^\n]*\\\r?\n)*[^\n]*?(?:[ \t]|^)"?(?:maintainer|org\.opencontainers\.image\.authors)"?[ \t]*=`,
 			absenceSpan:     "file",
-			description:     "Dockerfile missing LABEL maintainer",
-			cwe:             "CWE-1059", keywords: []string{"LABEL", "maintainer"},
+			description:     "Dockerfile does not name the image's authors (LABEL org.opencontainers.image.authors or maintainer)",
+			cwe:             "CWE-1059", keywords: []string{"LABEL", "maintainer", "org.opencontainers.image.authors"},
 			filePatterns: []string{"Dockerfile", "Dockerfile.*", "*.dockerfile"},
 			tags:         []string{"iac", "docker", "best-practice"},
-			remediation:  "Add LABEL maintainer=\"team@example.com\" to identify the image maintainer. This aids in vulnerability response and image lifecycle management.", // nox:ignore DATA-001 -- example email in remediation text
+			remediation:  "Add LABEL org.opencontainers.image.authors=\"<team or role address>\" (the OCI image-spec key; LABEL maintainer also satisfies this rule). A team or role address keeps working when people change and publishes no personal contact. It tells whoever finds a vulnerability in the image whom to report it to.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/1059.html"},
 		},
 		{

@@ -379,3 +379,15 @@ func containsDataURI(body []byte) bool {
 	}
 	return false
 }
+
+// RegionAt returns the index of the region containing offset, or -1.
+func RegionAt(regions []Region, offset int) int { return regionIndexAt(regions, offset) }
+
+// StringBody returns a string region's text without its prefix and quotes. A
+// region continuing an interpolated string has neither, so its body is all of
+// it.
+func StringBody(content []byte, r Region) []byte {
+	continuation := r.Start > 0 && content[r.Start-1] == '}'
+	from, to := stringDelimiters(content[r.Start:r.End], continuation)
+	return content[r.Start+from : r.Start+to]
+}

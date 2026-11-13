@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,6 +28,9 @@ import (
 	"github.com/nox-hq/nox/core/capability"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
+	"github.com/nox-hq/nox/core/fix"
+	"github.com/nox-hq/nox/core/image"
+	"github.com/nox-hq/nox/core/pypipin"
 	"github.com/nox-hq/nox/core/reach"
 	"github.com/nox-hq/nox/core/rules"
 )
@@ -79,6 +83,35 @@ type Package struct {
 	// than a resolved or pinned version. Empty for lockfile entries and exact
 	// pins. A finding against such a package says so.
 	Spec string
+	// Origin says where the package was read from when that changes what can
+	// be said about it. Empty for manifests and lockfiles; OriginGoBinary for a
+	// module embedded in a compiled Go executable, whose link set is not the
+	// source tree's.
+	Origin string
+}
+
+// OriginGoBinary marks a package read from a Go executable's build info.
+const OriginGoBinary = "go-binary"
+
+// OriginImage marks software read from inside a container base image
+// (core/image). Like a binary's modules, it is not what this source tree
+// links, so the tree's link set and call graph do not judge it.
+const OriginImage = "image"
+
+// fromArtifact reports whether a package was read from a built artifact (a
+// binary or an image) rather than from this tree's manifests.
+func fromArtifact(p Package) bool { return p.Origin == OriginGoBinary || p.Origin == OriginImage }
+
+// ImageReader reads what a digest-pinned container image has installed.
+// *image.Client is the implementation.
+type ImageReader interface {
+	Contents(ctx context.Context, name, digest string) (image.Contents, error)
+}
+
+// WithImages turns on reading digest-pinned base images named in
+// Dockerfiles. Off by default: it fetches image layers.
+func WithImages(r ImageReader) AnalyzerOption {
+	return func(a *Analyzer) { a.images = r }
 }
 
 // Vulnerability describes a known security issue for a package.
@@ -96,6 +129,41 @@ type PackageInventory struct {
 	mu    sync.Mutex
 	pkgs  []Package
 	vulns map[int][]Vulnerability
+	// pomsRequested counts the Maven parent and BOM coordinates sent to the
+	// POM source, so the scan can say what left the machine.
+	pomsRequested int
+	// goFetchedVia is where the go command was allowed to fetch modules from
+	// to enumerate the build; imageHosts is every host asked for a base
+	// image. Both are empty when the caches answered.
+	goFetchedVia []string
+	imageHosts   []string
+}
+
+// GoModulesFetchedVia is where the go command was allowed to fetch modules
+// from when it enumerated the packages the build links: each GOPROXY entry as
+// scheme and host, and "direct" for the modules' own source hosts. Empty when
+// the module cache answered, and on a scan that makes no lookups.
+func (pi *PackageInventory) GoModulesFetchedVia() []string {
+	pi.mu.Lock()
+	defer pi.mu.Unlock()
+	return append([]string(nil), pi.goFetchedVia...)
+}
+
+// ImageHostsContacted is every host the scan asked for a base image's
+// manifest, layers or pull token, sorted. Empty when every blob came from the
+// cache, and on a scan that makes no lookups.
+func (pi *PackageInventory) ImageHostsContacted() []string {
+	pi.mu.Lock()
+	defer pi.mu.Unlock()
+	return append([]string(nil), pi.imageHosts...)
+}
+
+// MavenPOMsRequested is how many published Maven POM coordinates the scan asked
+// its POM source for. Zero on an offline scan.
+func (pi *PackageInventory) MavenPOMsRequested() int {
+	pi.mu.Lock()
+	defer pi.mu.Unlock()
+	return pi.pomsRequested
 }
 
 // Add appends a package to the inventory.
@@ -246,10 +314,17 @@ type Analyzer struct {
 	// advisoryCache is applied to the default OSV source when one is built.
 	advisoryCache osvsource.AdvisoryCache
 
+	// pomSource fetches Maven parents and BOMs the repository does not
+	// contain (maven_remote.go). Nil on an offline scan.
+	pomSource POMSource
+
 	// degradations collects the checks this analyzer could not complete. It is
 	// optional: a nil collector discards records, so library callers that do
 	// not supply one behave exactly as before.
 	degradations *degrade.Degradations
+
+	// images reads base images' installed software; nil leaves them unread.
+	images ImageReader
 }
 
 // WithDegradations gives the analyzer a collector to report incomplete checks
@@ -418,6 +493,11 @@ var supportedLockfiles = map[string]func([]byte) ([]Package, error){
 	"composer.lock":      parseComposerLock,
 	"bom.json":           parseCycloneDXContent,
 	"sbom.json":          parseSPDXContent,
+	"Package.resolved":   parsePackageResolved,
+	"mix.lock":           parseMixLock,
+	"gradle.lockfile":    parseGradleLockfile,
+	"Podfile.lock":       parsePodfileLock,
+	"conan.lock":         parseConanLock,
 }
 
 // ParseLockfile detects the lockfile format from its filename and delegates
@@ -442,7 +522,15 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	// Track which lockfile each package came from for finding locations.
 	type pkgSource struct {
 		lockfilePath string
+		// line and image locate software read from a base image at the FROM
+		// line that names it; image is "name@digest".
+		line  int
+		image string
+		// absDir is the lockfile's directory on disk, where the manifest
+		// beside it is read. Empty for sources without one.
+		absDir string
 	}
+	var npmProj npmProjects
 	var sources []pkgSource
 
 	// Module root of the Go module under scan, used to enumerate the packages
@@ -458,7 +546,31 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 	}
 
-	npmLocks := newManifestDedupe()
+	locks := newManifestDedupe()
+
+	// Every pom.xml is indexed before any is read, so a module's versions can
+	// come from a parent or BOM elsewhere in the repository. See maven.go.
+	poms := newMavenIndex()
+	for _, art := range artifacts {
+		if art.Type == discovery.Lockfile && filepath.Base(art.Path) == "pom.xml" && !isInstalledDependencyPath(art.Path) {
+			if content, err := os.ReadFile(art.AbsPath); err == nil {
+				poms.add(filepath.ToSlash(art.Path), content)
+			}
+		}
+	}
+	mavenFetched := poms.fetchRemote(ctx, a.pomSource)
+	inventory.pomsRequested = mavenFetched.requested
+	var mavenUnresolved []unresolvedMaven
+
+	// A gradle.lockfile pins every version its project resolves, so a
+	// versionless declaration in a build file it governs is not a gap.
+	var gradleLockDirs []string
+	for _, art := range artifacts {
+		if art.Type == discovery.Lockfile && filepath.Base(art.Path) == "gradle.lockfile" {
+			gradleLockDirs = append(gradleLockDirs, pathDir(art.Path))
+		}
+	}
+	var gradleUnresolved []unresolvedGradle
 
 	for _, art := range artifacts {
 		if art.Type != discovery.Lockfile || isInstalledDependencyPath(art.Path) {
@@ -469,21 +581,39 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if err != nil {
 			return nil, nil, fmt.Errorf("reading lockfile %s: %w", art.Path, err)
 		}
-		if npmLockfiles[filepath.Base(art.Path)] {
+		lockEco := lockfileEcosystems[filepath.Base(art.Path)]
+		if lockEco != "" {
 			// Recorded before parsing so a lockfile that fails to parse still
 			// counts as present; see manifestDedupe.record.
-			npmLocks.record(pathDir(art.Path), nil)
+			locks.record(lockEco, pathDir(art.Path), nil)
 		}
 
 		var pkgs []Package
-		if filepath.Base(art.AbsPath) == "go.mod" {
+		switch filepath.Base(art.AbsPath) {
+		case "go.mod":
 			goModDir = filepath.Dir(art.AbsPath)
 			// Go needs both files: go.mod for the selected versions, go.sum to
 			// recover transitives that module graph pruning left unnamed. A
 			// missing or unreadable go.sum is fine — go.mod alone still resolves.
 			goSum, _ := os.ReadFile(filepath.Join(filepath.Dir(art.AbsPath), "go.sum"))
 			pkgs, err = resolveGoPackages(content, goSum)
-		} else {
+		case "pom.xml":
+			var unresolved []unresolvedMaven
+			pkgs, unresolved, err = poms.packages(filepath.ToSlash(art.Path))
+			mavenUnresolved = append(mavenUnresolved, unresolved...)
+		case "build.gradle", "build.gradle.kts":
+			var props map[string]string
+			if b, perr := os.ReadFile(filepath.Join(filepath.Dir(art.AbsPath), "gradle.properties")); perr == nil {
+				props = parseGradleProperties(b)
+			}
+			var b gradleBuild
+			b, err = parseGradleBuild(content, props)
+			pkgs = b.pkgs
+			if len(b.unresolved) > 0 && !governedBy(gradleLockDirs, pathDir(art.Path)) {
+				gradleUnresolved = append(gradleUnresolved,
+					unresolvedGradle{path: filepath.ToSlash(art.Path), names: b.unresolved, springBoot: b.springBoot})
+			}
+		default:
 			pkgs, err = a.ParseLockfile(art.AbsPath, content)
 		}
 		if err != nil {
@@ -507,49 +637,52 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			continue
 		}
 
-		if npmLockfiles[filepath.Base(art.Path)] {
-			npmLocks.record(pathDir(art.Path), pkgs)
+		if lockEco != "" {
+			locks.record(lockEco, pathDir(art.Path), pkgs)
 		}
 		for _, p := range pkgs {
 			inventory.Add(p)
-			sources = append(sources, pkgSource{lockfilePath: art.Path})
+			sources = append(sources, pkgSource{lockfilePath: art.Path, absDir: filepath.Dir(art.AbsPath)})
 		}
 	}
 
-	// package.json declares dependencies even when no lockfile resolves them,
-	// which is the usual shape of a project an AI assistant just generated.
-	// Reading only lockfiles reported such a project as having none. A lockfile
-	// stays authoritative: the manifest contributes only names it does not
-	// resolve, and everything when there is no lockfile at all.
+	// Compiled Go executables, read from the build info they embed. Only
+	// files nothing else claimed are probed; see gobinary.go.
 	for _, art := range artifacts {
-		if filepath.Base(art.Path) != "package.json" || isInstalledDependencyPath(art.Path) {
+		if art.Type != discovery.Unknown {
 			continue
 		}
-		content, err := os.ReadFile(art.AbsPath)
+		bin, err := readGoBinary(art.AbsPath, art.Size)
 		if err != nil {
-			a.degradations.AddAdvisory(degrade.Lockfile,
-				fmt.Sprintf("%s could not be read: %v", art.Path, err),
-				"dependencies declared in this file were NOT scanned for vulnerabilities")
 			continue
 		}
-		mpkgs, unresolved, err := parsePackageJSONManifest(content)
-		if err != nil {
-			a.degradations.AddAdvisory(degrade.Lockfile,
-				fmt.Sprintf("%s was not parsed: %v", art.Path, err),
-				"dependencies declared in this file were NOT scanned for vulnerabilities")
-			continue
-		}
-		locked, governed := npmLocks.governing(pathDir(art.Path))
-		for _, p := range mpkgs {
-			if _, ok := locked[p.Name]; ok {
-				continue
-			}
+		for _, p := range bin.packages {
 			inventory.Add(p)
 			sources = append(sources, pkgSource{lockfilePath: art.Path})
 		}
-		if !governed && len(mpkgs)+len(unresolved) > 0 {
-			detail, impact := manifestDegradation(art.Path, len(mpkgs), unresolved)
-			a.degradations.AddAdvisory(degrade.Lockfile, detail, impact)
+		if len(bin.localReplaces) > 0 {
+			a.degradations.Add(degrade.Lockfile,
+				fmt.Sprintf("%s links modules replaced by a local directory: %s", art.Path, strings.Join(bin.localReplaces, ", ")),
+				"the binary records no version for them, so they were NOT checked for vulnerabilities")
+		}
+	}
+
+	if len(gradleUnresolved) > 0 {
+		detail, impact := gradleDegradation(gradleUnresolved)
+		a.degradations.Add(degrade.Lockfile, detail, impact)
+	}
+	if len(mavenUnresolved) > 0 {
+		detail, impact := mavenDegradation(mavenUnresolved, mavenFetched)
+		a.degradations.Add(degrade.Lockfile, detail, impact)
+	}
+
+	// A manifest declares dependencies even when no lockfile resolves them, which
+	// is the usual shape of a project an AI assistant just generated. Reading
+	// only lockfiles reported such a project as having none. See readManifests.
+	for _, m := range a.readManifests(artifacts, locks) {
+		for _, p := range m.Pkgs {
+			inventory.Add(p)
+			sources = append(sources, pkgSource{lockfilePath: m.Path})
 		}
 	}
 
@@ -585,12 +718,25 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		fromLines := dockerfileFromLines(content)
 
 		for i, img := range images {
-			inventory.Add(img)
-			sources = append(sources, pkgSource{lockfilePath: art.Path})
-
 			line := 1
 			if i < len(fromLines) {
 				line = fromLines[i]
+			}
+			var inside []Package
+			if a.images != nil {
+				var read bool
+				inside, read = a.readImage(ctx, art.Path, img)
+				if read {
+					// Checked through what it holds: not an unqueryable
+					// "docker" package any more.
+					img.Origin = OriginImage
+				}
+			}
+			inventory.Add(img)
+			sources = append(sources, pkgSource{lockfilePath: art.Path})
+			for _, p := range inside {
+				inventory.Add(p)
+				sources = append(sources, pkgSource{lockfilePath: art.Path, line: line, image: img.Name + "@" + img.Version})
 			}
 
 			// CONT-002: image uses "latest" tag (explicit or implicit).
@@ -731,12 +877,18 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 	}
 
+	if contacted, ok := a.images.(interface{ Contacted() []string }); ok {
+		inventory.imageHosts = contacted.Contacted()
+	}
+
 	// Query OSV for vulnerabilities if enabled.
 	if a.osvEnabled {
 		pkgs := inventory.Packages()
 		if len(pkgs) > 0 {
 			ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 			defer cancel()
+
+			a.reportUnqueryableEcosystems(uncheckedImageRefs(pkgs))
 
 			src := a.vulnSource()
 			vulnMap, err := lookupDistinct(ctx, src, pkgs)
@@ -753,7 +905,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 				linkedGoKnown bool
 			)
 			if goModDir != "" {
-				linkedGoPkgs, linkedGoKnown = goImportedPackages(ctx, goModDir)
+				linkedGoPkgs, linkedGoKnown, inventory.goFetchedVia = goImportedPackages(ctx, goModDir)
 			}
 			// Built once per scan and only when there is a Go module to build
 			// it over, so a repository with no go.mod pays nothing. It answers
@@ -788,9 +940,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						})
 					}
 
-					lockfilePath := ""
+					lockfilePath, lockDir := "", ""
+					startLine, imageRef := 1, ""
 					if pkgIdx < len(sources) {
-						lockfilePath = sources[pkgIdx].lockfilePath
+						lockfilePath, lockDir = sources[pkgIdx].lockfilePath, sources[pkgIdx].absDir
+						if sources[pkgIdx].line > 0 {
+							startLine = sources[pkgIdx].line
+						}
+						imageRef = sources[pkgIdx].image
 					}
 
 					aliases := strings.Join(ov.Aliases, ",")
@@ -820,22 +977,38 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						}
 					}
 					addProvenanceMetadata(meta, &ov)
-					if fix := fixedVersion(&ov, pkg.Name, pkg.Ecosystem, pkg.Version); fix != "" {
-						meta["fixed_in"] = fix
+					addPriorityMetadata(meta, &ov)
+					if fixVer := fixedVersion(&ov, pkg.Name, pkg.Ecosystem, pkg.Version); fixVer != "" {
+						meta["fixed_in"] = fixVer
 						meta["remediation_action"] = "upgrade"
-						meta["remediation_command"] = upgradeCommand(pkg.Ecosystem, pkg.Name, fix)
+						meta["remediation_command"] = fix.UpgradeCommand(pkg.Ecosystem, pkg.Name, fixVer)
+						if pkg.Ecosystem == "npm" && lockDir != "" {
+							addNPMRemediation(meta, npmProj.open(lockDir).Advice(pkg.Name, fixVer), pkg.Name, fixVer)
+						}
+						if pkg.Ecosystem == "pypi" && lockDir != "" {
+							addPyPIRemediation(meta, pypipin.AdviceFor(filepath.Join(lockDir, filepath.Base(lockfilePath)), pkg.Name, pkg.Version, fixVer))
+						}
+						if pkg.Origin == OriginImage {
+							addImageRemediation(meta, imageRef, pkg.Name, fixVer)
+						}
+					}
+					if pkg.Origin == OriginImage {
+						meta["image"] = imageRef
 					}
 					// OSV scopes Go advisories to import paths. When the affected
 					// packages are provably not linked, the finding is recorded
 					// but demoted out of gating severity rather than dropped: a
 					// silent disappearance is indistinguishable from a scanner
 					// that simply missed it.
-					message := fmt.Sprintf("Known vulnerability %s in %s@%s: %s", ov.ID, pkg.Name, pkg.Version, ov.Summary)
+					text := vulnText{
+						shown:    headline("Known vulnerability "+ov.ID, pkg.Name, pkg.Version, ov.Summary),
+						identity: fmt.Sprintf("Known vulnerability %s in %s@%s: %s", ov.ID, pkg.Name, pkg.Version, ov.Summary),
+					}
 					if pkg.Spec != "" {
 						// The version is a range's lower bound, not an install.
 						meta["declared_spec"] = pkg.Spec
 						meta["version_source"] = "manifest_range_lower_bound"
-						message += fmt.Sprintf(" [declared range %s, no lockfile: checked at its lower bound %s]", pkg.Spec, pkg.Version)
+						text.add(fmt.Sprintf(" [declared range %s, no lockfile: checked at its lower bound %s]", pkg.Spec, pkg.Version))
 					}
 
 					// A record with no published advisory is a projection, and
@@ -849,12 +1022,23 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// the same treatment an unreachable Go advisory gets below.
 					if !status.Gating() {
 						sev = findings.SeverityInfo
-						message = fmt.Sprintf("THEORETICAL %s in %s@%s: %s",
-							strings.ToLower(string(status)), pkg.Name, pkg.Version, ov.Summary)
+						text = vulnText{
+							shown: headline("THEORETICAL "+strings.ToLower(string(status)),
+								pkg.Name, pkg.Version, ov.Summary),
+							identity: fmt.Sprintf("THEORETICAL %s in %s@%s: %s",
+								strings.ToLower(string(status)), pkg.Name, pkg.Version, ov.Summary),
+						}
 						if ov.Theoretical() {
 							meta["theoretical"] = "true"
 						}
 					}
+					// Both return the message they were given with a note on
+					// the end, or unchanged. Given nothing, they return the note.
+					var note string
+					sev, note = applyDistroUrgency(meta, &ov, pkg, sev, "")
+					text.add(note)
+					sev, note = gateOnlyFixable(meta, pkg, sev, "")
+					text.add(note)
 					// Applicability: how far the argument from "this advisory
 					// exists" to "an attacker can use it here" actually got, and
 					// why it stopped. Recorded on every dependency finding,
@@ -862,9 +1046,21 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					// because "we could not tell" and "we did not look" are the
 					// answers a reader most needs and least often gets.
 					verdict := applicabilityFor(pkg, &ov, linkedGoPkgs, linkedGoKnown, srcImports, goGraph, goModDir)
-					if pkg.Ecosystem == "go" {
+					// The source tree's link set and call graph describe what
+					// this repository builds. A module read from a compiled
+					// binary is judged by neither: the binary may have been
+					// built from other code, so a refutation borrowed from the
+					// tree would downgrade an advisory for code that shipped.
+					goFromSource := pkg.Ecosystem == "go" && !fromArtifact(pkg)
+					switch {
+					case goFromSource:
 						verdict = raiseOnListedSymbol(verdict, meta, goGraph, &ov, pkg.Name)
-					} else {
+						addImportedMetadata(meta, srcImports, pkg.Name)
+					case pkg.Ecosystem == "go":
+						meta["package_origin"] = pkg.Origin
+					case pkg.Origin == OriginImage:
+						meta["package_origin"] = OriginImage
+					default:
 						verdict = raiseOnJSListedSymbol(verdict, meta, srcImports, &ov, pkg)
 					}
 					meta["applicability"] = string(verdict.Outcome)
@@ -889,7 +1085,12 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 						// not tell" arrived looking exactly like "nobody asked",
 						// which is the one distinction this vocabulary exists to
 						// preserve.
-						r, _ := goSymbolReferenced(affected, linkedGoPkgs, linkedGoKnown)
+						linked, linkedKnown := linkedGoPkgs, linkedGoKnown
+						if !goFromSource {
+							// Asked, and not answerable from this tree.
+							linked, linkedKnown = nil, false
+						}
+						r, _ := goSymbolReferenced(affected, linked, linkedKnown)
 						if len(affected) > 0 {
 							meta["affected_imports"] = strings.Join(affected, ",")
 						}
@@ -910,9 +1111,11 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					if meta["affected_symbol_evidence"] == "source_reference" {
 						// Describe speaks of calls from an entry point, which a
 						// source reference is not. Say what was established.
-						message += " — " + sourceReferenceSentence(meta)
+						text.shown += " — " + sourceReferenceSentence(meta)
+						text.identity += " — " + sourceReferenceIdentity(meta)
 					} else {
-						message += " — " + verdict.Describe()
+						text.shown += " — " + verdict.Describe()
+						text.identity += " — " + verdict.FingerprintText()
 					}
 
 					// A range's lower bound is what the manifest permits, not
@@ -921,15 +1124,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					if pkg.Spec != "" {
 						confidence = findings.ConfidenceMedium
 					}
+					loc := findings.Location{FilePath: lockfilePath, StartLine: startLine}
 					into.Add(findings.Finding{
-						RuleID:     "VULN-001",
-						Severity:   sev,
-						Confidence: confidence,
-						Location: findings.Location{
-							FilePath:  lockfilePath,
-							StartLine: 1,
-						},
-						Message:           message,
+						RuleID:            "VULN-001",
+						Severity:          sev,
+						Confidence:        confidence,
+						Location:          loc,
+						Message:           text.shown,
+						Fingerprint:       findings.ComputeFingerprint("VULN-001", loc, text.identity),
 						Metadata:          meta,
 						AliasFingerprints: aliasFPs,
 					})
@@ -986,6 +1188,12 @@ func applicabilityFor(pkg Package, ov *osvVuln, linked map[string]struct{}, link
 		return applicability.Undeterminable(reached, applicability.SymbolUsed, capability.Unsupported)
 	}
 
+	if fromArtifact(pkg) {
+		// Build info names modules, not the packages the binary linked, and
+		// the source tree's link set is not this binary's. A limit of what nox
+		// reads today, not an answer.
+		return applicability.Undeterminable(reached, applicability.SymbolUsed, capability.Unsupported)
+	}
 	affected := goAffectedImports(ov, pkg.Name)
 	reachable, determined := goVulnReachable(affected, linked, linkedKnown)
 	if !determined {
@@ -1059,4 +1267,27 @@ func lookupDistinct(ctx context.Context, src vulnsource.Source, pkgs []Package) 
 		}
 	}
 	return out, nil
+}
+
+// reportUnqueryableEcosystems records, once per ecosystem, packages that were
+// inventoried but that the advisory pipeline has no OSV ecosystem for. The
+// lookup drops them without a word, so without this a Podfile.lock project
+// reads as checked and clean.
+func (a *Analyzer) reportUnqueryableEcosystems(pkgs []Package) {
+	counts := map[string]int{}
+	for _, p := range pkgs {
+		if _, ok := osvEcosystem(p.Ecosystem); !ok {
+			counts[p.Ecosystem]++
+		}
+	}
+	ecosystems := make([]string, 0, len(counts))
+	for eco := range counts {
+		ecosystems = append(ecosystems, eco)
+	}
+	sort.Strings(ecosystems)
+	for _, eco := range ecosystems {
+		a.degradations.AddAdvisory(degrade.Lockfile,
+			fmt.Sprintf("%d %s packages are in the inventory but the advisory pipeline has no OSV ecosystem for %s", counts[eco], eco, eco),
+			"these packages were NOT checked for known vulnerabilities; their licenses and the SBOM are unaffected")
+	}
 }

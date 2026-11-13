@@ -50,7 +50,7 @@ func extractKotlin(lines []logicalLine) []unitDraft {
 		// before statements so its name is not mistaken for a call and its
 		// parameters become the unit's.
 		if name, params, ok := kotlinFunHeader(trimmed); ok {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, requestBound: kotlinRequestBound(trimmed), headerLine: ll.line}
 			units = append(units, u)
 			cur = u
 			funDepth = depth
@@ -98,6 +98,7 @@ func extractKotlin(lines []logicalLine) []unitDraft {
 
 	out := make([]unitDraft, 0, len(units))
 	for _, u := range units {
+		seedRequestBoundParams(u)
 		out = append(out, *u)
 	}
 	return out
@@ -173,6 +174,9 @@ func parseKotlinParams(inner string) []string {
 		if p == "" {
 			continue
 		}
+		// Drop parameter annotations (`@RequestParam host: String`): left in,
+		// the name read as `@RequestParam host` and the parameter was lost.
+		_, p = leadingAnnotations(p)
 		// Drop a leading `vararg`/`noinline`/`crossinline` modifier.
 		for _, mod := range []string{"vararg ", "noinline ", "crossinline "} {
 			p = strings.TrimPrefix(p, mod)
@@ -314,4 +318,27 @@ func kotlinReturnStatement(ll logicalLine) (stmtDraft, bool) {
 	st.returns = append([]string(nil), st.reads...)
 	st.isReturn = true
 	return st, true
+}
+
+// kotlinRequestBound maps a Kotlin `fun` header's request-bound parameters
+// (`@RequestParam host: String`) to their source sentinels.
+func kotlinRequestBound(header string) map[string]string {
+	i := strings.Index(header, "fun ")
+	if i < 0 {
+		return nil
+	}
+	return requestBoundParams(headerParamList(header[i:]), splitKotlinParamList, kotlinParamName)
+}
+
+// kotlinParamName is the binding name of an annotation-free Kotlin parameter
+// slot: the text before its type annotation.
+func kotlinParamName(slot string) string {
+	slot = strings.TrimSpace(slot)
+	for _, mod := range []string{"vararg ", "noinline ", "crossinline "} {
+		slot = strings.TrimPrefix(slot, mod)
+	}
+	if i := topLevelColon(slot); i >= 0 {
+		return strings.TrimSpace(slot[:i])
+	}
+	return slot
 }

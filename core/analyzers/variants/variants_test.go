@@ -114,3 +114,32 @@ func TestExtScoping(t *testing.T) {
 		t.Errorf("python-scoped VARIANT-002 fired on .js; got %v", ids)
 	}
 }
+
+// A Loader named by a bare identifier is resolved in the same file. pydantic-ai
+// subclasses yaml.BaseLoader (strings only) and binds getattr(yaml,
+// 'CSafeLoader', yaml.SafeLoader); both were reported as the full loader of
+// CVE-2020-14343 (#928). A name bound to any unsafe loader, or defined
+// nowhere in the file, still fires.
+func TestPyYAMLLoaderResolvedInFile(t *testing.T) {
+	safe := []struct{ name, src string }{
+		{"BaseLoader subclass", "import yaml\n\nclass UniqueKeyLoader(yaml.BaseLoader):\n    pass\n\ndef parse(s):\n    return yaml.load(s, Loader=UniqueKeyLoader)\n"},
+		{"getattr safe binding", "import yaml\n\ndef load(p):\n    loader = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)\n    return yaml.load(p.read_text(), Loader=loader)\n"},
+	}
+	for _, c := range safe {
+		if has(scan(t, "m.py", c.src), "VARIANT-002") {
+			t.Errorf("%s: VARIANT-002 fired on a safe loader", c.name)
+		}
+	}
+	unsafe := []struct{ name, src string }{
+		{"FullLoader subclass", "import yaml\n\nclass L(yaml.FullLoader):\n    pass\n\nyaml.load(s, Loader=L)\n"},
+		{"conditional unsafe", "import yaml\nloader = yaml.Loader if trusted else yaml.SafeLoader\nyaml.load(s, Loader=loader)\n"},
+		{"mixed bases", "import yaml\n\nclass L(yaml.SafeLoader, yaml.UnsafeLoader):\n    pass\n\nyaml.load(s, Loader=L)\n"},
+		{"rebound unsafe", "import yaml\nloader = yaml.SafeLoader\nloader = yaml.UnsafeLoader\nyaml.load(s, Loader=loader)\n"},
+		{"imported, undefined", "import yaml\nfrom loaders import L\nyaml.load(s, Loader=L)\n"},
+	}
+	for _, c := range unsafe {
+		if !has(scan(t, "m.py", c.src), "VARIANT-002") {
+			t.Errorf("%s: VARIANT-002 no longer fires", c.name)
+		}
+	}
+}
