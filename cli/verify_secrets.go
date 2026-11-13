@@ -183,7 +183,7 @@ func redactedPrefix(secret string) string {
 func runVerifySecrets(args []string) int {
 	fs := flag.NewFlagSet("verify-secrets", flag.ContinueOnError)
 	var inputPath, root string
-	fs.StringVar(&inputPath, "input", "findings.json", "path to findings.json from a previous scan")
+	fs.StringVar(&inputPath, "input", scanReportPath(".", "findings.json"), "path to findings.json from a previous scan")
 	fs.StringVar(&root, "root", ".", "directory the scan was run against, used to resolve finding paths")
 	if err := fs.Parse(args); err != nil {
 		return 2

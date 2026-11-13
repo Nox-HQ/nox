@@ -12,8 +12,38 @@ Fixes from an audit of 1.65.0 as a user meets it (#1066).
 What an audit of 1.65.0 found in the findings themselves (#1067): ratings and
 wording that claimed more than the scan knew.
 
+### Added
+
+- `nox serve --plugins` lets an agent call installed plugins through MCP
+  (`plugin.list`, `plugin.call_tool`). Both tools existed in the server, but
+  `nox serve` never attached a plugin host, so they were never offered. The
+  flag is off by default, since a call starts a plugin process. Each plugin
+  passes the checks a scan applies (binary digest, track safety profile, the
+  `plugin_policy` in the workspace's `.nox.yaml`). A plugin that fails one is
+  named on stderr and the rest are hosted.
+- `plugin.call_tool` confines the root a plugin reads. It checked
+  `workspace_root` only when given and never `input.workspace_root`, where
+  plugins read their root, so a call could aim a plugin outside the allowed
+  roots. The root now comes from either place, must agree where both are
+  given, defaults to the first allowed root and is checked before the plugin
+  runs.
+
 ### Changed
 
+- **Reports go to `.nox/reports/`, not the working directory.** `nox scan .`
+  used to write `findings.json`, `results.sarif`, the SBOMs and the AI
+  inventory next to the code, five untracked files one `git add .` from being
+  committed. nox puts a `.gitignore` in the new directory, so git never lists
+  the reports and your own `.gitignore` is untouched. Commands that read a
+  report (`fix`, `fix plan`, `vex`, `annotate`, `advisories`, `ci-gate`,
+  `verify-secrets`, `attack`, `confirm`, `agent-graph`, `model`, `compliance`)
+  look there first and still read a `./findings.json` from an older scan.
+  `nox mcp drift` writes there too. `--output` and `output.directory` work as
+  before, and the GitHub Action passes its own `--output`, so it is
+  unaffected. **Breaking for scripts** that run `nox scan .` and then read
+  `./findings.json`: read `.nox/reports/findings.json`, or pass `--output .`
+  to keep the old place. Delete reports an older scan left in the tree;
+  until you do, a scan skips them and names them in a `[degraded]` line.
 - A mistyped `--format`, `--severity-threshold` or `--min-confidence` (and
   `output.format` in `.nox.yaml`) is an error, exit 2, before the scan runs.
   `--format sarfi` used to exit 0 and write no report; `--severity-threshold
@@ -69,6 +99,14 @@ wording that claimed more than the scan knew.
   and the fix plan still says to rotate it, but it no longer meets
   `--severity-threshold high`. The finding carries `value_class: test_mode`
   and `rule_severity`. A class only ever lowers a rating.
+- A client ID or account SID is reported at info, as an identifier. Nine
+  rules (SEC-260, SEC-264, SEC-274, SEC-292, SEC-379, SEC-421, SEC-557,
+  SEC-559, SEC-756: LinkedIn, Looker, MessageBird, Plaid, Twilio, Azure and
+  Google OAuth) claimed a hard-coded credential at high severity and told the
+  reader to rotate it; on a real repository a LinkedIn client ID and a Twilio
+  Account SID in `.env.example` led the assessment. They now say "not a
+  credential", cite CWE-547 instead of CWE-798, and name the secret that does
+  matter. Matches and fingerprints are unchanged.
 - A dependency finding's message says what was established in words. It
   used to end in the applicability ladder's identifiers ("established as
   far as "affected_version"; symbol_used was not established"), in SARIF,
@@ -76,6 +114,12 @@ wording that claimed more than the scan knew.
   The metadata keys and values are unchanged, and so is every fingerprint:
   a dependency finding's identity is still computed over the 1.65.0
   wording, so baselines, waivers and VEX statements keep matching.
+
+- `results.sarif` from `nox scan` describes only the rules its results point
+  at, as the MCP report already did. It embedded the whole catalog: 1,503
+  descriptors, 1.97 MB for a scan with six results, which every Code Scanning
+  upload carried and nothing read. Alert identity is unchanged: a result
+  points at the same descriptor id as before.
 
 ### Fixed
 
@@ -151,6 +195,14 @@ wording that claimed more than the scan knew.
   Those alerts close and reopen once under the new id after upgrading, and
   their dismissals do not carry over. Fingerprints, baselines, waivers and VEX
   are unchanged. See `docs/adr/0003-sarif-descriptor-per-rule-and-severity.md`.
+- The `actions/remediate` composite action ran the scan Action pinned at
+  v1.62.0, three releases behind the nox it was released with. The pin check
+  that keeps the documented Action pins on the release nox runs itself now
+  covers `actions/` too, so the pin moves with every release.
+- MARKETPLACE.md, the GitHub Marketplace listing copy, was written for v0.8.1:
+  717 rules, 19 plugins, "OSV lookups gated behind a single flag", a binary
+  cache the Action does not have, and a pre-listing checklist for that
+  release. It now describes the current Action and what an online scan sends.
 
 ## [1.65.0] - 2026-11-10
 

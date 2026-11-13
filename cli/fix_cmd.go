@@ -44,7 +44,7 @@ func runFix(args []string) int {
 		doContent    bool
 		write        bool
 	)
-	fs.StringVar(&inputPath, "input", "findings.json", "path to findings.json from a previous scan")
+	fs.StringVar(&inputPath, "input", scanReportPath(".", "findings.json"), "path to findings.json from a previous scan")
 	fs.BoolVar(&dryRun, "dry-run", false, "print actions without applying them")
 	fs.BoolVar(&includeMajor, "include-major", false, "apply upgrades that cross a major version boundary")
 	fs.StringVar(&manifestRoot, "root", ".", "directory containing the project's manifest (go.mod)")

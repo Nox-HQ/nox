@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -414,7 +415,7 @@ func resolveOutputDir(flagValue, configValue string) string {
 	if configValue != "" {
 		return configValue
 	}
-	return "."
+	return defaultReportDir
 }
 
 // stagedScanOptions adapts the scan options for a --staged run.
@@ -461,7 +462,7 @@ func absAgainst(root, p string) string {
 // the source.
 const (
 	usageFormat  = "output formats: json,sarif,cdx,spdx,html,all (comma-separated) (default \"json\")"
-	usageOutput  = "output directory for report files (default \".\")"
+	usageOutput  = "output directory for report files (default \".nox/reports\", which nox keeps out of git)"
 	usageRules   = "path to custom rules YAML file or directory"
 	usageQuiet   = "suppress all output except errors"
 	usageQuietSh = "suppress all output except errors (shorthand)"
@@ -883,7 +884,7 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	// it configured was not in force.
 
 	// Generate reports.
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+	if err := ensureReportDir(outputDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: creating output directory: %v\n", err)
 		return 2
 	}
@@ -905,10 +906,11 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 
 		case "sarif":
 			path := filepath.Join(outputDir, "results.sarif")
+			// Describes the rules its results use, as the MCP report does. The
+			// whole catalog (1,500+ descriptors, about 2 MB) was bytes every
+			// Code Scanning upload carried and nothing read: a descriptor is
+			// looked at only through a result that points at it.
 			r := result.SARIFReporter(version)
-			// The CLI writes to a file, not to a response budget, so it can
-			// afford the full rule catalog the MCP surface cannot.
-			r.Rules = result.Rules
 			if err := r.WriteToFile(result.Findings, path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)
 				return 2
@@ -1073,6 +1075,8 @@ func runServe(args []string) int {
 	serveFS := flag.NewFlagSet("serve", flag.ContinueOnError)
 	var allowedPaths string
 	serveFS.StringVar(&allowedPaths, "allowed-paths", "", "comma-separated workspace roots the server may scan (default: the working directory)")
+	var hostPlugins bool
+	serveFS.BoolVar(&hostPlugins, "plugins", false, "host installed plugins, adding the plugin.list and plugin.call_tool tools (trust policy from the first root's .nox.yaml)")
 
 	if err := serveFS.Parse(args); err != nil {
 		return 2
@@ -1084,7 +1088,22 @@ func runServe(args []string) int {
 		return 2
 	}
 
-	srv := server.New(version, paths)
+	host, warnings, err := servePluginHost(context.Background(), hostPlugins, paths[0])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
+	}
+	// stdout carries the MCP protocol; anything for the operator goes to stderr.
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "[plugin warn] %s\n", w)
+	}
+	var opts []server.Option
+	if host != nil {
+		defer func() { _ = host.Close() }()
+		opts = append(opts, server.WithPluginHost(host))
+	}
+
+	srv := server.New(version, paths, opts...)
 	if err := srv.Serve(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: MCP server failed: %v\n", err)
 		return 2

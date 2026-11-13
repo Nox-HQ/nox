@@ -8,11 +8,12 @@ import (
 	"github.com/nox-hq/nox/core/rules"
 )
 
-// The MCP surface does not embed the rule catalog; the CLI does. Both must
-// still name a finding by the same descriptor, which needs the rule's declared
-// severity: without it, a finding at its rule's own severity is reported under
-// `<rule>/<severity>` by MCP and under `<rule>` by the CLI, and an alert
-// uploaded from one would not match the other.
+// A Reporter either embeds the rule catalog (Rules, for a library caller that
+// asks for it) or only consults it (Declared, which nox's own surfaces use).
+// Both must name a finding by the same descriptor, which needs the rule's
+// declared severity: without it, a finding at its rule's own severity is
+// reported under `<rule>/<severity>` by one and under `<rule>` by the other, and
+// an alert uploaded from one would not match the other.
 func TestSARIFReporterNamesAFindingAsTheCLIDoes(t *testing.T) {
 	rs := rules.NewRuleSet()
 	rs.Add(&rules.Rule{ID: "SEC-001", Version: "1", Description: "d",

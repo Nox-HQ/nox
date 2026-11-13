@@ -72,7 +72,11 @@ nox scan .
 The exit code is the verdict: `0` nothing found, `1` findings, `2` the scan
 could not run.
 
-Nox writes `findings.json` to the current directory. To generate all output formats at once:
+Nox writes `findings.json` to `.nox/reports/` under the current directory. The
+directory ignores itself (nox puts a `.gitignore` in it), so reports never show
+up in `git status`. Commands that read a report, such as `nox fix plan` and
+`nox annotate`, look there first. To generate all output formats somewhere
+else:
 
 ```bash
 nox scan . --format all --output reports/
@@ -663,7 +667,7 @@ Baseline Flags:
   --baseline string        Baseline file path for update (default: .nox/baseline.json)
 
 Annotate Flags:
-  --input string           Path to findings.json (default: findings.json)
+  --input string           Path to findings.json (default: .nox/reports/findings.json)
   --pr string              PR number (auto-detected from GITHUB_REF)
   --repo string            Repository owner/name (auto-detected from GITHUB_REPOSITORY)
 
@@ -677,6 +681,7 @@ Cache Commands:
 
 Serve Flags:
   --allowed-paths string   Comma-separated list of allowed workspace paths
+  --plugins                Host installed plugins (plugin.list, plugin.call_tool)
 
 Exit Codes:
   0   No findings (or policy pass)
@@ -868,6 +873,7 @@ cannot talk it into scanning `$HOME`:
 ```bash
 nox serve                                    # the working directory
 nox serve --allowed-paths /path/to/project   # or name the roots
+nox serve --plugins                          # also let the agent call installed plugins
 ```
 
 ### Tools

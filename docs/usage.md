@@ -62,7 +62,7 @@ nox scan <path> [flags]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--format` | `json` | Output formats: `json`, `sarif`, `cdx`, `spdx`, `all` (comma-separated) |
-| `--output` | `.` | Output directory for report files |
+| `--output` | `.nox/reports` | Output directory for report files. The default directory carries its own `.gitignore`, so reports stay out of git; a directory you name is left as it is |
 | `--quiet`, `-q` | `false` | Suppress all output except errors |
 | `--verbose`, `-v` | `false` | Enable verbose output |
 | `--only` | all scopes | Scan only these scopes, comma-separated (see [Scopes](#scopes)) |
@@ -71,7 +71,7 @@ nox scan <path> [flags]
 **Examples:**
 
 ```bash
-# Basic scan, writes findings.json to current directory
+# Basic scan, writes findings.json to .nox/reports/ (which git ignores)
 nox scan .
 
 # Generate SARIF for GitHub Code Scanning
@@ -526,7 +526,7 @@ nox annotate [flags]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--input` | `findings.json` | Path to findings.json |
+| `--input` | `.nox/reports/findings.json` | Path to findings.json (`./findings.json` from an older scan is still read) |
 | `--pr` | (auto) | PR number (auto-detected from `GITHUB_REF`) |
 | `--repo` | (auto) | Repository owner/name (auto-detected from `GITHUB_REPOSITORY`) |
 | `--summary` | `false` | Also post a comment counting every finding in the report by severity |
@@ -930,6 +930,7 @@ nox serve [flags]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--allowed-paths` | the working directory | Comma-separated workspace roots the server may scan |
+| `--plugins` | off | Host the installed plugins and add the `plugin.list` and `plugin.call_tool` tools |
 
 The server confines itself to its own working directory unless you widen it.
 That matters because the caller is usually an agent: without a boundary, a
@@ -953,6 +954,21 @@ nox serve --allowed-paths /
 
 Paths are resolved through symlinks before the check, so a symlink inside an
 allowed root that points outside it is refused.
+
+`--plugins` makes the installed plugins callable by the agent. It is off by
+default because a plugin call starts the plugin's process on the agent's
+behalf. Each plugin passes the checks a scan applies before running one: its
+binary exists and matches the digest recorded at install, and its track's
+safety profile is enforced under the `plugin_policy` in the first allowed
+root's `.nox.yaml`. A plugin that fails a check is named on stderr and the
+others are still hosted. `plugin.call_tool` runs a plugin against a root under
+the allowed ones (the first allowed root when none is given, and the same root
+in `workspace_root` and `input.workspace_root`) and is rate-limited like
+`scan`.
+
+```bash
+nox serve --plugins
+```
 
 See [MCP Server](#mcp-server) for details on available tools and resources.
 
@@ -2486,8 +2502,13 @@ refused call returns JSON-RPC error `-32003` (rate limited); wait and retry.
 In the per-project URIs, `{project}` is the URL-encoded absolute path of a
 directory the server has scanned.
 
-`nox serve` does not load plugins, so `plugin.list` and `plugin.call_tool`
-(described in [the extension design](extension.md)) are not among its tools.
+With `--plugins`, two more tools are offered (see [the extension
+design](extension.md)):
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `plugin.list` | The hosted plugins and the tools each provides | — |
+| `plugin.call_tool` | Call one plugin tool | `tool` (`<plugin>.<tool>`), `input`, `workspace_root` (under an allowed root; default the first one) |
 
 ### Claude Desktop
 

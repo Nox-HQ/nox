@@ -25,7 +25,7 @@ func runAnnotate(args []string) int {
 		maxComments int
 		minSeverity string
 	)
-	fs.StringVar(&inputPath, "input", "findings.json", "path to findings.json")
+	fs.StringVar(&inputPath, "input", scanReportPath(".", "findings.json"), "path to findings.json")
 	fs.StringVar(&prNumber, "pr", "", "PR number (auto-detected from GITHUB_REF)")
 	fs.StringVar(&repo, "repo", "", "repository owner/name (auto-detected from GITHUB_REPOSITORY)")
 	fs.BoolVar(&summary, "summary", false, "also post a comment counting every finding by severity")

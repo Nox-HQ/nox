@@ -26,11 +26,14 @@ var (
 	remediationAt = regexp.MustCompile(`(?m)^\s*nox-version:\s*'(\d+\.\d+\.\d+)'`)
 )
 
-// documentedPinFiles are the files a reader copies a workflow from.
+// documentedPinFiles are the files a reader copies a workflow from, and the
+// composite actions under actions/, which run the scan action at a pinned
+// commit: actions/remediate sat on v1.62.0 three releases after
+// remediation.yml moved, because nothing compared it.
 func documentedPinFiles(t *testing.T) []string {
 	t.Helper()
 	files := []string{"../README.md", "../MARKETPLACE.md"}
-	for _, root := range []string{"../docs", "../examples"} {
+	for _, root := range []string{"../docs", "../examples", "../actions"} {
 		err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err

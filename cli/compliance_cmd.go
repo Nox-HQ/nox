@@ -47,9 +47,9 @@ func runComplianceISO27001(args []string) int {
 	fs := flag.NewFlagSet("compliance iso27001", flag.ContinueOnError)
 	var findingsPath, sbomPath, aiPath, outDir, repoDir string
 	var jsonOut, noWrite bool
-	fs.StringVar(&findingsPath, "findings", "", "path to findings.json (default: <dir>/findings.json)")
-	fs.StringVar(&sbomPath, "sbom", "", "path to a CycloneDX or SPDX JSON SBOM (default: <dir>/sbom.cdx.json, then sbom.spdx.json)")
-	fs.StringVar(&aiPath, "ai-inventory", "", "path to ai.inventory.json (default: <dir>/ai.inventory.json)")
+	fs.StringVar(&findingsPath, "findings", "", "path to findings.json (default: <dir>/.nox/reports/findings.json, or <dir>/findings.json from an older scan)")
+	fs.StringVar(&sbomPath, "sbom", "", "path to a CycloneDX or SPDX JSON SBOM (default: sbom.cdx.json, then sbom.spdx.json, under <dir>/.nox/reports or <dir>)")
+	fs.StringVar(&aiPath, "ai-inventory", "", "path to ai.inventory.json (default: <dir>/.nox/reports/ai.inventory.json, or <dir>/ai.inventory.json)")
 	fs.StringVar(&repoDir, "repo", "", "repository to read the commit from when scan outputs are kept elsewhere (default: <dir>)")
 	fs.StringVar(&outDir, "out", "compliance", "directory to write iso27001.md and iso27001.json to")
 	fs.BoolVar(&jsonOut, "json", false, "print the assessment as JSON to stdout instead of the summary; writes no files")
@@ -128,7 +128,7 @@ func loadISO27001Input(dir, repoDir, findingsPath, sbomPath, aiPath string) (iso
 	in.NoxVersion = version
 
 	if findingsPath == "" {
-		findingsPath = filepath.Join(dir, "findings.json")
+		findingsPath = scanReportPath(dir, "findings.json")
 	}
 	raw, err := os.ReadFile(findingsPath) //nolint:gosec // caller-supplied scan artifact
 	if err != nil {
@@ -145,7 +145,7 @@ func loadISO27001Input(dir, repoDir, findingsPath, sbomPath, aiPath string) (iso
 	in.Artifacts = append(in.Artifacts, art)
 
 	if sbomPath == "" {
-		sbomPath = firstExisting(filepath.Join(dir, "sbom.cdx.json"), filepath.Join(dir, "sbom.spdx.json"))
+		sbomPath = firstExisting(scanReportPath(dir, "sbom.cdx.json"), scanReportPath(dir, "sbom.spdx.json"))
 	}
 	if sbomPath != "" {
 		data, err := os.ReadFile(sbomPath) //nolint:gosec // caller-supplied scan artifact
@@ -161,7 +161,7 @@ func loadISO27001Input(dir, repoDir, findingsPath, sbomPath, aiPath string) (iso
 	}
 
 	if aiPath == "" {
-		aiPath = firstExisting(filepath.Join(dir, "ai.inventory.json"))
+		aiPath = firstExisting(scanReportPath(dir, "ai.inventory.json"))
 	}
 	if aiPath != "" {
 		data, err := os.ReadFile(aiPath) //nolint:gosec // caller-supplied scan artifact

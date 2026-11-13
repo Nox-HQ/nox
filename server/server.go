@@ -1439,6 +1439,47 @@ func (s *Server) handlePluginList(_ context.Context, _ emptyInput) (string, erro
 	return truncate(string(data)), nil
 }
 
+// pluginCallWorkspace settles the one workspace root a plugin call runs
+// against and returns the input with that root in it.
+//
+// A plugin reads its root from input.workspace_root (a scan sets it there and
+// in the request field), so confining only the request field confined nothing:
+// an agent could omit workspace_root, or put any path in input, and aim the
+// plugin outside the allowed roots. The root is now taken from either place,
+// must agree where both are given, defaults to the first allowed root, and is
+// checked against the allowlist before it is written into both.
+func (s *Server) pluginCallWorkspace(root string, in map[string]any) (workspace string, toolInput map[string]any, err error) {
+	if v, ok := in["workspace_root"]; ok {
+		inRoot, isString := v.(string)
+		if !isString {
+			return "", nil, fmt.Errorf("input.workspace_root must be a path string")
+		}
+		switch {
+		case root == "":
+			root = inRoot
+		case filepath.Clean(inRoot) != filepath.Clean(root):
+			return "", nil, fmt.Errorf("input.workspace_root %q differs from workspace_root %q; give one root", inRoot, root)
+		}
+	}
+	if root == "" && len(s.allowedPaths) > 0 {
+		root = s.allowedPaths[0]
+	}
+	if root == "" {
+		// Unrestricted server (an embedder passed no allowlist) and no root
+		// asked for: nothing to confine or to pass on.
+		return "", in, nil
+	}
+	if err := s.isPathAllowed(root); err != nil {
+		return "", nil, err
+	}
+	out := make(map[string]any, len(in)+1)
+	for k, v := range in {
+		out[k] = v
+	}
+	out["workspace_root"] = root
+	return root, out, nil
+}
+
 func (s *Server) handlePluginCallTool(ctx context.Context, input pluginCallToolInput) (string, error) {
 	if s.host == nil {
 		return "Error: no plugin host configured", nil
@@ -1450,13 +1491,12 @@ func (s *Server) handlePluginCallTool(ctx context.Context, input pluginCallToolI
 
 	toolName := s.resolveToolName(input.Tool)
 
-	if input.WorkspaceRoot != "" {
-		if err := s.isPathAllowed(input.WorkspaceRoot); err != nil {
-			return "Error: " + err.Error(), nil
-		}
+	root, toolInput, err := s.pluginCallWorkspace(input.WorkspaceRoot, input.Input)
+	if err != nil {
+		return "Error: " + err.Error(), nil
 	}
 
-	resp, err := s.host.InvokeTool(ctx, toolName, input.Input, input.WorkspaceRoot)
+	resp, err := s.host.InvokeTool(ctx, toolName, toolInput, root)
 	if err != nil {
 		if _, ok := err.(plugin.RuntimeViolation); ok {
 			return "Error: plugin violation: " + err.Error(), nil
