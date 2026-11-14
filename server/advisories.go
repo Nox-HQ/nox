@@ -77,6 +77,7 @@ func (s *Server) handleAdvisories(_ context.Context, input advisoriesInput) (mcp
 		Findings:   pc.result.Findings.Findings(),
 		Policy:     pol,
 		Incomplete: advisory.IncompleteReason(report.DegradationsFrom(pc.result.Degradations)),
+		Root:       pc.basePath,
 	}
 	var warning string
 	in.Previous, in.HavePrevious, warning = report.LoadPreviousFindings(input.Previous)

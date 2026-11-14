@@ -27,12 +27,22 @@ func Command(dir, pkg, version string) (tool string, args []string) {
 	}
 	section, spec, _ := Declaration(dir, pkg)
 	style := styleOfSpec(spec)
+	// The fix is a version in package.json and the lockfile. Where the project
+	// has no node_modules, installing would create one, full of third-party
+	// READMEs and fixtures that the next scan reports as findings; npm and
+	// pnpm can rewrite the lockfile alone. Where node_modules exists it is
+	// kept in step, or the installed tree would no longer match the lockfile.
+	lockOnly := !has("node_modules")
 	// Every command here installs packages, and installing runs their
 	// lifecycle scripts: arbitrary code from whatever version nox just chose.
 	// nox never executes untrusted code, so scripts are always off.
 	switch {
 	case has("pnpm-lock.yaml"):
-		return "pnpm", []string{"update", "--ignore-scripts", "--depth", "Infinity", target}
+		a := []string{"update", "--ignore-scripts", "--depth", "Infinity"}
+		if lockOnly {
+			a = append(a, "--lockfile-only")
+		}
+		return "pnpm", append(a, target)
 	case has("yarn.lock"):
 		// Berry renamed the verb and is told apart by its own config file.
 		// Berry has no --ignore-scripts on `up`; nox fix sets
@@ -42,6 +52,8 @@ func Command(dir, pkg, version string) (tool string, args []string) {
 		}
 		return "yarn", append(append([]string{"upgrade", "--ignore-scripts"}, saveFlags("yarn", style)...), target)
 	case has("bun.lock"), has("bun.lockb"):
+		// bun has no lockfile-only update (bun 1.1: even `install
+		// --lockfile-only` creates node_modules), so it always installs.
 		return "bun", []string{"update", "--ignore-scripts", target}
 	}
 	// npm install writes whatever it is given into package.json: a transitive
@@ -49,8 +61,15 @@ func Command(dir, pkg, version string) (tool string, args []string) {
 	// dependencies. So the manifest decides. A declared package keeps its
 	// section; anything else is moved by `npm update`, which touches only the
 	// lockfile and takes no version — nox fix reads the lockfile back to see where it landed.
+	npmArgs := func(verb string) []string {
+		a := []string{verb, "--ignore-scripts"}
+		if lockOnly {
+			a = append(a, "--package-lock-only")
+		}
+		return a
+	}
 	install := func(extra ...string) []string {
-		a := append([]string{"install", "--ignore-scripts"}, extra...)
+		a := append(npmArgs("install"), extra...)
 		a = append(a, saveFlags("npm", style)...)
 		return append(a, target)
 	}
@@ -62,7 +81,7 @@ func Command(dir, pkg, version string) (tool string, args []string) {
 	case "optionalDependencies":
 		return "npm", install("--save-optional")
 	}
-	return "npm", []string{"update", "--ignore-scripts", pkg}
+	return "npm", append(npmArgs("update"), pkg)
 }
 
 // specStyle is how a package.json specifier pins a version.

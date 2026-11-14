@@ -93,7 +93,7 @@ func runAdvisories(args []string) int {
 		return 2
 	}
 
-	in := advisory.Input{Findings: rep.Findings, Policy: pol, Incomplete: advisory.IncompleteReason(rep.Meta.Degradations)}
+	in := advisory.Input{Findings: rep.Findings, Policy: pol, Incomplete: advisory.IncompleteReason(rep.Meta.Degradations), Root: *root}
 	var warning string
 	in.Previous, in.HavePrevious, warning = report.LoadPreviousFindings(*previous)
 	if warning != "" {
