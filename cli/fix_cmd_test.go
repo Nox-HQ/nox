@@ -532,7 +532,7 @@ func TestApplyNpmUpgrade_RunsWithScriptsOffAndKeepsTheExactPin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "install --ignore-scripts --save-exact lodash@4.18.0|true|false\n"; string(got) != want {
+	if want := "install --ignore-scripts --package-lock-only --save-exact lodash@4.18.0|true|false\n"; string(got) != want {
 		t.Errorf("ran %q, want %q", got, want)
 	}
 }
