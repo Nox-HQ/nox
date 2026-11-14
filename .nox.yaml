@@ -90,6 +90,13 @@ scan:
     # its own test, which reads the modules directly; the self-scan must not
     # flag a fixture for containing exactly what it was built to contain.
     - "testdata/reachability-suite/"
+    # AUTHZ-001 ground truth (core/analyzers/authz/*_test.go). Each case is a
+    # route directory scored by its own test: `vulnerable/` holds the missing
+    # ownership checks it exists to contain, and every case is a bare file tree
+    # with no manifest, so SLOP-001 reads each import as undeclared (140 of the
+    # 141 Code Scanning alerts here). Same rationale as the suites above: the
+    # self-scan must not flag a fixture for being one.
+    - "core/analyzers/authz/testdata/"
     - ".relicta/"
     - ".cover/"
     - ".roady/"
