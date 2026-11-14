@@ -1,6 +1,8 @@
 package advisory
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -523,5 +525,47 @@ func TestRelevanceSentenceUsesNoIdentifier(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A transitive npm package whose parent pins it below the fix cannot be moved
+// by nox fix: it holds the upgrade, prints no plan, and the remediation action
+// opens no pull request. On the first-run walkthrough the policy step still
+// said "prepared as a pull request: qs 6.13.0 -> 6.16.1" for qs, which
+// express@4.21.2 and body-parser@1.20.3 pin at 6.13.0, so the job summary
+// promised a pull request that never came. The decision reads the same
+// lockfile nox fix reads.
+func TestHeldTransitiveIsNotPrepared(t *testing.T) {
+	root := t.TempDir()
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("package.json", `{"name": "app", "dependencies": {"express": "4.21.2", "axios": "1.6.0"}}`)
+	write("package-lock.json", `{"name": "app", "lockfileVersion": 3, "packages": {
+  "": {"name": "app", "dependencies": {"express": "4.21.2", "axios": "1.6.0"}},
+  "node_modules/express": {"version": "4.21.2", "dependencies": {"qs": "6.13.0"}},
+  "node_modules/qs": {"version": "6.13.0"},
+  "node_modules/axios": {"version": "1.6.0"}
+}}`)
+	p := mustPolicy(t, Settings{Policy: "prepare"})
+	held := adv("GHSA-held", "qs", "6.13.0", "6.16.1", findings.SeverityHigh, "impacting", "symbol_used")
+	direct := adv("GHSA-direct", "axios", "1.6.0", "1.20.0", findings.SeverityHigh, "impacting", "symbol_used")
+	res := Evaluate(Input{Findings: []findings.Finding{held, direct}, HavePrevious: true, Policy: p, Root: root})
+
+	by := map[string]Decision{}
+	for _, d := range res.Decisions {
+		by[d.Package] = d
+	}
+	if d := by["qs"]; d.Action == ActionPrepare || !strings.Contains(d.Reason, "not prepared") ||
+		!strings.Contains(d.Reason, "express@4.21.2") || strings.Contains(d.Reason, "prepared as a pull request") {
+		t.Errorf("held qs: action %q, reason %q; want it reported, naming express@4.21.2", d.Action, d.Reason)
+	}
+	if d := by["axios"]; d.Action != ActionPrepare {
+		t.Errorf("direct axios: action %q, want prepare (%s)", d.Action, d.Reason)
+	}
+	if len(res.Prepare) != 1 {
+		t.Errorf("prepare = %v, want only the axios finding", res.Prepare)
 	}
 }

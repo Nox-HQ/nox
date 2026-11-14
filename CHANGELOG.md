@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `package.json` and the lockfile (`--package-lock-only`, `--lockfile-only`);
   an existing one is still kept in step. bun has no lockfile-only update and
   still installs.
+- With `advisories.policy: prepare`, `nox advisories` said "prepared as a pull
+  request" for a transitive npm package whose parent pins it below the fix.
+  `nox fix` holds that move, so the remediation action opened no pull request,
+  while the job summary and issue promised one. The decision now reads the
+  same lockfile `nox fix` reads and says the upgrade is not prepared, which
+  parent holds it, and the `overrides` entry that would force it. The MCP
+  `advisories` tool makes the same check.
 - A PR-scoped scan (`--changed-since`) reported an import as SLOP-001,
   undeclared, whenever the manifest declaring it was not among the changed
   files: what a project declares was read from the diff, not the tree. On

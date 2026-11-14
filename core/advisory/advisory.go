@@ -32,12 +32,14 @@ package advisory
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/nox-hq/nox/core/applicability"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
+	"github.com/nox-hq/nox/core/npmtree"
 )
 
 // ruleID is the finding rule that carries dependency advisories.
@@ -283,6 +285,11 @@ type Input struct {
 	// Incomplete, when non-empty, says why this scan could not finish looking.
 	Incomplete string
 	Policy     Policy
+	// Root is the project directory the findings' manifest paths are relative
+	// to. With it, an npm move the lockfile shows a parent's range excluding is
+	// not prepared: nox fix holds such a move, so no pull request would ever
+	// be opened for it. Empty skips the check.
+	Root string
 }
 
 // Decision is the outcome for one advisory.
@@ -460,6 +467,10 @@ func decideActions(res *Result, in Input, candidates []int) []int {
 			d.Reason = unplannedReason(*f, plan, pos) + " " + why
 			continue
 		}
+		if held := heldMove(in.Root, mv); held != "" {
+			d.Reason = "New advisory; not prepared: " + held + " " + why
+			continue
+		}
 		d.Action = ActionPrepare
 		prepare = append(prepare, d.index)
 		// The move fixes every advisory on the package, not only the one that
@@ -488,6 +499,28 @@ func decideActions(res *Result, in Input, candidates []int) []int {
 	}
 	sort.Ints(res.Fixes)
 	return prepare
+}
+
+// heldMove says why nox fix would hold mv, or "" when it would make it. It is
+// the check nox fix and nox fix plan make: a transitive npm package whose
+// parents' ranges, as the lockfile records them, exclude the fixed version.
+// A reach nox cannot establish is not held here; apply attempts it and reads
+// the lockfile back.
+func heldMove(root string, mv fix.UpgradeAction) string {
+	if root == "" || mv.Ecosystem != "npm" {
+		return ""
+	}
+	dir := filepath.Join(root, filepath.Dir(mv.Manifest))
+	if !npmtree.Transitive(dir, mv.Package) {
+		return ""
+	}
+	reach := npmtree.ReachOf(dir, mv.Package, mv.To)
+	if !reach.Held() {
+		return ""
+	}
+	return fmt.Sprintf("%s is not a package you list yourself, and %s: the range excludes %s, so nox fix cannot move it. "+
+		"Upgrade %s to a release that allows it, or force the version with %s in package.json.",
+		mv.Package, reach.HoldList(), mv.To, reach.Holders(), npmtree.OverrideEntry(reach.Tool, mv.Package, mv.To))
 }
 
 // mergeBlocker returns why an already-prepared advisory may not be merged
