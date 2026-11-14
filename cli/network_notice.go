@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	nox "github.com/nox-hq/nox/core"
+	"github.com/nox-hq/nox/core/npmtree"
 )
 
 // networkNotice says, once, what a default scan sent off the machine and how to
@@ -104,4 +105,21 @@ func feedNetworkNotice(urls []string) string {
 		"cached on this machine so later scans do not ask again). Nothing from the repository was sent. "+
 		"Opt out: scan.slop.disabled: true and scan.mcp_feed.disabled: true in .nox.yaml request neither feed; "+
 		"--offline or scan.osv.disabled: true makes no network request.", strings.Join(urls, " and "))
+}
+
+// npmRegistryNotice says which packages' release histories nox fix plan read
+// from the npm registry to name the parent release that frees a held
+// upgrade. Only held transitive npm upgrades cause the request, so most plans
+// make none and print nothing.
+func npmRegistryNotice(reg *npmtree.HTTPRegistry) string {
+	if reg == nil {
+		return ""
+	}
+	asked := reg.Requested()
+	if len(asked) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("[network] npm release history: the names of %d package(s) (%s) were sent to %s "+
+		"to find the release of a listed package that lets a held upgrade move. Nothing else was sent. "+
+		"Opt out: --offline.", len(asked), strings.Join(asked, ", "), reg.Host())
 }
