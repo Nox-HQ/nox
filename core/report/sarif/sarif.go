@@ -555,6 +555,10 @@ func (r *Reporter) declared(id string) *rules.Rule {
 // not hold, also in id order.
 func (r *Reporter) buildRuleCatalog(items []findings.Finding) (catalog []ReportingDescriptor, index map[string]int) {
 	index = make(map[string]int)
+	// Never nil: SARIF 2.1.0 requires driver.rules to be an array, and GitHub
+	// rejects a report whose rules are null — which is what a scan with no
+	// findings and no embedded catalog wrote.
+	catalog = []ReportingDescriptor{}
 	if r.Rules != nil {
 		all := r.Rules.Rules()
 		sorted := make([]*rules.Rule, len(all))

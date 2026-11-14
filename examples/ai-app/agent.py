@@ -22,6 +22,8 @@ def chat():
             {"role": "user", "content": f"Answer this user question: {request.json['question']}"},
         ],
     )
+    # LLM05: the model's answer is returned as text/html. safe.py returns JSON.
+    # nox:ignore TAINT-003 -- deliberate; safe.py is the fixed form
     return response.choices[0].message.content
 
 
@@ -39,4 +41,5 @@ def personalize():
             {"role": "user", "content": "Hello"},
         ],
     )
+    # nox:ignore TAINT-003 -- deliberate; safe.py is the fixed form
     return response.choices[0].message.content

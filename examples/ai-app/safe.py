@@ -4,7 +4,7 @@ nox flags the issues.
 """
 
 import os
-from flask import Flask, request
+from flask import Flask, jsonify, request
 from openai import OpenAI
 
 app = Flask(__name__)
@@ -25,7 +25,10 @@ def chat():
             {"role": "user", "content": user_q},
         ],
     )
-    return response.choices[0].message.content
+    # The answer is steered by the user's question, so it is untrusted output.
+    # A str returned from a Flask view is served as text/html; JSON is not
+    # rendered by the browser.
+    return jsonify({"answer": response.choices[0].message.content})
 
 
 def ingest_record_safe():

@@ -526,6 +526,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// line that names it; image is "name@digest".
 		line  int
 		image string
+		// buildStage names the Dockerfile stage the image belongs to when that
+		// stage does not reach the final image (buildOnlyStages); "" otherwise.
+		buildStage string
 		// absDir is the lockfile's directory on disk, where the manifest
 		// beside it is read. Empty for sources without one.
 		absDir string
@@ -716,6 +719,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 
 		// Determine line numbers for each FROM instruction for precise locations.
 		fromLines := dockerfileFromLines(content)
+		buildOnly := buildOnlyStages(content)
 
 		for i, img := range images {
 			line := 1
@@ -736,7 +740,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			sources = append(sources, pkgSource{lockfilePath: art.Path})
 			for _, p := range inside {
 				inventory.Add(p)
-				sources = append(sources, pkgSource{lockfilePath: art.Path, line: line, image: img.Name + "@" + img.Version})
+				sources = append(sources, pkgSource{lockfilePath: art.Path, line: line, image: img.Name + "@" + img.Version, buildStage: stageAt(buildOnly, i)})
 			}
 
 			// CONT-002: image uses "latest" tag (explicit or implicit).
@@ -941,13 +945,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					}
 
 					lockfilePath, lockDir := "", ""
-					startLine, imageRef := 1, ""
+					startLine, imageRef, buildStage := 1, "", ""
 					if pkgIdx < len(sources) {
 						lockfilePath, lockDir = sources[pkgIdx].lockfilePath, sources[pkgIdx].absDir
 						if sources[pkgIdx].line > 0 {
 							startLine = sources[pkgIdx].line
 						}
 						imageRef = sources[pkgIdx].image
+						buildStage = sources[pkgIdx].buildStage
 					}
 
 					aliases := strings.Join(ov.Aliases, ",")
@@ -1038,6 +1043,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					sev, note = applyDistroUrgency(meta, &ov, pkg, sev, "")
 					text.add(note)
 					sev, note = gateOnlyFixable(meta, pkg, sev, "")
+					text.add(note)
+					sev, note = demoteBuildStageOnly(meta, buildStage, sev)
 					text.add(note)
 					// Applicability: how far the argument from "this advisory
 					// exists" to "an attacker can use it here" actually got, and

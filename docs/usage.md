@@ -1231,6 +1231,18 @@ negligible (Ubuntu) is recorded at `info` the same way. A scan that makes no
 lookups (`--offline`, `scan.osv.disabled`) reads images from the cache only
 and downloads nothing.
 
+In a multi-stage build only the final stage ships. An image named by an
+earlier `FROM` counts as shipped when the final stage is built on its stage,
+or copies system files out of it (`COPY --from` of `/`, or a path under
+`/usr`, `/lib`, `/bin`, `/etc`, `/var` or `/opt`). Advisories for any other
+stage's image — a toolchain image that only hands over a binary — are
+recorded at `info`, with `severity_source: build_stage_only`, the stage in
+`image_stage`, and the real severity in `original_severity`. A `FROM` or
+`COPY --from` naming a variable counts every stage as shipped. If you publish
+an intermediate stage with `docker build --target`, read that stage's
+findings at `original_severity`: the target is not in the Dockerfile, so nox
+cannot see it. Why: `docs/adr/0004-build-stage-image-advisories-are-info.md`.
+
 For each `FROM name@sha256:…` nox fetches the manifest and layers by digest
 (anonymous pulls only; a registry that wants credentials is reported as not
 read), checks every blob against its digest, applies the layers' whiteouts,
