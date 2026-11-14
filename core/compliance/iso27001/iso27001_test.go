@@ -414,3 +414,27 @@ func TestAdvisoryDetailDegradationMakesDependencyControlsIncomplete(t *testing.T
 		}
 	}
 }
+
+// A clean code check is weak evidence only when nothing shows there was code
+// to check. On the first-run walkthrough, A.8.28 said the scan outputs did not
+// show any such files were present, in a report whose next gap cited an
+// authorization lead in src/routes/invoices.js: findings.json simply did not
+// record the source files it read. With meta.source_files the code-scope
+// controls know; controls about other subjects are unaffected.
+func TestRecordedSourceFilesAreACodeSubject(t *testing.T) {
+	in := inputs()["clean"]
+	in.Report.Meta.SourceFiles = map[string]int{"javascript": 6}
+	a := Assess(in)
+	for _, id := range []string{"A.8.24", "A.8.28"} {
+		for _, g := range byID(t, a, id).Gaps {
+			if strings.Contains(g, "do not show that any files of this kind were present") {
+				t.Errorf("%s says no code was present with 6 JavaScript files recorded: %s", id, g)
+			}
+		}
+	}
+	for _, id := range []string{"A.5.23", "A.8.9", "A.5.34"} {
+		if c := byID(t, a, id); len(c.Gaps) == 0 || !strings.Contains(c.Gaps[0], "do not show that any files of this kind were present") {
+			t.Errorf("%s: source files are not its subject, but its empty-result gap went away: %v", id, c.Gaps)
+		}
+	}
+}

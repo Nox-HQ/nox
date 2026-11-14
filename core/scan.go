@@ -100,6 +100,10 @@ type ScanResult struct {
 	// "what depth did this scan give each language?" and is copied into the
 	// report meta so the decision is visible in the artifact, not just in config.
 	SASTProfile map[string]string
+	// SourceFiles counts the source files the scan read, by language: the
+	// evidence that a clean code check had code to check. See
+	// report.Meta.SourceFiles.
+	SourceFiles map[string]int
 	// Scope is what this scan looked at. A scan without a scope has no
 	// findings for it because it did not look, not because there are none;
 	// every output states it (see scope.go).
@@ -1205,6 +1209,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		Rules:              allRules,
 		Degradations:       degradations.Items(),
 		SASTProfile:        cfg.Scan.SAST.ResolvedProfile(),
+		SourceFiles:        sourceFilesByLanguage(artifacts),
 	}
 	res.AdvisoryLookupSkipped = !vulnLookupEnabled
 	res.FeedsRequested = feedsRequested.list()

@@ -29,6 +29,7 @@ func (r *ScanResult) JSONReporter(version string) *report.JSONReporter {
 		return rep
 	}
 	rep.SASTLanguages = r.SASTProfile
+	rep.SourceFiles = r.SourceFiles
 	rep.Scope = r.Scope.report()
 	rep.Degradations = report.DegradationsFrom(r.Degradations)
 	switch {

@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The ISO 27001 report said, under A.8.28 Secure coding, that the scan outputs
+  did not show any application code was present, in the same section that cited
+  an authorization lead found in that code: `findings.json` did not record the
+  source files a scan read. It now does, by language, in `meta.source_files`,
+  and the code and cryptography checks read their subject from it.
 - `nox fix apply` installed packages to move a version, so in a project with
   no `node_modules` it created one, and the next `nox scan` reported a critical
   and two high "secrets" from third-party READMEs and type definitions inside
