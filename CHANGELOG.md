@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- An advisory for software in a build-only Dockerfile stage is reported at
+  info. A multi-stage build publishes its final stage; an image named by an
+  earlier `FROM` reaches it only if the final stage is built on that stage or
+  copies system files out of it (`COPY --from` of `/`, `/usr`, `/lib`, `/etc`,
+  `/var`, `/opt` and the like). A builder that only hands over a binary is a
+  build environment, and its packages were rated as if they shipped: nox's own
+  `golang:1.27-alpine` builder made a zlib advisory gate a scan whose image
+  holds no zlib. Such a finding keeps its rating in `original_severity`, says
+  `severity_source: build_stage_only`, names the stage in `image_stage`, and
+  says what building with `--target` that stage would mean. A `FROM` or
+  `COPY --from` naming a variable counts every stage as shipped. See
+  `docs/adr/0004-build-stage-image-advisories-are-info.md`.
+
+### Fixed
+
+- OpenTelemetry 1.47.0 (GHSA-q7gw-24fr-5p69: `AttributeValueLengthLimit` is
+  bypassed by values made of U+FFFD runes), linked through the MCP server.
+- `examples/ai-app/safe.py`, the fixed half of the AI example, returned the
+  model's answer from a Flask view as a string, which Flask serves as HTML: an
+  XSS through the model's output. It returns JSON.
+
 ## [1.66.0] - 2026-11-13
 
 Fixes from an audit of 1.65.0 as a user meets it (#1066).

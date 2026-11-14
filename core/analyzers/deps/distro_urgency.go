@@ -67,3 +67,38 @@ func headline(lead, name, version, summary string) string {
 	}
 	return subject + ": " + summary
 }
+
+// demoteBuildStageOnly records an advisory for software in a build-only stage
+// at info, keeping its severity in original_severity. The stage's image is
+// where the artifact is built, not what ships: neither its packages nor its
+// files reach the final image (buildOnlyStages decides that, and anything it
+// cannot resolve counts as shipped). This is the treatment a Go advisory for a
+// package the build does not link has had since 1.58.0 — recorded, not
+// dropped, and not gating. The stage is named, because a build run with
+// --target publishes that stage instead, and then the finding is about what
+// ships.
+func demoteBuildStageOnly(meta map[string]string, stage string, sev findings.Severity) (newSev findings.Severity, note string) {
+	if stage == "" {
+		return sev, ""
+	}
+	meta["image_stage"] = stage
+	meta["image_stage_shipped"] = "false"
+	if sev == findings.SeverityInfo {
+		return sev, ""
+	}
+	if meta["original_severity"] == "" {
+		meta["original_severity"] = string(sev)
+	}
+	meta["severity_source"] = "build_stage_only"
+	return findings.SeverityInfo, fmt.Sprintf(
+		" [only in build stage %q, which the final image is not built on and copies no system files from: recorded at info, not gating; if you build with --target %s, it is what ships]",
+		stage, stage)
+}
+
+// stageAt is buildOnly[i], or "" past its end.
+func stageAt(buildOnly []string, i int) string {
+	if i < len(buildOnly) {
+		return buildOnly[i]
+	}
+	return ""
+}
