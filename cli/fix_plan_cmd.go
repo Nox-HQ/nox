@@ -126,9 +126,11 @@ func printPlan(plan remediate.Plan, format string) int {
 // rest only when the person asked for them.
 func selected(it *remediate.Item, o fixSubOptions) bool {
 	if it.Kind == remediate.KindHeldUpgrade {
-		// A parent's range excludes the fix; nox has no change to make. The
-		// plan item names the parent and the entry that would force it.
-		return false
+		// A parent's range excludes the fix. With no parent release named,
+		// nox has no change to make: the item names the entry that would
+		// force it. With one, the change is that parent's upgrade, which is
+		// a prediction about npm's re-resolution, so it needs review.
+		return len(it.ParentUpgrades) > 0 && o.includeReview
 	}
 	switch it.Class {
 	case remediate.ClassSafe:
@@ -182,9 +184,15 @@ func runApplySub(plan remediate.Plan, active []findings.Finding, o fixSubOptions
 
 	var attempts []remediate.Attempt
 	tidy := map[[2]string]bool{}
+	parents := map[string]error{}
 	for _, it := range chosen {
 		fmt.Printf("applying %d. %s\n", it.N, it.Title)
-		err := applyItem(it, o, tidy)
+		var err error
+		if it.Kind == remediate.KindHeldUpgrade {
+			err = applyParentUpgrades(it, o.root, tidy, parents)
+		} else {
+			err = applyItem(it, o, tidy)
+		}
 		a := remediate.Attempt{N: it.N, Applied: err == nil}
 		if err != nil {
 			a.Error = err.Error()
@@ -296,6 +304,39 @@ func applyItem(it *remediate.Item, o fixSubOptions, tidy map[[2]string]bool) err
 		return applyPatches(it.Patches, o.root)
 	}
 	return fmt.Errorf("nox cannot apply a %s change", it.Kind)
+}
+
+// applyParentUpgrades makes a held item's change: the upgrade of each listed
+// package that frees it. Items under one parent name the same release, and
+// it is run once; each item then reads the lockfile back, so an item whose
+// package npm left below its fix is reported as not applied, with the entry
+// that would force it, rather than counted as made.
+func applyParentUpgrades(it *remediate.Item, root string, tidy map[[2]string]bool, done map[string]error) error {
+	held := it.Upgrade
+	for _, up := range it.ParentUpgrades {
+		key := filepath.Dir(held.Manifest) + "\x00" + up.Parent + "@" + up.To
+		err, ran := done[key]
+		if !ran {
+			fmt.Printf("  upgrading %s, which frees %s\n", up.String(), up.FreesList())
+			err = applyUpgradeItem(&fix.UpgradeAction{
+				Ecosystem: held.Ecosystem, Package: up.Parent, From: up.From, To: up.To, Manifest: held.Manifest,
+			}, root, tidy)
+			done[key] = err
+		}
+		if err != nil {
+			return fmt.Errorf("upgrading %s: %w", up.String(), err)
+		}
+	}
+	dir := filepath.Join(root, filepath.Dir(held.Manifest))
+	below, err := npmtree.Below(dir, held.Package, held.To)
+	if err != nil {
+		return fmt.Errorf("reading the lockfile after the upgrade: %w", err)
+	}
+	if len(below) > 0 {
+		return fmt.Errorf("the upgrade was made, and npm left %s below %s; force it with %s in package.json",
+			strings.Join(below, ", "), held.To, npmtree.OverrideEntry(npmtree.Tool(dir), held.Package, held.To))
+	}
+	return nil
 }
 
 func applyUpgradeItem(up *fix.UpgradeAction, root string, tidy map[[2]string]bool) error {

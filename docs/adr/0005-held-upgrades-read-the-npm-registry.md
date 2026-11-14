@@ -67,8 +67,10 @@ The direct registry, not NOX Intelligence:
   that hold the copy (load it with a range that excludes the fix) lead to an
   ancestor. A package that loads the same copy with a range that allows the
   fix is not named: npm moves the copy under it.
-- `apply` still does not make the parent upgrade. It is a direct-dependency
-  upgrade a person can run from the plan, and making `apply` run it (once per
-  parent, not once per held item) is separate work.
+- `apply --include-review` makes the parent upgrade, once per parent and
+  release, not once per held item, and each held item reads the lockfile back
+  afterwards: a copy npm left below the fix fails that item. It needs review,
+  not the safe set, because the release is a prediction of npm's
+  re-resolution.
 - A registry that cannot be read is reported as that, never as "no release
   frees it".

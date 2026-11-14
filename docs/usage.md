@@ -646,8 +646,8 @@ in one of three classes:
   exactly what is needed.
 
 A fix for an npm package you do not list yourself, which a parent's range
-keeps below the fixed version, is a **held upgrade**: `apply` cannot make it.
-Online, `plan` reads the parent's release history from the npm registry and
+keeps below the fixed version, is a **held upgrade**: npm moves it only when
+that parent moves. Online, `plan` reads the parent's release history from the npm registry and
 names the first release that lets it move, following the tree the way npm
 re-resolves it (express 4.21.2 holds qs both itself and through body-parser,
 and only express 4.22.3 frees both copies):
@@ -664,6 +664,12 @@ for all of them, and `--format json` lists it in `parent_upgrades`. A
 `[network]` line names every package whose history was read; `--offline`
 reads none and gives the generic advice. A later major version is named only
 when no release on the installed one frees the package.
+
+`apply --include-review` makes a named parent upgrade: once, however many
+items it frees. Each item then reads the lockfile back, and one whose package
+npm still left below its fix is reported as not applied, with the
+`overrides` entry that forces it. A held upgrade with no parent release named
+(offline, or no release frees it) is never applied.
 
 `apply` changes nothing outside the safe set unless you pass `--include-major`
 or `--include-review`. It then re-runs the checks that produced the targeted

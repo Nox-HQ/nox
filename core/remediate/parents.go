@@ -110,6 +110,8 @@ func rewordHeld(it *Item, dir string) {
 	if i := strings.Index(why, " Either upgrade "); i >= 0 {
 		why = why[:i]
 	}
+	// apply can now make the change: the parent's upgrade, not the package's.
+	why = strings.Replace(why, ", so nox fix apply cannot move it.", ", so it moves only when that package does.", 1)
 	var b strings.Builder
 	b.WriteString(why)
 	for _, up := range it.ParentUpgrades {
@@ -125,6 +127,7 @@ func rewordHeld(it *Item, dir string) {
 		}
 		b.WriteString(".")
 	}
+	b.WriteString(" nox fix apply --include-review makes the upgrade, once for every item it frees, and reads the lockfile back.")
 	fmt.Fprintf(&b, " Or force the version with an entry in package.json: %s",
 		npmtree.OverrideEntry(npmtree.Tool(dir), pkg, to))
 	it.Why = b.String()
