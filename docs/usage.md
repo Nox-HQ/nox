@@ -2257,7 +2257,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Run Nox security scan
-        uses: nox-hq/nox@8983bb0c789c5b9d711442ebfd141e0789af248a # v1.66.0
+        uses: nox-hq/nox@3c0814cc5da0e2a82cb3d932f38c742e7b1172eb # v1.67.0
         with:
           path: '.'
           format: sarif
@@ -2297,7 +2297,7 @@ outranks the findings verdict, and reports are written before it, so the job
 still uploads its SARIF:
 
 ```yaml
-      - uses: nox-hq/nox@8983bb0c789c5b9d711442ebfd141e0789af248a # v1.66.0
+      - uses: nox-hq/nox@3c0814cc5da0e2a82cb3d932f38c742e7b1172eb # v1.67.0
         with:
           format: sarif
           fail-on-degraded: 'true'
@@ -2316,7 +2316,7 @@ still uploads its SARIF:
 
 ```yaml
       - name: Run Nox security scan
-        uses: nox-hq/nox@8983bb0c789c5b9d711442ebfd141e0789af248a # v1.66.0
+        uses: nox-hq/nox@3c0814cc5da0e2a82cb3d932f38c742e7b1172eb # v1.67.0
         with:
           format: all
           output: reports
@@ -2339,7 +2339,7 @@ still uploads its SARIF:
 
 ```yaml
       - name: Run Nox security scan
-        uses: nox-hq/nox@8983bb0c789c5b9d711442ebfd141e0789af248a # v1.66.0
+        uses: nox-hq/nox@3c0814cc5da0e2a82cb3d932f38c742e7b1172eb # v1.67.0
         with:
           fail-on-findings: 'false'
 ```
