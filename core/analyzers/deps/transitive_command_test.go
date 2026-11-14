@@ -44,12 +44,12 @@ func TestTransitiveNPMFindingOffersNoInstallCommand(t *testing.T) {
 		"transitive, held by its parent": {heldLock, `{"dependencies":{"vscode-languageclient":"^10.1.2"}}`, "",
 			[]string{"vscode-languageclient@10.1.2 requires minimatch ^10.2.6", `"overrides": { "minimatch": "11.0.1" }`}},
 		// Every parent allows the fix: npm update moves it, as apply runs.
-		"transitive, every parent allows": {movableLock, `{"dependencies":{"glob":"^12.0.0"}}`, "npm update --ignore-scripts minimatch", nil},
+		"transitive, every parent allows": {movableLock, `{"dependencies":{"glob":"^12.0.0"}}`, "npm update --ignore-scripts --package-lock-only minimatch", nil},
 		// A listed package keeps its section and specifier style.
-		"direct":     {bareLock, `{"dependencies":{"minimatch":"^10.2.6"}}`, "npm install --ignore-scripts --save-prefix=^ minimatch@11.0.1", nil},
-		"direct dev": {bareLock, `{"devDependencies":{"minimatch":"~10.2.6"}}`, "npm install --ignore-scripts --save-dev --save-prefix=~ minimatch@11.0.1", nil},
+		"direct":     {bareLock, `{"dependencies":{"minimatch":"^10.2.6"}}`, "npm install --ignore-scripts --package-lock-only --save-prefix=^ minimatch@11.0.1", nil},
+		"direct dev": {bareLock, `{"devDependencies":{"minimatch":"~10.2.6"}}`, "npm install --ignore-scripts --package-lock-only --save-dev --save-prefix=~ minimatch@11.0.1", nil},
 		// No package.json: what apply would run there, and no transitive claim.
-		"no manifest beside": {bareLock, "", "npm update --ignore-scripts minimatch", nil},
+		"no manifest beside": {bareLock, "", "npm update --ignore-scripts --package-lock-only minimatch", nil},
 	} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
