@@ -68,6 +68,14 @@ type Meta struct {
 	// re-deriving defaults from config. Omitted from JSON when empty (a scan
 	// run without a profile, e.g. history scans).
 	SASTLanguages map[string]string `json:"sast_languages,omitempty"`
+	// SourceFiles counts the source files this scan read, by language. A
+	// clean result from a code check means something only if there was code
+	// to check, and without this the artifact cannot say there was: a
+	// compliance report built from it called the code checks' clean result
+	// "nothing to check" while citing a lead found in that code. Omitted when
+	// no source file was read, which is also how a report from before the
+	// field reads.
+	SourceFiles map[string]int `json:"source_files,omitempty"`
 	// Degradations records checks that did not complete — a failed OSV lookup,
 	// a required plugin that never ran, an unparsed lockfile.
 	//
@@ -399,6 +407,8 @@ type JSONReporter struct {
 	// recorded verbatim in the report Meta. Set it from ScanResult.SASTProfile
 	// before Generate to make the depth strategy auditable in the artifact.
 	SASTLanguages map[string]string
+	// SourceFiles is ScanResult.SourceFiles, recorded in the report Meta.
+	SourceFiles map[string]int
 	// Scope is set for a scoped scan; nil for a full one.
 	Scope *ScanScope
 	// Degradations are the scan's incomplete checks. Set from
@@ -463,6 +473,7 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 			ToolVersion:   r.ToolVersion,
 			Offline:       r.Offline,
 			SASTLanguages: r.SASTLanguages,
+			SourceFiles:   r.SourceFiles,
 			Degradations:  r.Degradations,
 			Scope:         r.Scope,
 			Capabilities:  r.Capabilities,
