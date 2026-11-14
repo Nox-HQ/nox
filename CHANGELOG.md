@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   each package asked. `--offline` asks nothing. The MCP `fix_plan` tool does
   the same when its scan was online. See
   `docs/adr/0005-held-upgrades-read-the-npm-registry.md`.
+- `nox fix apply --include-review` makes that parent upgrade. It runs once,
+  however many held items the release frees, and then each item reads the
+  lockfile back: one whose package npm left below its fix is reported as not
+  applied, with the `overrides` entry that forces it. On the walkthrough app,
+  one `npm install express@4.22.3` cleared three items and eight advisories,
+  and the checks apply re-ran verified all three fixed.
 
 ## [1.67.0] - 2026-11-14
 

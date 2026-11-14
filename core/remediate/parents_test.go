@@ -68,6 +68,9 @@ func TestHeldUpgradesNameTheOneParentReleaseThatFreesThem(t *testing.T) {
 				t.Errorf("%s: why = %q, want %q", it.Upgrade.Package, it.Why, want)
 			}
 		}
+		if strings.Contains(it.Why, "cannot move it") || !strings.Contains(it.Why, "nox fix apply --include-review makes the upgrade") {
+			t.Errorf("%s: why does not say apply makes the parent upgrade: %q", it.Upgrade.Package, it.Why)
+		}
 		if strings.Contains(it.Why, "Either upgrade") {
 			t.Errorf("%s: the generic remedy stayed beside the named one: %q", it.Upgrade.Package, it.Why)
 		}

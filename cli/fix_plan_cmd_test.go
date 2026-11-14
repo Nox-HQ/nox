@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -10,6 +11,7 @@ import (
 
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/fix"
+	"github.com/nox-hq/nox/core/npmtree"
 	"github.com/nox-hq/nox/core/remediate"
 )
 
@@ -244,15 +246,63 @@ func TestBareFixStillTakesItsOwnFlags(t *testing.T) {
 	}
 }
 
-// An upgrade a parent's range holds out of reach is something nox cannot make,
-// so apply never selects it, even when review items are asked for.
+// An upgrade a parent's range holds out of reach is something nox cannot make
+// unless the plan named the parent release that frees it; that upgrade is a
+// prediction, so only --include-review selects it.
 func TestSelectedSkipsHeldUpgrades(t *testing.T) {
 	it := &remediate.Item{Class: remediate.ClassReview, Kind: remediate.KindHeldUpgrade}
 	if selected(it, fixSubOptions{includeReview: true, includeMajor: true}) {
 		t.Fatal("apply selected an upgrade that a parent's range holds back")
 	}
+	it.ParentUpgrades = []npmtree.ParentUpgrade{{Parent: "express", From: "4.21.2", To: "4.22.3", Frees: []string{"qs"}}}
+	if selected(it, fixSubOptions{includeMajor: true}) {
+		t.Fatal("a parent upgrade was selected without --include-review")
+	}
+	if !selected(it, fixSubOptions{includeReview: true}) {
+		t.Fatal("--include-review did not select the named parent upgrade")
+	}
 	major := &remediate.Item{Class: remediate.ClassReview, Kind: remediate.KindMajorUpgrade}
 	if !selected(major, fixSubOptions{includeMajor: true}) {
 		t.Fatal("a major upgrade must still be selectable with --include-major")
+	}
+}
+
+// A parent upgrade is run once for every item it frees, and each item reads
+// the lockfile back: one whose package npm left below the fix is not applied,
+// whatever the upgrade's own result.
+func TestParentUpgradeIsRunOnceAndEachItemReadsTheLockfileBack(t *testing.T) {
+	root := t.TempDir()
+	for name, body := range map[string]string{
+		"package.json": `{"dependencies":{"express":"4.22.3"}}`,
+		"package-lock.json": `{"lockfileVersion":3,"packages":{
+"":{"dependencies":{"express":"4.22.3"}},
+"node_modules/express":{"version":"4.22.3","dependencies":{"qs":"~6.16.0","body-parser":"~1.20.5"}},
+"node_modules/body-parser":{"version":"1.20.9","dependencies":{"qs":"6.13.0"}},
+"node_modules/body-parser/node_modules/qs":{"version":"6.13.0"},
+"node_modules/qs":{"version":"6.16.1"}}}`,
+	} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	up := npmtree.ParentUpgrade{Parent: "express", From: "4.21.2", To: "4.22.3", Frees: []string{"body-parser", "qs"}}
+	item := func(pkg, to string) *remediate.Item {
+		return &remediate.Item{Kind: remediate.KindHeldUpgrade, ParentUpgrades: []npmtree.ParentUpgrade{up},
+			Upgrade: &fix.UpgradeAction{Ecosystem: "npm", Package: pkg, To: to, Manifest: "package-lock.json"}}
+	}
+	// Already run in this apply: not run again (no npm on this path).
+	done := map[string]error{".\x00express@4.22.3": nil}
+	if err := applyParentUpgrades(item("body-parser", "1.20.9"), root, map[[2]string]bool{}, done); err != nil {
+		t.Fatalf("body-parser reached its fix: %v", err)
+	}
+	err := applyParentUpgrades(item("qs", "6.16.1"), root, map[[2]string]bool{}, done)
+	if err == nil || !strings.Contains(err.Error(), "node_modules/body-parser/node_modules/qs@6.13.0") ||
+		!strings.Contains(err.Error(), `"overrides": { "qs": "6.16.1" }`) {
+		t.Fatalf("a copy left below the fix gave err = %v", err)
+	}
+	// A failed upgrade fails every item that depends on it.
+	done[".\x00express@4.22.3"] = errors.New("npm exited 1")
+	if err := applyParentUpgrades(item("body-parser", "1.20.9"), root, map[[2]string]bool{}, done); err == nil {
+		t.Fatal("an item counted as applied although its parent upgrade failed")
 	}
 }
