@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `requirements.txt` naming it. Declarations, path aliases and first-party
   modules are now read from the whole tree; findings are still reported only
   on changed files.
+- A SARIF report with no findings wrote `"rules": null`, which SARIF 2.1.0
+  forbids; GitHub rejected the upload, and the alerts of the previous scan
+  stayed open. Found when the fix above left nox's own PR-scoped scan with
+  nothing to report. `rules` is now always an array.
 - OpenTelemetry 1.47.0 (GHSA-q7gw-24fr-5p69: `AttributeValueLengthLimit` is
   bypassed by values made of U+FFFD runes), linked through the MCP server.
 - `examples/ai-app/safe.py`, the fixed half of the AI example, returned the

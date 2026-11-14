@@ -601,6 +601,32 @@ func TestEmptyFindingSetProducesValidSARIF(t *testing.T) {
 	if len(ruleCatalog) != 0 {
 		t.Errorf("expected 0 rules for empty findings, got %d", len(ruleCatalog))
 	}
+
+	// A length check passes for null too, and null is what nox wrote: GitHub
+	// rejected the upload ("runs[0].tool.driver.rules is not of a type(s)
+	// array") on the first PR-scoped scan that found nothing, so the alerts
+	// of the scan before it stayed open. Read the raw JSON type.
+	var raw struct {
+		Runs []struct {
+			Results json.RawMessage `json:"results"`
+			Tool    struct {
+				Driver struct {
+					Rules json.RawMessage `json:"rules"`
+				} `json:"driver"`
+			} `json:"tool"`
+		} `json:"runs"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	for name, v := range map[string]json.RawMessage{
+		"runs[0].tool.driver.rules": raw.Runs[0].Tool.Driver.Rules,
+		"runs[0].results":           raw.Runs[0].Results,
+	} {
+		if !strings.HasPrefix(strings.TrimSpace(string(v)), "[") {
+			t.Errorf("%s = %s, want a JSON array (SARIF 2.1.0 requires one)", name, v)
+		}
+	}
 }
 
 func TestGenerateIsDeterministic(t *testing.T) {
