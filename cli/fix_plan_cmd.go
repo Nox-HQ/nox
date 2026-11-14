@@ -13,6 +13,7 @@ import (
 
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/fix"
+	"github.com/nox-hq/nox/core/npmtree"
 	"github.com/nox-hq/nox/core/remediate"
 )
 
@@ -70,7 +71,16 @@ func runFixSub(mode string, args []string) int {
 		// from its rule.
 		return runVerifySub(remediate.Build(remediate.Input{Findings: active}), active, o)
 	}
-	plan := remediate.Build(remediate.Input{Findings: active, Root: o.root, Targets: targetChecker(o.offline)})
+	in := remediate.Input{Findings: active, Root: o.root, Targets: targetChecker(o.offline)}
+	var reg *npmtree.HTTPRegistry
+	if !o.offline {
+		reg = npmtree.NewHTTPRegistry("")
+		in.Registry = reg
+	}
+	plan := remediate.Build(in)
+	if line := npmRegistryNotice(reg); line != "" {
+		fmt.Fprintln(os.Stderr, line)
+	}
 	if mode == "plan" {
 		return printPlan(plan, o.format)
 	}

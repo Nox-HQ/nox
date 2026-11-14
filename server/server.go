@@ -29,6 +29,7 @@ import (
 	"github.com/nox-hq/nox/core/fix"
 	"github.com/nox-hq/nox/core/fix/osvcheck"
 	"github.com/nox-hq/nox/core/git"
+	"github.com/nox-hq/nox/core/npmtree"
 	"github.com/nox-hq/nox/core/remediate"
 	"github.com/nox-hq/nox/core/report"
 	"github.com/nox-hq/nox/core/report/sbom"
@@ -1945,12 +1946,27 @@ func (s *Server) handleFixPlan(ctx context.Context, input fixPlanInput) (mcp.Str
 
 	// One plan for everything the assessment lists, built by the same code the
 	// CLI uses. Nothing in it is applied here.
-	resp.Plan = remediate.Build(remediate.Input{
+	in := remediate.Input{
 		Findings: pc.result.Findings.ActiveFindings(),
 		Rules:    pc.result.Rules,
 		Root:     pc.basePath,
 		Targets:  targets,
-	})
+		Ctx:      ctx,
+	}
+	// The same offline signal: a held npm upgrade names the parent release
+	// that frees it only when the scan was allowed to make lookups.
+	var reg *npmtree.HTTPRegistry
+	if targets != nil {
+		reg = npmtree.NewHTTPRegistry("")
+		in.Registry = reg
+	}
+	resp.Plan = remediate.Build(in)
+	if reg != nil {
+		if asked := reg.Requested(); len(asked) > 0 {
+			resp.Note += fmt.Sprintf(". The release histories of %s were read from %s to name the parent release that frees each held upgrade",
+				strings.Join(asked, ", "), reg.Host())
+		}
+	}
 	if targets == nil {
 		resp.Note += ". Offline: targets were not verified against all advisories; an advisory introduced after the installed version may still affect them"
 	}

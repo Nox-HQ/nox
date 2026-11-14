@@ -645,6 +645,26 @@ in one of three classes:
   authorization hint that only a two-account test settles. The item says
   exactly what is needed.
 
+A fix for an npm package you do not list yourself, which a parent's range
+keeps below the fixed version, is a **held upgrade**: `apply` cannot make it.
+Online, `plan` reads the parent's release history from the npm registry and
+names the first release that lets it move, following the tree the way npm
+re-resolves it (express 4.21.2 holds qs both itself and through body-parser,
+and only express 4.22.3 frees both copies):
+
+```text
+Upgrade express 4.21.2 -> 4.22.3, the first release of express that lets it
+move; it also frees body-parser and path-to-regexp: npm install --ignore-scripts
+--package-lock-only --save-exact express@4.22.3. Or force the version with an
+entry in package.json: "overrides": { "qs": "6.16.1" }
+```
+
+Held upgrades under one parent are answered together, so one upgrade is named
+for all of them, and `--format json` lists it in `parent_upgrades`. A
+`[network]` line names every package whose history was read; `--offline`
+reads none and gives the generic advice. A later major version is named only
+when no release on the installed one frees the package.
+
 `apply` changes nothing outside the safe set unless you pass `--include-major`
 or `--include-review`. It then re-runs the checks that produced the targeted
 findings (the dependency check for upgrades, the infrastructure check for
