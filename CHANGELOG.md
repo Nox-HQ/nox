@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `nox fix plan` names the release of the package you list that frees a held
+  npm upgrade. A fix for a transitive package that a parent's range keeps
+  below the fix used to say "upgrade express@4.21.2 to a release that depends
+  on a fixed qs", and leave the release history to the reader. Online, the
+  plan reads that history from the npm registry and works out what npm would
+  re-resolve under each later release. It names the first release that frees
+  every held copy, with its command, and one upgrade for all the items it
+  frees: express 4.21.2 -> 4.22.3 frees body-parser, path-to-regexp and qs.
+  `--format json` lists it in `parent_upgrades`, and a `[network]` line names
+  each package asked. `--offline` asks nothing. The MCP `fix_plan` tool does
+  the same when its scan was online. See
+  `docs/adr/0005-held-upgrades-read-the-npm-registry.md`.
+
 ## [1.67.0] - 2026-11-14
 
 ### Changed
