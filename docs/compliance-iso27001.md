@@ -106,9 +106,11 @@ reading as "fine":
 
 - A check that found nothing only counts as evidence if the outputs show it had
   something to examine. Secret scanning applies to every file; dependency checks
-  need an SBOM with components; infrastructure, data and cryptography checks
-  cover files that may not exist, and `findings.json` does not record whether
-  they did. Those report `limited_evidence` with that stated.
+  need an SBOM with components; application-code and cryptography checks need
+  source files, which `findings.json` records by language in
+  `meta.source_files`; infrastructure and data checks cover files that may not
+  exist, and `findings.json` does not record whether they did. Those report
+  `limited_evidence` with that stated.
 - The vulnerability lookup is network-dependent, and a scan run with `--no-osv`
   writes outputs identical to a clean one. A control that rests on it says so
   when it finds nothing, and when the scan ran with `--offline`.

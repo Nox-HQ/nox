@@ -49,6 +49,9 @@ type source struct {
 	// result from one of those cannot be told from a scan with nothing to read.
 	anywhere        bool
 	subjectFromSBOM bool
+	// subjectFromSource marks checks of application code: their subject is
+	// present when the report records source files read (meta.source_files).
+	subjectFromSource bool
 	// networkLookup marks checks that query an external advisory source. A
 	// scan that skipped the lookup (--no-osv) leaves the same outputs as one
 	// whose lookup found nothing, so an empty result cannot be read as clean.
@@ -231,7 +234,7 @@ var controls = []controlDef{
 		id: "A.8.24", title: "Use of cryptography", theme: "Technological",
 		sources: []source{
 			{kind: fromFindings, label: "Weak or misused cryptography checks", scope: "code",
-				prefixes: []string{"CRYPTO-"}, cwes: cryptoCWEs},
+				prefixes: []string{"CRYPTO-"}, cwes: cryptoCWEs, subjectFromSource: true},
 		},
 		limits: []string{
 			"Checks find weak algorithms, protocols and settings in code and configuration; they do not assess key generation, storage, rotation or retirement.",
@@ -275,7 +278,7 @@ var controls = []controlDef{
 		id: "A.8.28", title: "Secure coding", theme: "Technological",
 		sources: []source{
 			{kind: fromFindings, label: "Static analysis of application code", scope: "code",
-				prefixes: []string{"TAINT-", "VARIANT-", "MEMSAFE-", "HARDEN-"}},
+				prefixes: []string{"TAINT-", "VARIANT-", "MEMSAFE-", "HARDEN-"}, subjectFromSource: true},
 			{kind: fromFindings, label: "Authorization, authentication and webhook checks", scope: "code", ids: []string{"AUTHZ-001", "AUTHN-001", "WEBHOOK-001"}, additive: true},
 			{kind: fromFindings, label: "Agents that run model-supplied SQL", scope: "ai", ids: []string{"AI-AGENT-009"}, additive: true},
 			{kind: fromLeads, label: "Authorization and authentication leads"},

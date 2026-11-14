@@ -418,6 +418,14 @@ func (c *context) subjectPresent(src source) bool {
 	if src.anywhere {
 		return true
 	}
+	if src.subjectFromSource {
+		for _, n := range c.in.Report.Meta.SourceFiles {
+			if n > 0 {
+				return true
+			}
+		}
+		return false
+	}
 	if src.scope == "ai" {
 		return c.in.AI != nil && c.in.AI.Components+c.in.AI.Models > 0
 	}

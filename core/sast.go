@@ -199,3 +199,24 @@ func FilterArtifactsByLanguageProfile(artifacts []discovery.Artifact, cfg SASTCo
 	}
 	return filtered
 }
+
+// sourceFilesByLanguage counts the source artifacts a scan reads, by the
+// language their extension names. Nil when there are none, so the report
+// omits the field rather than recording an empty map.
+func sourceFilesByLanguage(artifacts []discovery.Artifact) map[string]int {
+	var counts map[string]int
+	for _, a := range artifacts {
+		if a.Type != discovery.Source {
+			continue
+		}
+		lang := LanguageForExtension(a.Path)
+		if lang == "" {
+			continue
+		}
+		if counts == nil {
+			counts = map[string]int{}
+		}
+		counts[lang]++
+	}
+	return counts
+}
