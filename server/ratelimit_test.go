@@ -87,20 +87,23 @@ func TestTriageIsNotChargedForScans(t *testing.T) {
 	}
 }
 
-// Nothing gets past the ceiling, cheap or not.
+// Nothing gets past the ceiling, cheap or not. The bucket refills at
+// requestRate while the loop runs, so a slow runner (Windows CI took 60ms for
+// 51 calls) earns a token back and the 51st call is let through. Twice the
+// burst leaves refill unable to keep up unless the calls take seconds.
 func TestEveryRequestHasACeiling(t *testing.T) {
 	h := chain(t)
 	ctx := context.Background()
 
 	var refused bool
-	for i := 0; i < requestBurst+1; i++ {
+	for i := 0; i < 2*requestBurst; i++ {
 		if _, err := h(ctx, toolCall("list_findings")); isRateLimited(err) {
 			refused = true
 			break
 		}
 	}
 	if !refused {
-		t.Fatalf("expected the ceiling to refuse within %d requests", requestBurst+1)
+		t.Fatalf("expected the ceiling to refuse within %d requests", 2*requestBurst)
 	}
 }
 
