@@ -18,6 +18,7 @@
 package remediate
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sort"
@@ -92,6 +93,10 @@ type Item struct {
 	Upgrade *fix.UpgradeAction `json:"upgrade,omitempty"`
 	// Patches are the line edits, for a content patch.
 	Patches []fix.Patch `json:"patches,omitempty"`
+	// ParentUpgrades, for a held upgrade, are the releases of packages the
+	// project lists that let it move. Named only when the plan was built with
+	// a Registry.
+	ParentUpgrades []npmtree.ParentUpgrade `json:"parent_upgrades,omitempty"`
 }
 
 // Actionable reports whether nox can prepare a change for the item.
@@ -160,6 +165,13 @@ type Input struct {
 	// Targets, when set, checks each upgrade target against the advisory
 	// source (see fix.Checker). Nil plans from the findings alone.
 	Targets fix.Checker
+	// Registry, when set, is asked for the release history of the packages
+	// that hold a transitive npm fix, so a held upgrade names the parent
+	// release that frees it. Nil keeps the plan offline: the same findings and
+	// the same files then give the same plan.
+	Registry npmtree.Registry
+	// Ctx bounds the Registry's requests; nil is context.Background().
+	Ctx context.Context //nolint:containedctx // an input to one Build call
 }
 
 // BuiltinRules is the rule set of every built-in analyzer, for callers that
@@ -189,6 +201,16 @@ func Build(in Input) Plan {
 			plan.Attention++
 		}
 		plan.Items = append(plan.Items, it)
+	}
+	if in.Registry != nil && in.Root != "" {
+		ctx := in.Ctx
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		nameParentUpgrades(ctx, &plan, in.Root, in.Registry)
+	}
+	for i := range plan.Items {
+		it := &plan.Items[i]
 		switch it.Class {
 		case ClassSafe:
 			plan.Safe++
