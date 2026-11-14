@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -327,10 +328,10 @@ func TestNpmCommand_TheManifestDecidesTheVerb(t *testing.T) {
 		pkg  string
 		want string
 	}{
-		{"astro", "npm install --ignore-scripts --save-prefix=^ astro@9.9.9"},
-		{"vitest", "npm install --ignore-scripts --save-dev --save-prefix=^ vitest@9.9.9"},
-		{"fsevents", "npm install --ignore-scripts --save-optional --save-prefix=^ fsevents@9.9.9"},
-		{"fast-uri", "npm update --ignore-scripts fast-uri"}, // transitive: never declared
+		{"astro", "npm install --ignore-scripts --package-lock-only --save-prefix=^ astro@9.9.9"},
+		{"vitest", "npm install --ignore-scripts --package-lock-only --save-dev --save-prefix=^ vitest@9.9.9"},
+		{"fsevents", "npm install --ignore-scripts --package-lock-only --save-optional --save-prefix=^ fsevents@9.9.9"},
+		{"fast-uri", "npm update --ignore-scripts --package-lock-only fast-uri"}, // transitive: never declared
 	} {
 		dir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(manifest), 0o600); err != nil {
@@ -464,10 +465,10 @@ func TestNpmCommand_KeepsTheSpecifierStyle(t *testing.T) {
 		spec string
 		want string
 	}{
-		{"4.17.15", "npm install --ignore-scripts --save-exact lodash@4.18.0"},
-		{"^4.17.15", "npm install --ignore-scripts --save-prefix=^ lodash@4.18.0"},
-		{"~4.17.0", "npm install --ignore-scripts --save-prefix=~ lodash@4.18.0"},
-		{">=4.0.0", "npm install --ignore-scripts lodash@4.18.0"}, // no faithful style: manager default
+		{"4.17.15", "npm install --ignore-scripts --package-lock-only --save-exact lodash@4.18.0"},
+		{"^4.17.15", "npm install --ignore-scripts --package-lock-only --save-prefix=^ lodash@4.18.0"},
+		{"~4.17.0", "npm install --ignore-scripts --package-lock-only --save-prefix=~ lodash@4.18.0"},
+		{">=4.0.0", "npm install --ignore-scripts --package-lock-only lodash@4.18.0"}, // no faithful style: manager default
 	} {
 		dir := t.TempDir()
 		manifest := `{"dependencies": {"lodash": "` + tc.spec + `"}}`
@@ -486,7 +487,7 @@ func TestNpmCommand_YarnKeepsStyleAndEveryManagerIgnoresScripts(t *testing.T) {
 	for _, tc := range []struct {
 		lockfile, extra, want string
 	}{
-		{"pnpm-lock.yaml", "", "pnpm update --ignore-scripts --depth Infinity lodash@4.18.0"},
+		{"pnpm-lock.yaml", "", "pnpm update --ignore-scripts --depth Infinity --lockfile-only lodash@4.18.0"},
 		{"yarn.lock", "", "yarn upgrade --ignore-scripts --exact lodash@4.18.0"},
 		{"yarn.lock", ".yarnrc.yml", "yarn up --exact lodash@4.18.0"}, // scripts off via YARN_ENABLE_SCRIPTS
 		{"bun.lockb", "", "bun update --ignore-scripts lodash@4.18.0"},
@@ -633,5 +634,57 @@ func TestPyPIPinIsVerifiedAfterApply(t *testing.T) {
 	a.manifest = "poetry.lock" // nox never edits it, so it never claims to have read it
 	if _, ok := installedVersion(dir, a); ok {
 		t.Error("claimed a version from a file nox did not edit")
+	}
+}
+
+// nox fix moves a version in package.json and the lockfile; installing the
+// packages is not part of the change. Run in a project with no node_modules,
+// npm install created one, and the next nox scan reported a critical SEC-073
+// and two high secrets in third-party READMEs and type definitions inside it:
+// findings nox's own fix had brought into being. Where the project has no
+// node_modules, npm and pnpm rewrite the lockfile only (both verified against
+// the real tools); where it has one, it is kept in step with the lockfile.
+// bun has no lockfile-only update and yarn is unverified, so both still
+// install.
+func TestNpmCommand_DoesNotCreateNodeModules(t *testing.T) {
+	manifest := `{"dependencies": {"axios": "1.6.0"}}`
+	for _, tc := range []struct {
+		lockfile, pkg string
+		lockOnly      string // the flag, or "" when the manager has none
+	}{
+		{"package-lock.json", "axios", "--package-lock-only"},
+		{"package-lock.json", "qs", "--package-lock-only"}, // transitive: npm update
+		{"pnpm-lock.yaml", "axios", "--lockfile-only"},
+		{"bun.lockb", "axios", ""},
+		{"yarn.lock", "axios", ""},
+	} {
+		for _, installed := range []bool{false, true} {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(manifest), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			touchFile(t, dir, tc.lockfile)
+			if installed {
+				if err := os.Mkdir(filepath.Join(dir, "node_modules"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			name, args := npmtree.Command(dir, tc.pkg, "9.9.9")
+			got := strings.Join(args, " ")
+			has := func(flag string) bool { return slices.Contains(args, flag) }
+			switch {
+			case tc.lockOnly == "":
+				if has("--package-lock-only") || has("--lockfile-only") {
+					t.Errorf("%s %s: %s has no verified lockfile-only update, got %q", tc.lockfile, tc.pkg, name, got)
+				}
+			case installed && has(tc.lockOnly):
+				t.Errorf("%s %s with node_modules: %q would leave it out of step with the lockfile", tc.lockfile, tc.pkg, got)
+			case !installed && !has(tc.lockOnly):
+				t.Errorf("%s %s without node_modules: %q creates one; want %s", tc.lockfile, tc.pkg, got, tc.lockOnly)
+			}
+			if !has("--ignore-scripts") && name != "yarn" {
+				t.Errorf("%s: %q runs lifecycle scripts", tc.lockfile, got)
+			}
+		}
 	}
 }

@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `nox fix apply` installed packages to move a version, so in a project with
+  no `node_modules` it created one, and the next `nox scan` reported a critical
+  and two high "secrets" from third-party READMEs and type definitions inside
+  it. Where there is no `node_modules`, npm and pnpm now rewrite only
+  `package.json` and the lockfile (`--package-lock-only`, `--lockfile-only`);
+  an existing one is still kept in step. bun has no lockfile-only update and
+  still installs.
 - A PR-scoped scan (`--changed-since`) reported an import as SLOP-001,
   undeclared, whenever the manifest declaring it was not among the changed
   files: what a project declares was read from the diff, not the tree. On
