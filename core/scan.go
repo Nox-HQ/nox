@@ -568,6 +568,22 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// discovered set (deterministic, input order preserved).
 	artifacts = FilterArtifactsByLanguageProfile(artifacts, cfg.Scan.SAST)
 
+	// tree is what the project contains, as opposed to what this scan reports
+	// on. They differ only under --changed-since: the diff names the files to
+	// report on, but what a project declares (its manifests, its first-party
+	// modules) is read from the whole tree, or every import whose manifest the
+	// diff left alone is reported as undeclared.
+	tree := artifacts
+	if opts.ChangedSince != "" {
+		treeOpts := opts
+		treeOpts.ChangedSince = ""
+		all, err := discoverArtifacts(target, cfg, treeOpts, &degrade.Degradations{})
+		if err != nil {
+			return nil, fmt.Errorf("reading the tree around the changed files: %w", err)
+		}
+		tree = FilterArtifactsByLanguageProfile(all, cfg.Scan.SAST)
+	}
+
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -845,7 +861,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			return nil
 		}},
 		{"slop", func(c context.Context) error {
-			fs, err := slopAnalyzer.ScanArtifacts(c, artifacts)
+			fs, err := slopAnalyzer.ScanArtifactsInContext(c, artifacts, tree)
 			if err != nil {
 				return err
 			}

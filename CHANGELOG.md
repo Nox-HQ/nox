@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A PR-scoped scan (`--changed-since`) reported an import as SLOP-001,
+  undeclared, whenever the manifest declaring it was not among the changed
+  files: what a project declares was read from the diff, not the tree. On
+  nox's own PR #1082, editing `safe.py`'s flask import flagged flask beside the
+  `requirements.txt` naming it. Declarations, path aliases and first-party
+  modules are now read from the whole tree; findings are still reported only
+  on changed files.
 - OpenTelemetry 1.47.0 (GHSA-q7gw-24fr-5p69: `AttributeValueLengthLimit` is
   bypassed by values made of U+FFFD runes), linked through the MCP server.
 - `examples/ai-app/safe.py`, the fixed half of the AI example, returned the

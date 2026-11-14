@@ -165,6 +165,17 @@ func isManifest(base string) bool {
 
 // ScanArtifacts detects phantom imports across the discovered source files.
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
+	return a.ScanArtifactsInContext(ctx, artifacts, artifacts)
+}
+
+// ScanArtifactsInContext reports on the imports of artifacts, judged against
+// what the project declares in tree: the manifests, path aliases and
+// first-party modules found anywhere in it. The two differ in a scoped scan
+// (--changed-since): the diff decides which files are reported on, but the
+// manifest declaring an import is usually a file the diff did not touch, and
+// reading declarations from the diff alone reported every such import as
+// undeclared (PR #1082: flask, beside the requirements.txt naming it).
+func (a *Analyzer) ScanArtifactsInContext(ctx context.Context, artifacts, tree []discovery.Artifact) (*findings.FindingSet, error) {
 	fs := findings.NewFindingSet()
 
 	// Gather declared packages from manifests and first-party module roots from
@@ -173,8 +184,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	aliases := newAliasSet()
 	local := make(map[string]struct{})
 	pkgDirs := make(map[string]struct{})
-	for i := range artifacts {
-		art := artifacts[i]
+	for i := range tree {
+		art := tree[i]
 		base := filepath.Base(art.Path)
 		if isManifest(base) {
 			if content, err := os.ReadFile(art.AbsPath); err == nil {
