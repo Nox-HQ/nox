@@ -514,13 +514,13 @@ func heldMove(root string, mv fix.UpgradeAction) string {
 	if !npmtree.Transitive(dir, mv.Package) {
 		return ""
 	}
-	reach := npmtree.ReachOf(dir, mv.Package, mv.To)
+	reach := npmtree.ReachAtOf(dir, mv.Package, mv.From, mv.To)
 	if !reach.Held() {
 		return ""
 	}
-	return fmt.Sprintf("%s is not a package you list yourself, and %s: the range excludes %s, so nox fix cannot move it. "+
+	return fmt.Sprintf("%s is not a package you list yourself, and %s: %s, so nox fix cannot move it. "+
 		"Upgrade %s to a release that allows it, or force the version with %s in package.json.",
-		mv.Package, reach.HoldList(), mv.To, reach.Holders(), npmtree.OverrideEntry(reach.Tool, mv.Package, mv.To))
+		mv.Package, reach.HoldList(), reach.Excludes(mv.To), reach.Holders(), npmtree.OverrideEntry(reach.Tool, mv.Package, mv.To))
 }
 
 // mergeBlocker returns why an already-prepared advisory may not be merged

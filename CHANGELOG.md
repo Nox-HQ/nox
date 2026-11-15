@@ -30,6 +30,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `nox fix plan` and `nox fix` read npm ranges whose bounds carry a
+  pre-release tag, such as vite's peers' `^6.0.0-0`. Each was read as unknown,
+  and an unknown range is treated as a hold, so on nox-hq.dev vite 6.4.1 was
+  reported as "held" below 6.4.5 by four ranges that all allow it. For a
+  release version the tag changes nothing (no release lies between `6.0.0-0`
+  and `6.0.0`), so each comparator is evaluated exactly: `>=`/`>` as `>=`
+  the release, `<`/`<=` as `<` it, and `=` as no match.
+- A range nox still cannot read (a dist-tag, a URL, an alias) keeps holding
+  the move, but the plan now says nox cannot tell whether it allows the fix,
+  instead of "the range excludes" it.
+- A package installed at two majors is judged per copy. nox-hq.dev has nanoid
+  5.1.6 at the root and 3.3.11 under postcss's `^3.3.11`; the 5.x finding's
+  fix, 5.1.16, was reported as held by postcss, whose range governs only the
+  3.x copy. picomatch 4.0.3 and zod 4.3.6 were held the same way. Each finding
+  is now answered for the copy at its own installed version: on nox-hq.dev 18
+  upgrades are safe to apply, up from 13. Apply's lockfile read-back makes the
+  same distinction: it reported the nanoid and picomatch upgrades as not
+  applied because the older lines, rightly untouched, were still below the
+  newer line's fix. On nox-hq.dev 17 of the 18 now verify; the 18th, zod 3.x,
+  is held by astro 5's `^3.25.76`, as the plan says.
 - `findings.json` lists plugin enrichments in the same order on every scan of
   the same tree. They were written in the order each plugin returned them, and
   nox/reachability 0.9.0 returns them in Go map order: three scans of the

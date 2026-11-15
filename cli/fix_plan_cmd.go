@@ -328,7 +328,7 @@ func applyParentUpgrades(it *remediate.Item, root string, tidy map[[2]string]boo
 		}
 	}
 	dir := filepath.Join(root, filepath.Dir(held.Manifest))
-	below, err := npmtree.Below(dir, held.Package, held.To)
+	below, err := npmtree.BelowFrom(dir, held.Package, held.From, held.To)
 	if err != nil {
 		return fmt.Errorf("reading the lockfile after the upgrade: %w", err)
 	}

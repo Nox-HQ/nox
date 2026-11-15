@@ -6,8 +6,9 @@ import (
 )
 
 // npmVersion is a release version. Pre-release and build tags are not
-// represented: a fixed version nox plans is a release, and a range that names
-// a pre-release is reported as unreadable rather than guessed at.
+// represented: a fixed version nox plans is a release. A range bound that
+// names a pre-release is still read, exactly (satisfiesPrereleaseBound),
+// because the answer for a release version does not depend on the tag.
 type npmVersion [3]int
 
 func parseNPMVersion(s string) (npmVersion, bool) {
@@ -41,8 +42,8 @@ func (a npmVersion) cmp(b npmVersion) int {
 
 // satisfiesNPMRange reports whether version v lies inside an npm semver range.
 // The second result is false when the range is written in a form this does not
-// read (a tag, a URL, a pre-release, an alias): the caller must then not
-// conclude the fix is reachable.
+// read (a dist-tag, a URL, an alias): the caller must then not conclude the
+// fix is reachable.
 func satisfiesNPMRange(v npmVersion, rng string) (in, known bool) {
 	rng = strings.TrimSpace(rng)
 	if rng == "" {
@@ -146,6 +147,13 @@ func satisfiesComparator(v npmVersion, c string) (in, known bool) {
 			break
 		}
 	}
+	// Build metadata has no precedence (semver 10): 1.2.3+build is 1.2.3.
+	if i := strings.IndexByte(c, '+'); i >= 0 {
+		c = c[:i]
+	}
+	if base, tag, tagged := strings.Cut(c, "-"); tagged {
+		return satisfiesPrereleaseBound(v, op, base, tag)
+	}
 	p, ok := parsePartial(c)
 	if !ok {
 		return false, false
@@ -173,6 +181,38 @@ func satisfiesComparator(v npmVersion, c string) (in, known bool) {
 		return v.cmp(lo) >= 0 && v.cmp(hi) < 0, true
 	case "^":
 		return v.cmp(lo) >= 0 && v.cmp(caretCeiling(p)) < 0, true
+	}
+	return false, false
+}
+
+// satisfiesPrereleaseBound evaluates a comparator whose version carries a
+// pre-release tag, X.Y.Z-tag, against a release version v. It is exact, not
+// a guess: no release lies between X.Y.Z-tag and X.Y.Z, so for a release
+//
+//	v >= X.Y.Z-tag and v > X.Y.Z-tag  are  v >= X.Y.Z
+//	v <  X.Y.Z-tag and v <= X.Y.Z-tag are  v <  X.Y.Z
+//	v =  X.Y.Z-tag                     never holds
+//
+// and a caret or tilde keeps its ordinary ceiling. Dropping the tag would be
+// wrong for >, <= and =, which is why each operator is spelled out. The vite
+// ecosystem writes peer ranges as ^6.0.0-0; read as unknown, they made nox
+// report vite 6.4.1 as held below 6.4.5 by ranges that allow it.
+func satisfiesPrereleaseBound(v npmVersion, op, base, tag string) (in, known bool) {
+	b, ok := parseNPMVersion(base)
+	if !ok || tag == "" {
+		return false, false // a tag on a partial (^1.2-beta) is not a form npm defines
+	}
+	switch op {
+	case ">=", ">":
+		return v.cmp(b) >= 0, true
+	case "<", "<=":
+		return v.cmp(b) < 0, true
+	case "", "=":
+		return false, true
+	case "^":
+		return v.cmp(b) >= 0 && v.cmp(caretCeiling(partial{n: b, count: 3})) < 0, true
+	case "~":
+		return v.cmp(b) >= 0 && v.cmp(npmVersion{b[0], b[1] + 1, 0}) < 0, true
 	}
 	return false, false
 }
