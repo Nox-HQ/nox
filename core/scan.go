@@ -1200,7 +1200,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		Conflicts:          conflicts,
 		Stages:             stages,
 		Findings:           allFindings,
-		Enrichments:        pluginEnrichments,
+		Enrichments:        findings.SortEnrichments(pluginEnrichments),
 		Graphs:             pluginGraphs,
 		Inventory:          inventory,
 		AIInventory:        aiInventory,
