@@ -94,7 +94,7 @@ func (a UpgradeAction) CommandIn(root string) string {
 	}
 	switch a.Ecosystem {
 	case "npm":
-		return npmtree.AdviceFor(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.To).Command
+		return npmtree.AdviceAtFor(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.From, a.To).Command
 	case "pypi":
 		return pypipin.AdviceFor(filepath.Join(root, a.Manifest), a.Package, a.From, a.To).Command
 	}

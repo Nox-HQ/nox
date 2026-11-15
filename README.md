@@ -98,7 +98,7 @@ reports/
 
 ```yaml
 # .github/workflows/security.yml
-- uses: nox-hq/nox@3c0814cc5da0e2a82cb3d932f38c742e7b1172eb # v1.67.0
+- uses: nox-hq/nox@6bb8ca8c4da7dc87a0ef6d87d7f3a5d3ec1bc432 # v1.68.0
   with:
     path: '.'
     format: sarif

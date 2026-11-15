@@ -125,7 +125,14 @@ func Copies(dir, pkg string) (map[string]string, error) {
 // Below lists every copy of pkg in dir's lockfile still below version, as
 // "key@version", sorted. A copy whose version cannot be read is listed too:
 // nothing establishes that it is fixed.
-func Below(dir, pkg, version string) ([]string, error) {
+func Below(dir, pkg, version string) ([]string, error) { return BelowFrom(dir, pkg, "", version) }
+
+// BelowFrom is Below for the line a finding names: a copy below from, the
+// version the finding was about, is another installed line with a finding and
+// a fix of its own, and is not evidence that this upgrade failed. Upgrading
+// nanoid 5.1.6 to 5.1.16 leaves postcss's nanoid 3.3.20 where it is, rightly,
+// and apply reported the 5.x upgrade as not applied because of it.
+func BelowFrom(dir, pkg, from, version string) ([]string, error) {
 	copies, err := Copies(dir, pkg)
 	if err != nil {
 		return nil, err
@@ -134,9 +141,14 @@ func Below(dir, pkg, version string) ([]string, error) {
 	if !ok {
 		return nil, fmt.Errorf("unreadable fixed version %q", version)
 	}
+	floor, hasFloor := parseNPMVersion(strings.TrimPrefix(strings.TrimSpace(from), "v"))
 	var below []string
 	for key, v := range copies {
-		if got, ok := parseNPMVersion(v); !ok || got.cmp(target) < 0 {
+		got, ok := parseNPMVersion(v)
+		if ok && hasFloor && got.cmp(floor) < 0 {
+			continue // an older line, not the copy this upgrade moves
+		}
+		if !ok || got.cmp(target) < 0 {
 			if !strings.HasSuffix(key, "@"+v) {
 				key += "@" + v
 			}
@@ -153,9 +165,18 @@ type Hold struct {
 	By string
 	// Requires is what the holder asks for, as written: "qs 6.13.0".
 	Requires string
+	// Unread is set when nox could not read the range (a dist-tag, a URL, an
+	// alias). It still holds: nox will not promise a move it cannot check.
+	// But it is not a range that excludes the fix, and is not reported as one.
+	Unread bool
 }
 
-func (h Hold) String() string { return h.By + " requires " + h.Requires }
+func (h Hold) String() string {
+	if h.Unread {
+		return h.By + " requires " + h.Requires + " (a range nox cannot read)"
+	}
+	return h.By + " requires " + h.Requires
+}
 
 // Reach is what the lockfile says about moving a package to a fixed version.
 type Reach struct {
@@ -196,6 +217,19 @@ func (r Reach) Holders() string {
 	return strings.Join(names, ", ")
 }
 
+// Excludes is the clause a held item states after HoldList: "the range
+// excludes 6.4.5", or, when a holder's range is one nox could not read, a
+// sentence that says so rather than claiming the range rules the fix out.
+func (r Reach) Excludes(fixed string) string {
+	for _, h := range r.Holds {
+		if h.Unread {
+			return "nox cannot tell whether every range allows " + fixed +
+				", and does not promise a move it cannot check"
+		}
+	}
+	return "the range excludes " + fixed
+}
+
 // HoldList is every hold, "; "-joined, for "because ..." text.
 func (r Reach) HoldList() string {
 	parts := make([]string, len(r.Holds))
@@ -221,6 +255,9 @@ func OverrideEntry(tool, pkg, version string) string {
 // dependent's range being violated. See Project.Reach; this reads the
 // workspace for one question.
 func ReachOf(dir, pkg, fixed string) Reach { return Open(dir).Reach(pkg, fixed) }
+
+// ReachAtOf is ReachOf for the copy installed at from. See Project.ReachAt.
+func ReachAtOf(dir, pkg, from, fixed string) Reach { return Open(dir).ReachAt(pkg, from, fixed) }
 
 // Project is one workspace's package.json and lockfile, read once for many
 // questions. A scan asks about every vulnerable package in a lockfile, and a
@@ -291,7 +328,19 @@ func Open(dir string) *Project {
 // A range that excludes the fix is a hold; so is an override in package.json
 // that pins the package lower. The size of the step does not enter into it: a
 // parent holds a minor fix and a major one alike.
-func (p *Project) Reach(pkg, fixed string) Reach {
+func (p *Project) Reach(pkg, fixed string) Reach { return p.ReachAt(pkg, "", fixed) }
+
+// ReachAt is Reach for the copies of pkg installed at from, the version a
+// finding is about; empty from means every copy below fixed.
+//
+// A package installed at two majors has a copy per line, and each line's
+// finding names its own fix: nanoid 3.3.11 (fixed in 3.3.18) under postcss's
+// ^3.3.11 and nanoid 5.1.6 (fixed in 5.1.16) beside it. Asked about 5.1.16
+// for every copy, Reach found the 3.x copy below it and reported
+// "postcss@8.5.6 requires nanoid ^3.3.11: the range excludes 5.1.16" for a
+// 5.x copy nothing held. The question is about the copy the finding names.
+func (p *Project) ReachAt(pkg, from, fixed string) Reach {
+	from = strings.TrimPrefix(strings.TrimSpace(from), "v")
 	r := Reach{Tool: p.tool}
 	if p.g == nil || !p.ranges {
 		r.Why = p.why
@@ -312,8 +361,8 @@ func (p *Project) Reach(pkg, fixed string) Reach {
 
 	keys := p.g.keys()
 	seen := map[Hold]bool{}
-	addHold := func(by, rng string) {
-		h := Hold{By: by, Requires: pkg + " " + rng}
+	addHold := func(by, rng string, known bool) {
+		h := Hold{By: by, Requires: pkg + " " + rng, Unread: !known}
 		if !seen[h] {
 			seen[h] = true
 			r.Holds = append(r.Holds, h)
@@ -328,9 +377,12 @@ func (p *Project) Reach(pkg, fixed string) Reach {
 		if !ok || installed.cmp(target) >= 0 {
 			continue // already at or past the fix
 		}
+		if from != "" && n.version != from {
+			continue // another installed line, with a finding and a fix of its own
+		}
 		if rng, declares := p.g.root[pkg]; declares && p.g.resolve("", pkg, rng) == key {
 			if in, known := satisfiesNPMRange(target, rng); !known || !in {
-				addHold("package.json", rng)
+				addHold("package.json", rng, known)
 			}
 		}
 		for _, q := range keys {
@@ -339,14 +391,15 @@ func (p *Project) Reach(pkg, fixed string) Reach {
 			if !declares || p.g.resolve(q, pkg, rng) != key {
 				continue
 			}
-			if in, known := satisfiesNPMRange(target, rng); known && in {
+			in, known := satisfiesNPMRange(target, rng)
+			if known && in {
 				continue
 			}
 			by := dep.name
 			if dep.version != "" {
 				by += "@" + dep.version
 			}
-			addHold(by, rng)
+			addHold(by, rng, known)
 		}
 	}
 	if h, held := overrideHold(p.dir, p.tool, pkg, target); held {

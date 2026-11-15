@@ -219,9 +219,17 @@ func TestARuleNamingSeveralFormatsIsNotGatedByOne(t *testing.T) {
 	if !ok {
 		t.Fatal("IAC-007 not found")
 	}
-	if _, allGated := gatesFor(r); allGated {
-		t.Error("IAC-007 is tagged kubernetes, cloudformation and kustomize; kubernetes " +
-			"has no gate, so no gate may decide whether it applies")
+	// Every one of its formats is gated now, kubernetes by "not a GitHub
+	// workflow", so a document passing any one of them keeps the rule. A
+	// CloudFormation template is no kustomization, and IAC-007 must still
+	// report it there.
+	if gates, allGated := gatesFor(r); !allGated || len(gates) != 3 {
+		t.Errorf("IAC-007 names kubernetes, cloudformation and kustomize; gatesFor "+
+			"returned %d gates (allGated=%v)", len(gates), allGated)
+	}
+	cfn := "AWSTemplateFormatVersion: \"2010-09-09\"\nResources:\n  Task:\n    Type: AWS::ECS::TaskDefinition\n    Properties:\n      ContainerDefinitions:\n        - Name: app\n          Privileged: true\n"
+	if ids := scanIDs(t, "task.yaml", cfn); !contains(ids, "IAC-007") {
+		t.Errorf("IAC-007 lost `Privileged: true` on a CloudFormation task definition; got %v", ids)
 	}
 }
 

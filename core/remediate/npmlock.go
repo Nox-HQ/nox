@@ -23,7 +23,7 @@ func heldReason(a upgradePlan, reach npmtree.Reach) string {
 		}
 		fmt.Fprintf(&b, ", and nox cannot see whether the packages that need it allow the move: %s", why)
 	} else {
-		fmt.Fprintf(&b, " and %s: the range excludes %s", reach.HoldList(), a.to)
+		fmt.Fprintf(&b, " and %s: %s", reach.HoldList(), reach.Excludes(a.to))
 	}
 	b.WriteString(", so nox fix apply cannot move it. ")
 	fmt.Fprintf(&b, "Either upgrade %s to a release that depends on a fixed %s, or force the version with an entry in package.json: %s",

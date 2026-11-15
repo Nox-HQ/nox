@@ -226,14 +226,43 @@ func TestAFormatTheDetectorsCannotReadIsNotJudged(t *testing.T) {
 	}
 }
 
-// TestKubernetesIsNotGated states the deliberate omission, so a later change
-// that adds a Kubernetes gate has to argue with this first.
-func TestKubernetesIsNotGated(t *testing.T) {
+// ansibleK8sTask is the case that kept the Kubernetes family ungated: an
+// Ansible task applying a resource, where IAC-143 on `namespace: default` was
+// measured as a true positive. Its gate must not take that away.
+const ansibleK8sTask = `- name: Deploy the worker
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: worker
+        namespace: default
+`
+
+// TestKubernetesIsGatedOnlyAgainstWorkflows states the one exclusion and what
+// it must keep. The family was deliberately ungated because its rules apply to
+// any document declaring Kubernetes resources, an Ansible k8s task among them.
+// The gate added for GitHub Actions workflows takes none of that away: it
+// asks only whether the document is a workflow, where a pod-spec key is text.
+func TestKubernetesIsGatedOnlyAgainstWorkflows(t *testing.T) {
+	var gates int
 	for _, g := range documentKindGates {
-		if g.tag == "kubernetes" {
-			t.Error("Kubernetes is gated. Its rules legitimately apply to any document " +
-				"declaring Kubernetes resources — an Ansible k8s_module task among them, " +
-				"where IAC-143 on `namespace: default` was measured as a true positive.")
+		if g.tag != "kubernetes" {
+			continue
 		}
+		gates++
+		if !g.is("roles/worker/tasks/main.yml", []byte(ansibleK8sTask)) {
+			t.Error("the Kubernetes gate rejected an Ansible k8s task")
+		}
+		if g.is(".github/workflows/ci.yml", []byte(remediationWorkflow)) {
+			t.Error("the Kubernetes gate accepted a GitHub Actions workflow")
+		}
+	}
+	if gates != 1 {
+		t.Fatalf("want exactly one Kubernetes gate, found %d", gates)
+	}
+	if ids := scanIDs(t, "roles/worker/tasks/main.yml", ansibleK8sTask); !contains(ids, "IAC-143") {
+		t.Errorf("IAC-143 lost `namespace: default` on an Ansible k8s task; got %v", ids)
 	}
 }
