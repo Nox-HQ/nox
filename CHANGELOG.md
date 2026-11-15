@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- IAC-294 no longer reports an `emptyDir` that sets a `sizeLimit`. Its
+  pattern made both braces optional, so it matched the bare key and reported
+  every `emptyDir`, flow or block style. It now asks whether the volume itself
+  sets the limit, and reports on the same line as before.
+- IAC-379 ("verify timezone") no longer fires on a CronJob that sets
+  `timeZone`. IAC-385, which notes that `timeZone` needs a recent Kubernetes,
+  is now informational: setting the field is IAC-379's remedy, and scoring it
+  as a medium risk meant one of the two rules fired on every CronJob.
+- IAC-135 recognizes a seccomp profile inherited from the pod when the
+  Deployment is embedded in another document's block scalar (a RollOps
+  RolloutConfig, an Argo CD Application). The same Deployment was clean as a
+  file of its own and reported inside the wrapper.
+- Taint analysis recognizes a host allowlist written as a guard. When every
+  term of a condition pins a URL's host (or scheme) to literals, and the
+  branch exits, throws, raises or returns, SSRF is cleared from then on for
+  the checked value and for the value it was parsed from. Recognized in
+  JavaScript/TypeScript, Python and shell `case` statements. A guard that
+  logs and continues, compares the host to a variable, or checks only the
+  scheme is not a defence and still reports. Other vulnerability classes are
+  unaffected.
+- `nox fix plan` looks for the parent release that frees a held npm upgrade
+  only among the copies on the finding's release line, as #1094 did for
+  reach. On nox-hq.dev the esbuild 0.27.3 item was also told that no release
+  of @astrojs/vue frees it; @astrojs/vue reaches esbuild only through vite's
+  0.25 copy.
+
 ## [1.68.0] - 2026-11-15
 
 ### Added

@@ -50,6 +50,15 @@ const maxSimDepth = 16
 // package.json) has no ancestor to upgrade, and makes ok false, as does a
 // lockfile that records no ranges.
 func (p *Project) ListedAncestors(pkg, fixed string) (names []string, ok bool) {
+	return p.ListedAncestorsFrom(pkg, "", fixed)
+}
+
+// ListedAncestorsFrom is ListedAncestors for the finding on from's release
+// line. A copy on a lower line is another finding: nox-hq.dev has nanoid 5.1.6
+// at the root and 3.3.11 under postcss, and the 5.x finding's fix, 5.1.16, was
+// answered by walking up from the 3.x copy, naming postcss, whose range
+// governs only that copy. An empty from judges every copy, as before.
+func (p *Project) ListedAncestorsFrom(pkg, from, fixed string) (names []string, ok bool) {
 	if p.g == nil || !p.ranges {
 		return nil, false
 	}
@@ -83,7 +92,7 @@ func (p *Project) ListedAncestors(pkg, fixed string) (names []string, ok bool) {
 			continue
 		}
 		v, okn := parseNPMVersion(n.version)
-		if !okn || v.cmp(target) >= 0 {
+		if !okn || v.cmp(target) >= 0 || belowLineOf(v, from) {
 			continue
 		}
 		// The walk up starts at the copy's holders: what loads it with a
@@ -127,6 +136,15 @@ func (p *Project) ListedAncestors(pkg, fixed string) (names []string, ok bool) {
 // a later major is named only when no release on this one does it. The zero
 // ParentUpgrade, with no error, means no published release does.
 func (p *Project) ParentRelease(ctx context.Context, reg Registry, parent string, targets map[string]string) (ParentUpgrade, error) {
+	return p.ParentReleaseFrom(ctx, reg, parent, targets, nil)
+}
+
+// ParentReleaseFrom is ParentRelease where froms names, per target, the
+// installed version of the finding. A copy on a lower release line than that
+// is not the finding's and is not required to reach its fix: the 3.x nanoid
+// under postcss can never reach 5.1.16, and requiring it made every release
+// of every parent fail for the 5.x finding.
+func (p *Project) ParentReleaseFrom(ctx context.Context, reg Registry, parent string, targets, froms map[string]string) (ParentUpgrade, error) {
 	if p.g == nil || !p.ranges {
 		return ParentUpgrade{}, fmt.Errorf("%s", p.why)
 	}
@@ -151,7 +169,7 @@ func (p *Project) ParentRelease(ctx context.Context, reg Registry, parent string
 		want[pkg] = v
 	}
 
-	s := &simulation{p: p, reg: reg, ctx: ctx, want: want, releases: map[string]map[string]map[string]string{}}
+	s := &simulation{p: p, reg: reg, ctx: ctx, want: want, froms: froms, releases: map[string]map[string]map[string]string{}}
 	rels, err := s.releasesOf(parent)
 	if err != nil {
 		return ParentUpgrade{}, err
@@ -202,6 +220,7 @@ type simulation struct {
 	reg      Registry
 	ctx      context.Context //nolint:containedctx // one simulation is one call
 	want     map[string]npmVersion
+	froms    map[string]string
 	releases map[string]map[string]map[string]string
 }
 
@@ -292,7 +311,21 @@ func (s *simulation) walk(key string, deps map[string]string, depth int, seen ma
 // reaches reports whether a copy of name at v satisfies what is wanted of it.
 func (s *simulation) reaches(name string, v npmVersion) bool {
 	w, wanted := s.want[name]
-	return !wanted || v.cmp(w) >= 0
+	return !wanted || v.cmp(w) >= 0 || belowLineOf(v, s.froms[name])
+}
+
+// belowLineOf reports whether v is on a lower release line than from: a lower
+// major, or for 0.x a lower minor, which npm's caret also treats as breaking.
+// An empty or unparseable from is no line, and nothing is below it.
+func belowLineOf(v npmVersion, from string) bool {
+	f, ok := parseNPMVersion(from)
+	if !ok {
+		return false
+	}
+	if v[0] != f[0] {
+		return v[0] < f[0]
+	}
+	return f[0] == 0 && v[1] < f[1]
 }
 
 // highestIn is the highest release inside rng. ok is false when rng is a form

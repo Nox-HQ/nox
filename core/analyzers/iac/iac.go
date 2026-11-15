@@ -178,7 +178,7 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	out = append(out, scanComposeServices(path, content)...)
 	// A task is not something a regex can identify. See ansible_no_log.go.
 	out = append(out, scanAnsibleNoLog(path, content)...)
-	embedded, err := a.scanEmbedded(path, content, out)
+	embedded, err := a.scanEmbedded(path, content, out, drop)
 	if err != nil {
 		return nil, err
 	}

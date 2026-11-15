@@ -304,14 +304,22 @@ func builtinExpandedIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-294", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
-			pattern:      `(?i)emptyDir:\s*\{?\s*\}?`,
-			description:  "K8s emptyDir volume without sizeLimit",
-			cwe:          "CWE-770",
-			keywords:     []string{"emptyDir"},
-			filePatterns: k8sFilePatterns,
-			tags:         []string{"iac", "kubernetes", "resource-management"},
-			remediation:  "Set a sizeLimit on emptyDir volumes to prevent a container from consuming all available disk space on the node, which could cause node-level failures.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/770.html"},
+			// The pattern this replaced, emptyDir:\s*\{?\s*\}?, made both braces
+			// optional and so matched the bare key: every emptyDir was reported,
+			// including `emptyDir: {sizeLimit: 1Gi}` and the block form with a
+			// sizeLimit child. The question is whether THIS volume sets a limit,
+			// and the volume is the anchor line (flow style) plus its children
+			// (block style). The finding stays on the emptyDir line.
+			absenceAnchor:   `(?i)emptyDir\s*:`,
+			absenceProperty: `(?i)\bsizeLimit\s*:`,
+			absenceSpan:     "yaml-block",
+			description:     "K8s emptyDir volume without sizeLimit",
+			cwe:             "CWE-770",
+			keywords:        []string{"emptyDir"},
+			filePatterns:    k8sFilePatterns,
+			tags:            []string{"iac", "kubernetes", "resource-management"},
+			remediation:     "Set a sizeLimit on emptyDir volumes to prevent a container from consuming all available disk space on the node, which could cause node-level failures.",
+			references:      []string{"https://cwe.mitre.org/data/definitions/770.html"},
 		},
 		{
 			id: "IAC-295", severity: findings.SeverityMedium, confidence: findings.ConfidenceHigh,
@@ -1245,14 +1253,20 @@ func builtinExpandedIaCRules() []rules.Rule {
 		},
 		{
 			id: "IAC-379", severity: findings.SeverityLow, confidence: findings.ConfidenceMedium,
-			pattern:      `(?i)schedule:\s*['"][^'"]+['"]`,
-			description:  "K8s CronJob defines schedule (verify timezone)",
-			cwe:          "CWE-693",
-			keywords:     []string{"schedule", "CronJob"},
-			filePatterns: k8sFilePatterns,
-			tags:         []string{"iac", "kubernetes", "cronjob"},
-			remediation:  "Verify CronJob schedules use the expected timezone. CronJobs run in the controller's timezone unless specified otherwise.",
-			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
+			// The schedule runs in the controller's local time only when the
+			// CronJob sets no timeZone, so a timeZone anywhere in the same
+			// document answers it. As a bare pattern it fired on every schedule,
+			// including the ones that had done what the remediation says.
+			absenceAnchor:   `(?i)schedule:\s*['"][^'"]+['"]`,
+			absenceProperty: `(?im)^\s*timeZone\s*:`,
+			absenceSpan:     "yaml-doc",
+			description:     "K8s CronJob defines schedule (verify timezone)",
+			cwe:             "CWE-693",
+			keywords:        []string{"schedule", "CronJob"},
+			filePatterns:    k8sFilePatterns,
+			tags:            []string{"iac", "kubernetes", "cronjob"},
+			remediation:     "Verify CronJob schedules use the expected timezone. CronJobs run in the controller's timezone unless specified otherwise.",
+			references:      []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
 		{
 			id: "IAC-380", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
@@ -1310,7 +1324,11 @@ func builtinExpandedIaCRules() []rules.Rule {
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
 		{
-			id: "IAC-385", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
+			// Informational: setting timeZone is what IAC-379 asks for, so scoring
+			// it as a medium risk penalized the fix and guaranteed one of the two
+			// rules fired on every CronJob. What remains true is the version
+			// note: before Kubernetes 1.27 (GA) the field may be ignored.
+			id: "IAC-385", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium,
 			pattern:      `(?i)timeZone:\s*['"][^'"]+['"]`,
 			description:  "K8s CronJob specifies timezone (K8s 1.24+)",
 			cwe:          "CWE-693",
