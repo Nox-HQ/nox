@@ -76,6 +76,7 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) (units []ta
 			Guards:   guards,
 		})
 	}
+	attachHostAllowlists(units, hostAllowlistsFor(lang, content))
 	return units
 }
 
@@ -300,9 +301,30 @@ func (e *StructuralEngine) forwardPass(
 	var suppressed []taint.Suppression
 	var returned []string
 	checked := e.checkedValues(lang, unit)
+	applied := make([]bool, len(unit.HostAllowlists))
 
 	for i := range unit.Stmts {
 		st := &unit.Stmts[i]
+
+		// A host-pinning guard that ended before this statement clears SSRF on
+		// what it checked. Applied to the taint state as it stands, so a value
+		// re-read from the source after the guard is tainted again.
+		for gi, g := range unit.HostAllowlists {
+			if applied[gi] || g.Line >= st.Line {
+				continue
+			}
+			applied[gi] = true
+			for _, v := range hostAllowlistClears(unit, g) {
+				if ti, ok := tainted[v]; ok {
+					c := cloneTaintInfo(ti)
+					if c.cleared == nil {
+						c.cleared = map[taint.VulnClass]bool{}
+					}
+					c.cleared[taint.VulnSSRF] = true
+					tainted[v] = c
+				}
+			}
+		}
 
 		// inlineCleared maps a variable to the classes for which a sanitizer call
 		// in THIS statement neutralizes it — the `os.system(shlex.quote(user))`
