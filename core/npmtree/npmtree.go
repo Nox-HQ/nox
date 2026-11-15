@@ -125,7 +125,14 @@ func Copies(dir, pkg string) (map[string]string, error) {
 // Below lists every copy of pkg in dir's lockfile still below version, as
 // "key@version", sorted. A copy whose version cannot be read is listed too:
 // nothing establishes that it is fixed.
-func Below(dir, pkg, version string) ([]string, error) {
+func Below(dir, pkg, version string) ([]string, error) { return BelowFrom(dir, pkg, "", version) }
+
+// BelowFrom is Below for the line a finding names: a copy below from, the
+// version the finding was about, is another installed line with a finding and
+// a fix of its own, and is not evidence that this upgrade failed. Upgrading
+// nanoid 5.1.6 to 5.1.16 leaves postcss's nanoid 3.3.20 where it is, rightly,
+// and apply reported the 5.x upgrade as not applied because of it.
+func BelowFrom(dir, pkg, from, version string) ([]string, error) {
 	copies, err := Copies(dir, pkg)
 	if err != nil {
 		return nil, err
@@ -134,9 +141,14 @@ func Below(dir, pkg, version string) ([]string, error) {
 	if !ok {
 		return nil, fmt.Errorf("unreadable fixed version %q", version)
 	}
+	floor, hasFloor := parseNPMVersion(strings.TrimPrefix(strings.TrimSpace(from), "v"))
 	var below []string
 	for key, v := range copies {
-		if got, ok := parseNPMVersion(v); !ok || got.cmp(target) < 0 {
+		got, ok := parseNPMVersion(v)
+		if ok && hasFloor && got.cmp(floor) < 0 {
+			continue // an older line, not the copy this upgrade moves
+		}
+		if !ok || got.cmp(target) < 0 {
 			if !strings.HasSuffix(key, "@"+v) {
 				key += "@" + v
 			}
@@ -205,7 +217,6 @@ func (r Reach) Holders() string {
 	return strings.Join(names, ", ")
 }
 
-// HoldList is every hold, "; "-joined, for "because ..." text.
 // Excludes is the clause a held item states after HoldList: "the range
 // excludes 6.4.5", or, when a holder's range is one nox could not read, a
 // sentence that says so rather than claiming the range rules the fix out.
@@ -219,6 +230,7 @@ func (r Reach) Excludes(fixed string) string {
 	return "the range excludes " + fixed
 }
 
+// HoldList is every hold, "; "-joined, for "because ..." text.
 func (r Reach) HoldList() string {
 	parts := make([]string, len(r.Holds))
 	for i, h := range r.Holds {

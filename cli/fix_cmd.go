@@ -547,7 +547,7 @@ func applyNpmUpgrade(manifestRoot string, a upgradeAction) error {
 	// Read back where it landed, in whichever lockfile the manager wrote. An
 	// update moves a transitive package only as far as its parents allow, and
 	// a copy still short of the fix means the advisory is still there.
-	below, err := npmtree.Below(manifestRoot, a.pkg, version)
+	below, err := npmtree.BelowFrom(manifestRoot, a.pkg, a.fromVer, version)
 	if err != nil {
 		return fmt.Errorf("reading the lockfile after %s: %w", name, err)
 	}
@@ -584,7 +584,7 @@ func alreadySatisfied(dir string, a upgradeAction) bool {
 	if err != nil || len(copies) == 0 {
 		return false
 	}
-	below, err := npmtree.Below(dir, a.pkg, strings.TrimPrefix(a.toVersion, "v"))
+	below, err := npmtree.BelowFrom(dir, a.pkg, a.fromVer, strings.TrimPrefix(a.toVersion, "v"))
 	return err == nil && len(below) == 0
 }
 

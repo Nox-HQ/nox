@@ -45,7 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fix, 5.1.16, was reported as held by postcss, whose range governs only the
   3.x copy. picomatch 4.0.3 and zod 4.3.6 were held the same way. Each finding
   is now answered for the copy at its own installed version: on nox-hq.dev 18
-  upgrades are safe to apply, up from 13.
+  upgrades are safe to apply, up from 13. Apply's lockfile read-back makes the
+  same distinction: it reported the nanoid and picomatch upgrades as not
+  applied because the older lines, rightly untouched, were still below the
+  newer line's fix. On nox-hq.dev 17 of the 18 now verify; the 18th, zod 3.x,
+  is held by astro 5's `^3.25.76`, as the plan says.
 - `findings.json` lists plugin enrichments in the same order on every scan of
   the same tree. They were written in the order each plugin returned them, and
   nox/reachability 0.9.0 returns them in Go map order: three scans of the

@@ -268,3 +268,31 @@ func TestReachIsAboutTheCopyTheFindingNames(t *testing.T) {
 		t.Errorf("the 5.x copy's advice offers no command: %+v", a)
 	}
 }
+
+// After nanoid 5.1.6 -> 5.1.16 the 3.x line under postcss is untouched, as it
+// should be. Apply's read-back counted it and reported the 5.x upgrade as not
+// applied ("npm left node_modules/nanoid@3.3.20 below 5.1.16").
+func TestTheReadBackIsAboutTheLineTheFindingNames(t *testing.T) {
+	lock := func(root string) map[string]string {
+		return map[string]string{
+			"package.json": `{"name":"site","dependencies":{"astro":"5.17.2"}}`,
+			"package-lock.json": `{"name":"site","lockfileVersion":3,"packages":{
+  "":{"name":"site","dependencies":{"astro":"5.17.2"}},
+  "node_modules/astro":{"version":"5.17.2","dependencies":{"nanoid":"^5.0.0","postcss":"^8.4.0"}},
+  "node_modules/nanoid":{"version":"` + root + `"},
+  "node_modules/postcss":{"version":"8.5.23","dependencies":{"nanoid":"^3.3.11"}},
+  "node_modules/postcss/node_modules/nanoid":{"version":"3.3.20"}}}`,
+		}
+	}
+	below, err := BelowFrom(workspace(t, lock("5.1.16")), "nanoid", "5.1.6", "5.1.16")
+	if err != nil || len(below) != 0 {
+		t.Errorf("upgraded: BelowFrom = %v, %v; want nothing left on the 5.x line", below, err)
+	}
+	below, err = BelowFrom(workspace(t, lock("5.1.6")), "nanoid", "5.1.6", "5.1.16")
+	if err != nil || len(below) != 1 || !strings.Contains(below[0], "5.1.6") {
+		t.Errorf("not upgraded: BelowFrom = %v, %v; want the 5.1.6 copy", below, err)
+	}
+	if below, _ := Below(workspace(t, lock("5.1.16")), "nanoid", "5.1.16"); len(below) != 1 {
+		t.Errorf("Below without a floor still lists every copy below the fix; got %v", below)
+	}
+}
