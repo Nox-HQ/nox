@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.68.0] - 2026-11-15
+
 ### Added
 
 - `nox fix plan` names the release of the package you list that frees a held
