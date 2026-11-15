@@ -204,3 +204,67 @@ func TestNoCopyInTheLockfileIsNotEstablished(t *testing.T) {
 		}
 	}
 }
+
+// A range nox cannot read still holds (nox does not promise a move it cannot
+// check), but it is not a range that excludes the fix, and the advice must
+// not say it is. Before Hold.Unread, a dependent asking for "qs latest" was
+// reported as "the range excludes 6.16.0".
+func TestAnUnreadableRangeHoldsWithoutClaimingToExclude(t *testing.T) {
+	dir := workspace(t, map[string]string{
+		"package.json": `{"name":"app","dependencies":{"lib":"1.0.0"}}`,
+		"package-lock.json": `{"name":"app","lockfileVersion":3,"packages":{
+  "":{"name":"app","dependencies":{"lib":"1.0.0"}},
+  "node_modules/lib":{"version":"1.0.0","dependencies":{"qs":"latest"}},
+  "node_modules/qs":{"version":"6.13.0"}}}`,
+	})
+	r := ReachOf(dir, "qs", "6.16.0")
+	if !r.Held() || len(r.Holds) != 1 || !r.Holds[0].Unread {
+		t.Fatalf("want one unread hold, got %+v", r)
+	}
+	if got := r.Excludes("6.16.0"); strings.Contains(got, "the range excludes") {
+		t.Errorf("Excludes = %q: an unreadable range was reported as excluding the fix", got)
+	}
+	if !strings.Contains(r.HoldList(), "a range nox cannot read") {
+		t.Errorf("HoldList = %q, want the unreadable range named as such", r.HoldList())
+	}
+	// A range nox reads and that rules the fix out keeps the plain clause.
+	dir = workspace(t, map[string]string{
+		"package.json": `{"name":"app","dependencies":{"lib":"1.0.0"}}`,
+		"package-lock.json": `{"name":"app","lockfileVersion":3,"packages":{
+  "":{"name":"app","dependencies":{"lib":"1.0.0"}},
+  "node_modules/lib":{"version":"1.0.0","dependencies":{"qs":"6.13.0"}},
+  "node_modules/qs":{"version":"6.13.0"}}}`,
+	})
+	if got := ReachOf(dir, "qs", "6.16.0").Excludes("6.16.0"); got != "the range excludes 6.16.0" {
+		t.Errorf("Excludes = %q for an exact pin below the fix", got)
+	}
+}
+
+// Two installed lines of one package: nanoid 5.1.6 at the root and 3.3.11
+// under postcss, which asks for ^3.3.11 (nox-hq.dev's lockfile, reduced). The
+// 5.x copy's finding is fixed in 5.1.16 and nothing holds it; asked about
+// every copy below 5.1.16, Reach found the 3.x one and called the 5.x
+// upgrade held by postcss.
+func TestReachIsAboutTheCopyTheFindingNames(t *testing.T) {
+	dir := workspace(t, map[string]string{
+		"package.json": `{"name":"site","dependencies":{"astro":"5.17.2"}}`,
+		"package-lock.json": `{"name":"site","lockfileVersion":3,"packages":{
+  "":{"name":"site","dependencies":{"astro":"5.17.2"}},
+  "node_modules/astro":{"version":"5.17.2","dependencies":{"nanoid":"^5.0.0","postcss":"^8.4.0"}},
+  "node_modules/nanoid":{"version":"5.1.6"},
+  "node_modules/postcss":{"version":"8.5.6","dependencies":{"nanoid":"^3.3.11"}},
+  "node_modules/postcss/node_modules/nanoid":{"version":"3.3.11"}}}`,
+	})
+	if r := ReachAtOf(dir, "nanoid", "5.1.6", "5.1.16"); !r.Movable() {
+		t.Errorf("nanoid 5.1.6 -> 5.1.16: want movable, got %+v", r)
+	}
+	if r := ReachAtOf(dir, "nanoid", "3.3.11", "5.1.16"); !r.Held() || !strings.Contains(r.HoldList(), "postcss@8.5.6") {
+		t.Errorf("nanoid 3.3.11 -> 5.1.16: want held by postcss, got %+v", r)
+	}
+	if r := ReachAtOf(dir, "nanoid", "3.3.11", "3.3.18"); !r.Movable() {
+		t.Errorf("nanoid 3.3.11 -> 3.3.18: want movable within ^3.3.11, got %+v", r)
+	}
+	if a := AdviceAtFor(dir, "nanoid", "5.1.6", "5.1.16"); a.Command == "" {
+		t.Errorf("the 5.x copy's advice offers no command: %+v", a)
+	}
+}
