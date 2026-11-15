@@ -162,3 +162,67 @@ func TestParentReleaseRefusesWhatItCannotRead(t *testing.T) {
 		t.Error("pnpm's lockfile records no ranges; no ancestor can be established")
 	}
 }
+
+// nox-hq.dev's shape, reduced: vite pins nanoid 5.x for itself and depends on
+// postcss, which keeps its own nanoid on the 3.x line. The 5.x finding's fix is
+// 5.1.16. The 3.x copy can never reach it, and it is not the finding's copy.
+const twoLineLock = `{
+  "lockfileVersion": 3,
+  "packages": {
+    "": {"dependencies": {"vite": "6.4.1"}},
+    "node_modules/vite": {"version": "6.4.1", "dependencies": {"nanoid": "5.1.6", "postcss": "8.5.6"}},
+    "node_modules/nanoid": {"version": "5.1.6"},
+    "node_modules/postcss": {"version": "8.5.6", "dependencies": {"nanoid": "^3.3.11"}},
+    "node_modules/postcss/node_modules/nanoid": {"version": "3.3.11"}
+  }
+}`
+
+func twoLineRegistry() *fakeRegistry {
+	return &fakeRegistry{rel: map[string]map[string]map[string]string{
+		"vite": {
+			"6.4.1": {"nanoid": "5.1.6", "postcss": "8.5.6"},
+			"6.4.5": {"nanoid": "^5.1.16", "postcss": "8.5.6"},
+		},
+		"postcss": {"8.5.6": {"nanoid": "^3.3.11"}},
+		"nanoid":  {"3.3.11": {}, "5.1.6": {}, "5.1.16": {}},
+	}}
+}
+
+func TestAParentReleaseIsJudgedOnTheFindingsLine(t *testing.T) {
+	p := Open(workspace(t, map[string]string{
+		"package.json":      `{"dependencies": {"vite": "6.4.1"}}`,
+		"package-lock.json": twoLineLock,
+	}))
+	up, err := p.ParentReleaseFrom(context.Background(), twoLineRegistry(), "vite",
+		map[string]string{"nanoid": "5.1.16"}, map[string]string{"nanoid": "5.1.6"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up.To != "6.4.5" {
+		t.Fatalf("ParentReleaseFrom = %+v; want vite 6.4.5, which moves the 5.x copy and leaves postcss's 3.x copy alone", up)
+	}
+	// With no line given, every copy is judged, as before: the 3.x copy holds.
+	if old, _ := p.ParentRelease(context.Background(), twoLineRegistry(), "vite", map[string]string{"nanoid": "5.1.16"}); old.To != "" {
+		t.Errorf("ParentRelease without a line = %+v; want none, the documented all-copies answer", old)
+	}
+}
+
+func TestAncestorsAreOnlyThoseOfTheFindingsLine(t *testing.T) {
+	p := Open(workspace(t, map[string]string{
+		"package.json": `{"dependencies": {"app-lib": "1.0.0", "postcss": "8.5.6"}}`,
+		"package-lock.json": `{
+  "lockfileVersion": 3,
+  "packages": {
+    "": {"dependencies": {"app-lib": "1.0.0", "postcss": "8.5.6"}},
+    "node_modules/app-lib": {"version": "1.0.0", "dependencies": {"nanoid": "5.1.6"}},
+    "node_modules/nanoid": {"version": "5.1.6"},
+    "node_modules/postcss": {"version": "8.5.6", "dependencies": {"nanoid": "^3.3.11"}},
+    "node_modules/postcss/node_modules/nanoid": {"version": "3.3.11"}
+  }
+}`,
+	}))
+	names, ok := p.ListedAncestorsFrom("nanoid", "5.1.6", "5.1.16")
+	if !ok || !reflect.DeepEqual(names, []string{"app-lib"}) {
+		t.Errorf("ListedAncestorsFrom(nanoid 5.1.6) = %v, %v; want [app-lib]: postcss holds only the 3.x copy", names, ok)
+	}
+}

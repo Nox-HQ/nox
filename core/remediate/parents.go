@@ -22,6 +22,7 @@ func nameParentUpgrades(ctx context.Context, plan *Plan, root string, reg npmtre
 	type group struct {
 		dir, parent string
 		targets     map[string]string
+		froms       map[string]string
 		items       []int
 	}
 	projects := map[string]*npmtree.Project{}
@@ -38,7 +39,7 @@ func nameParentUpgrades(ctx context.Context, plan *Plan, root string, reg npmtre
 			p = npmtree.Open(dir)
 			projects[dir] = p
 		}
-		parents, ok := p.ListedAncestors(it.Upgrade.Package, it.Upgrade.To)
+		parents, ok := p.ListedAncestorsFrom(it.Upgrade.Package, it.Upgrade.From, it.Upgrade.To)
 		if !ok {
 			continue
 		}
@@ -46,11 +47,12 @@ func nameParentUpgrades(ctx context.Context, plan *Plan, root string, reg npmtre
 			k := dir + "\x00" + parent
 			g := groups[k]
 			if g == nil {
-				g = &group{dir: dir, parent: parent, targets: map[string]string{}}
+				g = &group{dir: dir, parent: parent, targets: map[string]string{}, froms: map[string]string{}}
 				groups[k] = g
 				order = append(order, k)
 			}
 			g.targets[it.Upgrade.Package] = it.Upgrade.To
+			g.froms[it.Upgrade.Package] = it.Upgrade.From
 			g.items = append(g.items, i)
 		}
 	}
@@ -66,7 +68,7 @@ func nameParentUpgrades(ctx context.Context, plan *Plan, root string, reg npmtre
 	for _, k := range order {
 		g := groups[k]
 		p := projects[g.dir]
-		up, err := p.ParentRelease(ctx, reg, g.parent, g.targets)
+		up, err := p.ParentReleaseFrom(ctx, reg, g.parent, g.targets, g.froms)
 		if err != nil {
 			for _, i := range g.items {
 				noteParentLookup(&plan.Items[i], g.parent, err)
@@ -81,7 +83,8 @@ func nameParentUpgrades(ctx context.Context, plan *Plan, root string, reg npmtre
 		}
 		for _, i := range g.items {
 			it := &plan.Items[i]
-			one, err := p.ParentRelease(ctx, reg, g.parent, map[string]string{it.Upgrade.Package: it.Upgrade.To})
+			one, err := p.ParentReleaseFrom(ctx, reg, g.parent,
+				map[string]string{it.Upgrade.Package: it.Upgrade.To}, map[string]string{it.Upgrade.Package: it.Upgrade.From})
 			switch {
 			case err != nil:
 				noteParentLookup(it, g.parent, err)
