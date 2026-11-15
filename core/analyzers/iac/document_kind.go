@@ -326,6 +326,26 @@ const (
 	ciPipelineFamilyTag    = "ci-cd"
 )
 
+// kubernetesFamilyTag marks the Kubernetes rules. Unlike the other families
+// they carry no positive test of their own document: a pod spec is just as
+// often a Helm values file, with no apiVersion and no kind, as a manifest, and
+// a gate asking "is this a Kubernetes resource?" would drop the values file
+// that is where a chart's operator actually sets `privileged: true`.
+//
+// What the family can say is what it is not. Its file patterns include every
+// *.yml, so every GitHub Actions workflow was eligible, and there a pod-spec
+// key is only ever text: Nox-HQ/.github's remediation workflow documents an
+// input as "(privileged: true -> false, runAsNonRoot: false -> true ...)" and
+// IAC-007, IAC-035 and IAC-369 reported it as a privileged container running
+// as root. A pod spec pasted into a step's heredoc is not covered either way:
+// nox cannot evaluate a manifest held in a shell string.
+const kubernetesFamilyTag = "kubernetes"
+
+// isNotAGitHubActionsWorkflow is the Kubernetes family's gate.
+func isNotAGitHubActionsWorkflow(path string, content []byte) bool {
+	return !isGitHubActionsWorkflow(path, content)
+}
+
 // isGitHubActionsWorkflow reports whether content is a GitHub Actions workflow.
 //
 // A workflow declares `jobs:` at the top level and nothing else in common use
@@ -558,6 +578,14 @@ type documentKindGate struct {
 }
 
 var documentKindGates = []documentKindGate{
+	{
+		tag: kubernetesFamilyTag,
+		is:  isNotAGitHubActionsWorkflow,
+		why: "this rule describes a Kubernetes pod spec, and this document is a " +
+			"GitHub Actions workflow: a top-level `jobs:` with steps. A pod-spec key " +
+			"there is text in an input description, a step's script or a string, " +
+			"not a setting nox can evaluate",
+	},
 	{
 		tag: serverlessFamilyTag,
 		is:  isServerlessManifest,
