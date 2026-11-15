@@ -127,7 +127,7 @@ type seenKey struct {
 	line int
 }
 
-func (a *Analyzer) scanEmbedded(path string, content []byte, outer []findings.Finding) ([]findings.Finding, error) {
+func (a *Analyzer) scanEmbedded(path string, content []byte, outer []findings.Finding, drop refuteFunc) ([]findings.Finding, error) {
 	if a.absence == nil {
 		return nil, nil
 	}
@@ -150,6 +150,11 @@ func (a *Analyzer) scanEmbedded(path string, content []byte, outer []findings.Fi
 		if err != nil {
 			return nil, err
 		}
+		// The outer file's refiners have already run, and dropping a finding
+		// there removes it from `seen`, so a refiner that does not also run
+		// here is undone by this rescan. Lines are still relative to the
+		// extracted document, which is what the refiner parses.
+		got = dropSeccompInheritedFromPod(got, em.content, drop)
 		for i := range got {
 			// The finding's line is relative to the extracted document. Shift
 			// it so an operator opening the file at that line sees the
