@@ -28,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one `npm install express@4.22.3` cleared three items and eight advisories,
   and the checks apply re-ran verified all three fixed.
 
+### Fixed
+
+- `findings.json` lists plugin enrichments in the same order on every scan of
+  the same tree. They were written in the order each plugin returned them, and
+  nox/reachability 0.9.0 returns them in Go map order: three scans of the
+  walkthrough app gave its eight reachability enrichments in three different
+  orders. They are now ordered by the finding they annotate, then source,
+  kind, title, body, confidence and metadata. Findings and the enrichments
+  themselves are unchanged.
+
 ## [1.67.0] - 2026-11-14
 
 ### Changed
