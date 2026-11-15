@@ -58,6 +58,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   kind, title, body, confidence and metadata. Findings and the enrichments
   themselves are unchanged.
 
+- The Kubernetes rules no longer fire on GitHub Actions workflows. Their file
+  patterns include every `*.yml`, and in a workflow a pod-spec key is only ever
+  text: Nox-HQ/.github's remediation workflow documents an input as
+  "(privileged: true -> false, runAsNonRoot: false -> true ...)", and IAC-007,
+  IAC-035 and IAC-369 reported it as a privileged container running as root
+  (26 of the repository's 36 grade points). The family's gate asks only
+  whether the document is a workflow (a top-level `jobs:` with steps), so a
+  Helm values file, a manifest anywhere in the tree, an Ansible `k8s` task and
+  IAC-007's CloudFormation and Kustomize forms are all still checked.
+
 ## [1.67.0] - 2026-11-14
 
 ### Changed
