@@ -357,6 +357,14 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) (*fileScan, error) 
 				"the phrase is the value of an agent's input, not tool metadata")
 			continue
 		}
+		// MCP-011 reports tool metadata. In a UI component that defines no
+		// tool, the matched prose is text for the person using the form; see
+		// mcp_ui_component.go.
+		if results[i].RuleID == "MCP-011" && isUIComponentWithoutTools(artifact.Path, content) {
+			a.refute(candidate, evidence.KindHeuristic,
+				"the phrase is in a UI component that defines no agent tool, so it is text shown to a user, not tool metadata")
+			continue
+		}
 		// MCP-018 reports a metadata endpoint as an SSRF target. An address
 		// that is one entry of a collection of nothing but addresses is the
 		// list a guard refuses, not a target; see isAddressCatalogue.

@@ -280,6 +280,14 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) ([]findings.Finding
 			continue
 		}
 
+		// A translation catalogue's password-named keys are form labels, and
+		// their values are those labels in some language; see locale.go.
+		if keyNamedRules[results[i].RuleID] && isLocaleCatalogue(artifact.Path) {
+			a.refute(candidate, evidence.KindHeuristic,
+				"the assignment is a message in a translation catalogue: the key names a form label and the value is that label's text, not a password")
+			continue
+		}
+
 		// A rule that anchors a vendor's credential format has established
 		// what it found, so the blob length heuristic does not overrule it --
 		// the same reasoning the recorded-exchange refiner above applies. The

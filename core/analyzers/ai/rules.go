@@ -927,6 +927,11 @@ func builtinAIRules() []*rules.Rule {
 				"detection_pattern", "detectionpattern",
 				"guardrail", "jailbreak_pattern", "known_attack",
 				"payload", "corpus", "attack_pattern",
+				// A detection table keyed by pattern id: each row's
+				// description names the attack its pattern detects
+				// ("prompt injection: ignore previous instructions").
+				// RAGFlow's skill_hub/security/patterns.go, #1090.
+				"patternid", "pattern_id",
 			},
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.go", "*.ts", "*.js", "*.py"},
 			tags:         []string{"ai", "mcp", "tool-poisoning", "prompt-injection", "owasp-mcp03"},
