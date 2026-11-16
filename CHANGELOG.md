@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- SEC-080 no longer reports translation catalogues. In a file such as
+  `locales/de.ts` or `i18n/en/common.json`, a password-named key is a form
+  label and its value is that label's text (German: Passwort). On RAGFlow
+  this was 146 of SEC-080's 198 findings. A password-named assignment in code
+  beside the catalogues (`locales/index.ts`) is still reported (#1099).
+- MCP-009 recognizes a detection table keyed by pattern id: each row's
+  description names the attack its pattern detects, and is not tool metadata
+  (#1099).
+- MCP-011 no longer reports text shown to a user in a JSX/TSX component that
+  defines no agent tool ("Upload the credential again to restart"). A
+  component that registers a WebMCP tool or declares an AI SDK `tool()` is
+  still checked, and server code is unchanged (#1099).
 - IAC-294 no longer reports an `emptyDir` that sets a `sizeLimit`. Its
   pattern made both braces optional, so it matched the bare key and reported
   every `emptyDir`, flow or block style. It now asks whether the volume itself
