@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - SEC-080 no longer reports translation catalogues. In a file such as
   `locales/de.ts` or `i18n/en/common.json`, a password-named key is a form
-  label and its value is that label's text (`password: 'Passwort'`). On RAGFlow
+  label and its value is that label's text (German: Passwort). On RAGFlow
   this was 146 of SEC-080's 198 findings. A password-named assignment in code
   beside the catalogues (`locales/index.ts`) is still reported (#1099).
 - MCP-009 recognizes a detection table keyed by pattern id: each row's

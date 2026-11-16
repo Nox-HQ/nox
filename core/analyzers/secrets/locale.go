@@ -8,8 +8,9 @@ import (
 
 // A translation catalogue maps message keys to the text a user reads. The key
 // `password` in one is the identifier of a form label, and its value is that
-// label in some language: `password: 'Passwort'`, `confirmPassword: 'Confirm
-// new password'`. SEC-080 reads exactly that shape as a hardcoded password,
+// label in some language: the German catalogue maps it to Passwort, the English
+// one maps confirmPassword to Confirm new password. SEC-080 reads exactly that
+// shape as a hardcoded password,
 // because its whole evidence is a key named like a password and a quoted
 // string of eight or more characters.
 //
