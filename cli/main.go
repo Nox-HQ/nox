@@ -462,7 +462,7 @@ func absAgainst(root, p string) string {
 // the source.
 const (
 	usageFormat  = "output formats: json,sarif,cdx,spdx,html,all (comma-separated) (default \"json\")"
-	usageOutput  = "output directory for report files (default \".nox/reports\", which nox keeps out of git)"
+	usageOutput  = "output directory for report files (default \".nox/reports\", which nox keeps out of git); \"-\" streams one report (--format json, sarif, cdx or spdx) on stdout and writes no files"
 	usageRules   = "path to custom rules YAML file or directory"
 	usageQuiet   = "suppress all output except errors"
 	usageQuietSh = "suppress all output except errors (shorthand)"
@@ -516,6 +516,7 @@ Environment:
 func printScanEnvironment(out io.Writer) { _, _ = fmt.Fprint(out, scanEnvironmentHelp) }
 
 func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verbose bool) int {
+	var reportOut *os.File
 	// Parse scan-specific flags.
 	scanFS := flag.NewFlagSet("scan", flag.ContinueOnError)
 	var (
@@ -632,6 +633,37 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		return 2
 	}
 
+	// Precedence is flag > config > default.
+	formatFlag = resolveOutputFormat(formatFlag, cfg.Output.Format)
+	outputDir = resolveOutputDir(outputDir, cfg.Output.Directory)
+
+	formats, err := parseFormats(formatFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
+	}
+
+	// --output - streams the one report on stdout. The check comes before
+	// anything is printed or installed so a refusal leaves no trace.
+	toStdout := outputDir == stdoutOutput
+	if toStdout {
+		if err := validateStdoutFormats(formats); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return 2
+		}
+		// From here to the report, every line nox prints is not the report.
+		// Rather than trust each print site (this function, the plugin
+		// installer, notes in other files) to pick the right stream, stdout is
+		// pointed at stderr for the whole scan and the real one is kept for
+		// the report alone. A stray line would make the stream invalid
+		// JSON/SARIF, and the next print added anywhere in the scan path
+		// would otherwise be that line.
+		reportOut = os.Stdout
+		os.Stdout = os.Stderr
+		defer func() { os.Stdout = reportOut }()
+		outputDir = ""
+	}
+
 	// Auto-install required plugins from .nox.yaml plugins.required when
 	// the project opts in (default) and the operator hasn't passed
 	// --no-auto-install. Failures are non-fatal — the scan still runs.
@@ -648,15 +680,6 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		}
 	}
 
-	// Precedence is flag > config > default.
-	formatFlag = resolveOutputFormat(formatFlag, cfg.Output.Format)
-	outputDir = resolveOutputDir(outputDir, cfg.Output.Directory)
-
-	formats, err := parseFormats(formatFlag)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 2
-	}
 	if err := validateThresholds(thresholdFlag, minConfidenceFlag); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 2
@@ -884,7 +907,12 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 	// it configured was not in force.
 
 	// Generate reports.
-	if err := ensureReportDir(outputDir); err != nil {
+	if toStdout {
+		if rc := streamReport(reportOut, formats[0], result, version, offlineFlag, sortFlag == "priority"); rc != 0 {
+			return rc
+		}
+		formats = nil
+	} else if err := ensureReportDir(outputDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: creating output directory: %v\n", err)
 		return 2
 	}
@@ -976,7 +1004,8 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 
 	// Always write the AI inventory. An empty one still records which AI
 	// checks ran, so "found nothing" stays distinguishable from "did not look".
-	{
+	// A stdout run writes no files.
+	if !toStdout {
 		path := filepath.Join(outputDir, "ai.inventory.json")
 		if err := result.AIInventory.WriteFile(path); err != nil {
 			fmt.Fprintf(os.Stderr, "error: writing %s: %v\n", path, err)

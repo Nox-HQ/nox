@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `nox scan --output -` streams one report on stdout: `--format json`, `sarif`,
+  `cdx` or `spdx`, no wrapper script or temporary directory. stdout carries only
+  the document (every other line the scan prints goes to stderr), no files are
+  written, and exit codes are unchanged. Several formats, `all` and `html` are a
+  usage error, exit 2; with no `--format` the default, json, is streamed
+  (#1107).
+
 - Rust: argument injection is its own class, `TAINT-012` (CWE-88, medium).
   A value passed to `Command::arg`/`.args` reaches `execve` as one argument
   with no shell, so at worst it is read as an option; it was reported as
@@ -19,6 +26,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the same limit the argv exemption has in Python, JavaScript and Go (#1106).
 
 ### Fixed
+
+- `nox baseline add` and `nox baseline update` write one entry per occurrence.
+  They kept at most one entry per fingerprint, but a scan consumes one entry per
+  finding, so when several findings shared a fingerprint (two `continue-on-error`
+  steps in one workflow, repeated taint flows in one file) only the first could
+  ever be accepted: `baseline add --rule IAC-018` reported "1 added" and line 11
+  stayed active, with nothing short of hand-editing `baseline.json` to accept
+  it. Both commands now count the way the matcher does, adding an entry for
+  each occurrence no unconsumed entry covers, so a second run still adds
+  nothing and `update` still prunes to one entry per live occurrence.
+  `add --fingerprint fp,fp` runs no scan, so a repeated fingerprint is the
+  count. (#1105)
 
 - Rust: a `&Path` parameter is not an HTTP query. The axum `Path<T>` extractor
   and `std::path::Path` share a name, and any parameter typed `Path`, `Json`,
