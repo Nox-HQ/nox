@@ -2,11 +2,12 @@ package hypothesize_test
 
 import (
 	"bytes"
-	"github.com/nox-hq/nox/core/capability"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nox-hq/nox/core/capability"
 
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/hypothesize"

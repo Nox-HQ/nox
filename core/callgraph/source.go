@@ -10,7 +10,9 @@ import (
 	"github.com/nox-hq/nox/core/taint"
 )
 
-// A call graph for every language the taint extractor reads.
+// SourceBuilder collects the units of every non-Go source file a scan reads
+// and builds a call graph over them: a call graph for every language the
+// taint extractor reads.
 //
 // BuildGo parses Go with go/ast. Everything else is read through the units the
 // taint engine already extracts (core/taint/engine): one unit per function,
@@ -240,7 +242,7 @@ var mainLanguages = map[string]bool{
 // sourceEntryPoint is entryPoint for the other languages. The reason is
 // recorded for the same cause: an operator can disagree with the set only if
 // they can see why each member is in it.
-func sourceEntryPoint(f *sourceFile, u *taint.Unit) (EntryKind, string) {
+func sourceEntryPoint(f *sourceFile, u *taint.Unit) (kind EntryKind, reason string) {
 	lang := strings.ToLower(f.lang)
 	module := u.FuncName == "" && u.Line == 0
 	if f.test {

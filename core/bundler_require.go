@@ -50,10 +50,10 @@ func productionGems(gemfile string) []string {
 		if i := strings.Index(line, "#"); i >= 0 {
 			line = strings.TrimSpace(line[:i])
 		}
-		switch {
-		case line == "":
+		switch line {
+		case "":
 			continue
-		case line == "end":
+		case "end":
 			if len(stack) > 0 {
 				stack = stack[:len(stack)-1]
 			}

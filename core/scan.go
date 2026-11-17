@@ -1847,12 +1847,12 @@ type analyzerTask func(context.Context) error
 // scanFlowsTogether runs taintflow and agentflow over one walk of the source
 // files (see flowunits), each into its own FindingSet, so the findings are
 // what each would report on its own.
-func scanFlowsTogether(ctx context.Context, artifacts []discovery.Artifact, tf *taintflow.Analyzer, af *agentflow.Analyzer, addFindings func(*findings.FindingSet), graph *callgraph.SourceBuilder) error {
+func scanFlowsTogether(ctx context.Context, artifacts []discovery.Artifact, tf *taintflow.Analyzer, af *agentflow.Analyzer, addFindings func(*findings.FindingSet), unitsOut *callgraph.SourceBuilder) error {
 	taintFS, agentFS := findings.NewFindingSet(), findings.NewFindingSet()
 	err := flowunits.WalkContent(ctx, artifacts, func(path string, content []byte, units []taint.Unit) {
 		tf.ScanUnits(taintFS, path, units)
 		af.ScanUnits(agentFS, units)
-		graph.Add(path, content, units)
+		unitsOut.Add(path, content, units)
 	})
 	if err != nil {
 		return err
