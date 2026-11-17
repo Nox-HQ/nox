@@ -1106,7 +1106,7 @@ scan:
     # verification recommended" as a two-account test, and no machine output,
     # exit code or gate sees them. Named here, each is a finding. Its body
     # analysis covers Express, Fastify, Flask and FastAPI. AUTHN-001 is the
-    # same arrangement, over Express, Fastify, Flask, FastAPI, Next.js, NestJS, Django, Spring, JAX-RS, Go, ASP.NET Core, Rails and Laravel
+    # same arrangement, over Express, Fastify, Flask, FastAPI, Next.js, NestJS, Django, Spring, JAX-RS, Go (net/http, Gin, Echo, Chi and gorilla/mux), actix-web, ASP.NET Core (controllers, minimal APIs, Razor Pages), Rails and Laravel
     # routes, for a route with no visible authentication (an
     # administrative or account route, or any DELETE, PUT or PATCH, with no
     # auth middleware, decorator, dependency or check on the caller): a lead
