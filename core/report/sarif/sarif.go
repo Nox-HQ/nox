@@ -9,6 +9,7 @@ package sarif
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"sort"
@@ -385,6 +386,18 @@ func (r *Reporter) buildInvocations() []Invocation {
 		return nil
 	}
 	return []Invocation{{ExecutionSuccessful: true, ToolExecutionNotifications: notes}}
+}
+
+// Write generates the SARIF report and writes it to w. Nothing is written when
+// generation fails, so a stream never holds half a document. WriteToFile uses
+// the same Generate, so file and stream carry the same bytes.
+func (r *Reporter) Write(w io.Writer, fs *findings.FindingSet) error {
+	data, err := r.Generate(fs)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
 }
 
 // WriteToFile generates the SARIF report and writes it to the specified path

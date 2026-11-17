@@ -44,6 +44,9 @@ func assessmentShown(quiet, staged, history bool) bool {
 // findingsPath is where this run wrote findings.json, or "" when it did not,
 // in the form the old [tip] lines used so a copied command still works.
 func (a scanAssessment) findingsPath() string {
+	if a.outDir == "" {
+		return "" // streamed to stdout: there is no file to point at
+	}
 	for _, f := range a.formats {
 		if f == "json" {
 			return a.outDir + "/findings.json"
@@ -60,7 +63,7 @@ func (a scanAssessment) print(w io.Writer) {
 	in.Targets = a.targets
 	// Mirrors the write rule in runScan: the inventory is written whenever it
 	// holds a component, whatever --format says.
-	if a.result != nil && a.result.AIInventory != nil && len(a.result.AIInventory.Components) > 0 {
+	if a.outDir != "" && a.result != nil && a.result.AIInventory != nil && len(a.result.AIInventory.Components) > 0 {
 		in.InventoryPath = a.outDir + "/ai.inventory.json"
 	}
 	opts := assess.RenderOptions{Limit: assess.DefaultLimit}

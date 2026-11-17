@@ -62,7 +62,7 @@ nox scan <path> [flags]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--format` | `json` | Output formats: `json`, `sarif`, `cdx`, `spdx`, `all` (comma-separated) |
-| `--output` | `.nox/reports` | Output directory for report files. The default directory carries its own `.gitignore`, so reports stay out of git; a directory you name is left as it is |
+| `--output` | `.nox/reports` | Output directory for report files. The default directory carries its own `.gitignore`, so reports stay out of git; a directory you name is left as it is. `--output -` streams one report on stdout instead (see below) |
 | `--quiet`, `-q` | `false` | Suppress all output except errors |
 | `--verbose`, `-v` | `false` | Enable verbose output |
 | `--only` | all scopes | Scan only these scopes, comma-separated (see [Scopes](#scopes)) |
@@ -79,6 +79,9 @@ nox scan . --format sarif --output results/
 
 # Generate all formats into a reports directory
 nox scan /path/to/project --format all --output /path/to/reports
+
+# Stream one report on stdout, no files written
+nox scan . --format sarif --output - --offline > results.sarif
 
 # Quiet mode for CI (exit code only)
 nox scan . -q
@@ -107,6 +110,17 @@ nox scan . --skip deps
 # Byte-identical reports: pin every timestamp (Unix seconds)
 SOURCE_DATE_EPOCH=1700000000 nox scan . --offline --format all
 ```
+
+**Streaming a report with `--output -`.** `--output -` writes exactly one report to
+stdout, for consumers that read a scanner over a pipe. Choose a single
+`--format` of `json` (findings.json), `sarif`, `cdx` or `spdx`; zero or several
+formats (`json,sarif`, `all`) and `html` are a usage error (exit 2, nothing
+written). stdout carries only the report: every other line the scan prints
+(progress, `[results]`, notes, the assessment) goes to stderr. No files are
+written, including `ai.inventory.json` and the `.nox/reports` directory. Exit
+codes are unchanged (0 clean, 1 findings, `--fail-on-degraded` applied after the
+report is written); if the scan fails before a report exists, stdout is empty.
+`output.directory: "-"` in `.nox.yaml` does the same.
 
 #### Reproducible output
 

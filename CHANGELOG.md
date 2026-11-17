@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `nox scan --output -` streams one report on stdout: `--format json`, `sarif`,
+  `cdx` or `spdx`, no wrapper script or temporary directory. stdout carries only
+  the document (every other line the scan prints goes to stderr), no files are
+  written, and exit codes are unchanged. Zero or several formats and `html` are
+  a usage error, exit 2 (#1107).
+
 ## [1.68.1] - 2026-11-17
 
 ### Fixed
