@@ -1094,7 +1094,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
 		{
-			id: "IAC-364", severity: findings.SeverityLow, confidence: findings.ConfidenceLow,
+			id: "IAC-364", severity: findings.SeverityInfo, confidence: findings.ConfidenceLow,
 			pattern:      `(?i)topologySpreadConstraints:`,
 			description:  "K8s topology spread constraints defined (positive)",
 			cwe:          "CWE-693",
@@ -1350,7 +1350,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
 		{
-			id: "IAC-387", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
+			id: "IAC-387", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium,
 			pattern:      `(?i)matchExpressions:\s*\n.*operator:\s*['"]?DoesNotExist`,
 			description:  "K8s uses DoesNotExist operator in node affinity",
 			cwe:          "CWE-693",
@@ -1383,7 +1383,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
 		{
-			id: "IAC-390", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
+			id: "IAC-390", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium,
 			pattern:      `(?i)podAntiAffinity:\s*\n\s+preferredDuringScheduling`,
 			description:  "K8s uses preferred pod anti-affinity",
 			cwe:          "CWE-693",
@@ -1438,7 +1438,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
 		{
-			id: "IAC-395", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
+			id: "IAC-395", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium,
 			pattern:      `(?i)PodDisruptionBudget`,
 			description:  "K8s defines PodDisruptionBudget (positive)",
 			cwe:          "CWE-693",
@@ -1670,7 +1670,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
 		{
-			id: "IAC-416", severity: findings.SeverityLow, confidence: findings.ConfidenceMedium,
+			id: "IAC-416", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium,
 			pattern:      `(?i)recommendation:\s*\n.*containerRecommendations:`,
 			description:  "K8s VPA shows recommendations (informational)",
 			cwe:          "CWE-693",
@@ -1956,7 +1956,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
 		{
-			id: "IAC-442", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
+			id: "IAC-442", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium,
 			pattern:      `(?i)ResourceQuota`,
 			description:  "K8s ResourceQuota defined (positive)",
 			cwe:          "CWE-693",
@@ -1989,7 +1989,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 			references:   []string{"https://cwe.mitre.org/data/definitions/400.html"},
 		},
 		{
-			id: "IAC-445", severity: findings.SeverityMedium, confidence: findings.ConfidenceMedium,
+			id: "IAC-445", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium,
 			pattern:      `(?i)hard:\s*\n.*pods:`,
 			description:  "K8s ResourceQuota limits pod count",
 			cwe:          "CWE-400",
@@ -2044,7 +2044,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
 		{
-			id: "IAC-450", severity: findings.SeverityLow, confidence: findings.ConfidenceMedium,
+			id: "IAC-450", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium,
 			pattern:      `(?i)LimitRange`,
 			description:  "K8s LimitRange defined (positive)",
 			cwe:          "CWE-693",
@@ -2143,7 +2143,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 			references:   []string{"https://cwe.mitre.org/data/definitions/400.html"},
 		},
 		{
-			id: "IAC-459", severity: findings.SeverityLow, confidence: findings.ConfidenceMedium,
+			id: "IAC-459", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium,
 			pattern:      `(?i)type:\s*['"]?Container`,
 			description:  "K8s LimitRange targets containers",
 			cwe:          "CWE-693",
@@ -2355,7 +2355,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 			references:   []string{"https://cwe.mitre.org/data/definitions/693.html"},
 		},
 		{
-			id: "IAC-477", severity: findings.SeverityLow, confidence: findings.ConfidenceMedium,
+			id: "IAC-477", severity: findings.SeverityInfo, confidence: findings.ConfidenceMedium,
 			pattern:      k8sManifestPrefix + `message:`,
 			description:  "K8s condition has message (informational)",
 			cwe:          "CWE-693",

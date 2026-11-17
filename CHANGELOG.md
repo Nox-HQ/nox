@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Rules that report a control being present are informational. IAC-364,
+  IAC-387, IAC-390, IAC-395, IAC-416, IAC-442, IAC-445, IAC-450, IAC-459 and
+  IAC-477 ("K8s defines PodDisruptionBudget (positive)", "K8s ResourceQuota
+  defined (positive)", "K8s uses preferred pod anti-affinity", ...) were low
+  or medium, so adding the control made the scan worse: hardening
+  nox-intelligence's manifests with the NetworkPolicies, quota, limit range,
+  budget and anti-affinity its scan asked for raised its unsuppressed
+  findings from 16 to 26, every new one saying a requested control was there.
+  They now report at info, as IAC-464 already did.
 - SEC-080 no longer reports translation catalogues. In a file such as
   `locales/de.ts` or `i18n/en/common.json`, a password-named key is a form
   label and its value is that label's text (German: Passwort). On RAGFlow
