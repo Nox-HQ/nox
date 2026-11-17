@@ -30,6 +30,7 @@ package callgraph
 
 import (
 	"sort"
+	"sync"
 
 	"github.com/nox-hq/nox/core/reach"
 )
@@ -80,11 +81,18 @@ const (
 	// EntryConcrete — main or init. Execution genuinely begins here when the
 	// program runs, with no caller outside the module required.
 	EntryConcrete
+	// EntryRoute — the handler of an HTTP route. Execution begins here when a
+	// request arrives, which is to say when someone outside the program
+	// decides it does. Strongest of the four for that reason: a path from
+	// here is a path an outside request can start.
+	EntryRoute
 )
 
 // String renders the kind for a scope description.
 func (k EntryKind) String() string {
 	switch k {
+	case EntryRoute:
+		return "route"
 	case EntryConcrete:
 		return "concrete"
 	case EntryTest:
@@ -129,6 +137,22 @@ type Graph struct {
 	intoSymbol map[string][]string
 	root       string
 	module     string
+	// intoDependency is intoPackage for the source graph: the functions that
+	// call into a dependency their file imports, keyed by ecosystem and name.
+	intoDependency map[string][]string
+	// stmtOwner maps a file and line to the function whose statement is on
+	// it. The source graph has it; FuncAt prefers it to the nearest header,
+	// which is wrong for module code after a function.
+	stmtOwner map[string]map[int]string
+	// funcRefs maps a Go file and line to the declared functions passed as
+	// arguments on it (see MarkGoRoutes).
+	funcRefs map[string]map[int][]string
+	// lines caches, per file, the sorted statement and header lines FuncAt
+	// searches; built on first use.
+	lines   map[string]*fileLines
+	linesMu sync.Mutex
+	// analysis and buildID describe the graph in its Scope.
+	analysis, buildID string
 }
 
 // Len returns the number of functions in the graph.
@@ -188,6 +212,9 @@ func (g *Graph) Scope() reach.Scope {
 		Analysis: "go/ast call graph",
 		BuildID:  "syntactic, single module",
 	}
+	if g != nil && g.analysis != "" {
+		s.Analysis, s.BuildID = g.analysis, g.buildID
+	}
 	if g != nil {
 		// The concrete set. Listing every exported function would describe a
 		// search far broader than the one that answers "can this run".
@@ -234,10 +261,11 @@ func (g *Graph) PathToFunc(target string) (path []string, reached EntryKind) {
 		queue = queue[1:]
 		if f, ok := g.funcs[n.key]; ok && f.Kind > bestKind {
 			best, bestKind = n, f.Kind
-			// Concrete is the strongest answer available, so stop. Anything
-			// weaker keeps searching, because a longer path from main beats a
-			// short one from an exported function nothing calls.
-			if bestKind == EntryConcrete {
+			// A route is the strongest answer available, so stop. Anything
+			// weaker keeps searching, because a longer path from a request
+			// beats a short one from main, and one from main beats one from
+			// an exported function nothing calls.
+			if bestKind == EntryRoute {
 				break
 			}
 		}
@@ -274,6 +302,37 @@ func chain(n *searchNode) []string {
 	return out
 }
 
+type fileLines struct{ stmts, headers []int }
+
+// lineIndex returns the sorted statement and function-header lines of file.
+func (g *Graph) lineIndex(file string) *fileLines {
+	g.linesMu.Lock()
+	defer g.linesMu.Unlock()
+	if ix, ok := g.lines[file]; ok {
+		return ix
+	}
+	ix := &fileLines{}
+	for l := range g.stmtOwner[file] {
+		ix.stmts = append(ix.stmts, l)
+	}
+	for _, f := range g.funcs {
+		if f.File == file && f.Line > 0 {
+			ix.headers = append(ix.headers, f.Line)
+		}
+	}
+	sort.Ints(ix.stmts)
+	sort.Ints(ix.headers)
+	if g.lines == nil {
+		g.lines = map[string]*fileLines{}
+	}
+	g.lines[file] = ix
+	return ix
+}
+
+// maxContinuation bounds how far below a module-level statement a line is
+// still read as its continuation, when nothing after it closes the span.
+const maxContinuation = 40
+
 // FuncAt returns the function whose declaration encloses file:line.
 //
 // It answers the question a finding actually poses. A finding names a line, the
@@ -288,6 +347,28 @@ func chain(n *searchNode) []string {
 func (g *Graph) FuncAt(file string, line int) (string, bool) {
 	if g == nil || file == "" || line <= 0 {
 		return "", false
+	}
+	if owner, ok := g.stmtOwner[file]; ok {
+		if key, ok := owner[line]; ok {
+			return key, true
+		}
+		// A statement is recorded at the line it starts on, so a line inside
+		// a multi-line call or literal has no owner of its own. It belongs to
+		// the nearest statement above it, unless a function begins in between
+		// or the gap is longer than any statement nox would join.
+		ix := g.lineIndex(file)
+		i := sort.SearchInts(ix.stmts, line) - 1
+		if i < 0 {
+			return "", false
+		}
+		prev := ix.stmts[i]
+		if line-prev > maxContinuation {
+			return "", false
+		}
+		if j := sort.SearchInts(ix.headers, prev+1); j < len(ix.headers) && ix.headers[j] <= line {
+			return "", false
+		}
+		return owner[prev], true
 	}
 	best, bestLine := "", 0
 	for key, f := range g.funcs {

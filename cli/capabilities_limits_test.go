@@ -21,7 +21,9 @@ func TestAFullMatrixStillStatesItsLimits(t *testing.T) {
 
 	for _, claim := range []string{
 		"a scan executes nothing",
-		"Go only",
+		// The limit that remains now the graph reads every language nox
+		// analyses: a finding outside code has no call graph to ask.
+		"manifest, config or other file",
 		"never reports that no path exists",
 	} {
 		if !strings.Contains(out, claim) {

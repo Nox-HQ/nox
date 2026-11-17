@@ -66,7 +66,7 @@ func TestFlowsTogetherReportWhatEachReportsAlone(t *testing.T) {
 	var together []*findings.FindingSet
 	err = scanFlowsTogether(ctx, arts, taintflow.NewAnalyzer(), agentflow.NewAnalyzer(), func(fs *findings.FindingSet) {
 		together = append(together, fs)
-	})
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

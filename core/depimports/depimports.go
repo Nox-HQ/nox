@@ -102,6 +102,27 @@ func (ix *Index) Add(filePath string, content []byte) {
 	}
 }
 
+// FileImports returns the ecosystem a file's imports name and the
+// distributions it imports, normalised as Imports matches them. eco is "" for
+// a file whose imports nothing here reads.
+//
+// It answers per file what Index answers per tree, for a caller that must know
+// whether THIS file imports a package: a call written `yaml.load` is a call
+// into PyYAML only in a file that imports it.
+func FileImports(filePath string, content []byte) (eco string, names []string) {
+	eco, ok := ecosystemFor[strings.ToLower(path.Ext(filePath))]
+	if !ok || eco == "go" {
+		return "", nil
+	}
+	return eco, extract(eco, string(content))
+}
+
+// NormalizeName folds a distribution name the way Imports and FileImports
+// compare it, so a caller can match a lockfile's name against either.
+func NormalizeName(ecosystem, name string) string {
+	return normalizeName(normalizeEco(ecosystem), name)
+}
+
 // Known reports whether any source file of this ecosystem's languages was read.
 func (ix *Index) Known(ecosystem string) bool { return ix.seen[normalizeEco(ecosystem)] }
 

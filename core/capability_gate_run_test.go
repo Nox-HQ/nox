@@ -150,7 +150,9 @@ func TestScanAlwaysSuppliesARunView(t *testing.T) {
 		t.Skip("end-to-end scan; skipped in -short")
 	}
 	dir := writeGateProject(t, map[string]string{
-		"app/creds.py": "GITHUB_TOKEN = \"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\"\n",
+		// A config file: no call graph reads it, so call_graph is provided by
+		// this installation and nothing in this scan put the question.
+		"app/creds.env": "GITHUB_TOKEN=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\n",
 		".nox.yaml": "policy:\n  fail_on: critical\n  uncertainty: fail\n" +
 			"  require_capabilities: [call_graph]\n",
 	})
@@ -162,9 +164,9 @@ func TestScanAlwaysSuppliesARunView(t *testing.T) {
 		t.Fatal("the scan produced no coverage, so the policy gate fell back to the " +
 			"installation-only answer that Track H replaced")
 	}
-	// call_graph is now implemented for Go, and this project is Python — so the
-	// gate must still fail, but for the OTHER reason: the analysis exists and
-	// nothing in this scan reached a conclusion with it.
+	// call_graph is implemented, and this project's only finding is in a file
+	// no graph reads — so the gate must still fail, but for the OTHER reason:
+	// the analysis exists and nothing in this scan reached a conclusion with it.
 	//
 	// That distinction is the point of the whole run-level view. An operator
 	// told "not provided" installs a plugin; one told "nothing put the

@@ -1121,6 +1121,9 @@ func (ix *rbIndex) finish(r rbRoute) (Route, routeView) {
 		rt.Authn = ev.authn
 	}
 	rt.Authz = ev.authz
+	if ev.defined {
+		rt.HandlerFile, rt.HandlerFunc = cls.file.path, r.action
+	}
 	v.route = rt
 	v.handler = ev.body
 	v.guardUnseen = v.guardUnseen || ev.unseen

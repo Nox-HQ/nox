@@ -125,6 +125,9 @@ type SinkArgInfo struct {
 type Unit struct {
 	FilePath string
 	FuncName string
+	// Line is the line the function's header starts on; 0 for the module
+	// unit, and for an extractor that does not record it (Go, Clojure).
+	Line     int
 	Language string
 	Stmts    []Statement
 	// Params are the positional parameter names of this function, in declaration

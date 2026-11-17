@@ -446,7 +446,7 @@ func goCallReachable(g *callgraph.Graph, root string, affected []string) (path [
 			// is the weaker claim reach.AttackerEntryPathExists exists to keep
 			// separate — and a test entry establishes that the test suite runs
 			// it, not the program.
-			if kind != callgraph.EntryConcrete {
+			if kind < callgraph.EntryConcrete {
 				continue
 			}
 			if best == nil || len(p) < len(best) {
@@ -538,7 +538,7 @@ func goListedSymbolHit(g *callgraph.Graph, ov *osvVuln, module string) (symbolHi
 			for _, caller := range g.CallersOfSymbol(importPath, sym) {
 				p, kind := g.PathToFunc(caller)
 				// Only a concrete entry, as in goCallReachable.
-				if kind != callgraph.EntryConcrete {
+				if kind < callgraph.EntryConcrete {
 					continue
 				}
 				if !found || len(p) < len(best.path) {
@@ -629,8 +629,10 @@ func jsListedSymbolHit(src *sourceImports, ov *osvVuln, module string) (spec, sy
 
 // raiseOnJSListedSymbol is raiseOnListedSymbol for npm. The evidence is weaker
 // than Go's and is labelled so: a reference in non-test project source, not a
-// call path from an entry point, because nox has no JavaScript call graph.
-// affected_symbol_evidence says which, and the printed sentence repeats it.
+// call path from an entry point. affected_symbol_evidence says which, and the
+// printed sentence repeats it. The scan replaces it with a call path when the
+// source call graph finds one (core.raiseDependencyReachability), which runs
+// after this analyzer because the graph is built from the flow analyzers' walk.
 func raiseOnJSListedSymbol(v applicability.Verdict, meta map[string]string, src *sourceImports, ov *osvVuln, pkg Package) applicability.Verdict {
 	if !strings.EqualFold(pkg.Ecosystem, "npm") || v.Outcome == applicability.NotImpacting {
 		return v

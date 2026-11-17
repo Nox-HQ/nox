@@ -7,7 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Call paths and entry points for every language the taint engine reads, not
+  only Go. The call graph is built from the functions and calls the taint
+  extractor already records, during the same walk, and binds a call only when
+  it names one function (a bare name defined once, a call on `self`/`this`, a
+  module that is a file in the tree). A finding in code now carries
+  `call_path` and `entry_kind` in Python, JavaScript/TypeScript, Java, Kotlin,
+  C#, Ruby, PHP, Rust and the rest, where its capability matrix read
+  `unsupported` before. Like the Go graph it never reports that no path exists.
+- HTTP route handlers are entry points (`entry_kind: route`, with the route in
+  `entry_reason`), in Go and in every framework the route reader reads: a
+  decorated or annotated handler, a callback, a handler the registration
+  names, and a Rails or Laravel controller action reached through its routes
+  file.
+- Dependency advisories climb to `call_reachable` in npm, PyPI, RubyGems, Cargo
+  and pub, as they did only in Go: when a function that calls into the
+  affected package, in a file that imports it, is reached from an entry point.
+  The witness is the call path. A Rails application's gems count as imported
+  when `config/application.rb` calls `Bundler.require`, except development and
+  test groups and `require: false`. The climb stops at `call_reachable` even
+  from a route, because a call into the package is not a call into the
+  vulnerable function. The fingerprint does not move, so baselines, waivers
+  and VEX statements still apply; more advisories now pass the default
+  remediate gate, which is `call_reachable`.
+
 ### Fixed
+
+- JavaScript methods are named correctly: a modifier was trimmed as a bare
+  prefix, so `getUser(id) {` was "User" and `settings() {` "tings", and a
+  function named `get` or `set` had no name.
 
 - Taint analysis ends a function's scope where the function ends in Python,
   Ruby, Lua, PHP, Perl and PowerShell. Their extractors opened a scope at each
