@@ -1000,7 +1000,7 @@ var rbParamsRe = regexp.MustCompile(`\bparams\b`)
 
 // rbEmptyDef: the action's whole text is `def name … end` with nothing between,
 // so Rails renders the action's template and nothing else.
-var rbEmptyDefRe = regexp.MustCompile(`^def\s+[\w]+[?!]?\s*(?:\([^)]*\))?\s*;?\s*end$`)
+var rbEmptyDefRe = regexp.MustCompile(`^def\s+\w+[?!]?\s*(?:\([^)]*\))?\s*;?\s*end$`)
 
 func rbEmptyDef(body string) bool {
 	return rbEmptyDefRe.MatchString(strings.Join(strings.Fields(body), " "))
