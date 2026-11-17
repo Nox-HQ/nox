@@ -25,7 +25,7 @@ import (
 
 // deviceFlowCap bounds polling regardless of what the server says.
 //
-// RFC 8628 §5.4: a user code is short enough for a human to retype, so it is
+// RFC 8628 §5.1: a user code is short enough for a human to retype, so it is
 // short enough to guess at. The server sets its own expiry; this is a second
 // ceiling the client controls, so a server that advertises an hour cannot make
 // this terminal sit on a guessable code for an hour.

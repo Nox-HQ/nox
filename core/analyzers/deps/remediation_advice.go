@@ -55,7 +55,7 @@ func addNPMRemediation(meta map[string]string, adv npmtree.Advice, pkg, fixed st
 	}
 	if adv.Reach.Held() {
 		meta["remediation_note"] = pkg + " is not listed in package.json, and " + adv.Reach.HoldList() +
-			": the range excludes " + fixed + ". Upgrade " + adv.Reach.Holders() +
+			": " + adv.Reach.Excludes(fixed) + ". Upgrade " + adv.Reach.Holders() +
 			" to a release that allows it, or add to package.json: " +
 			npmtree.OverrideEntry(adv.Reach.Tool, pkg, fixed)
 	}

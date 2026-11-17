@@ -272,7 +272,7 @@ func holdTransitive(it *Item, a *fix.UpgradeAction, root string, major bool) boo
 	if !transitiveNPM(root, a) {
 		return false
 	}
-	reach := npmtree.ReachOf(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.To)
+	reach := npmtree.ReachAtOf(filepath.Join(root, filepath.Dir(a.Manifest)), a.Package, a.From, a.To)
 	if reach.Movable() {
 		return false
 	}

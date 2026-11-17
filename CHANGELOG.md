@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- SEC-080 no longer reports translation catalogues. In a file such as
+  `locales/de.ts` or `i18n/en/common.json`, a password-named key is a form
+  label and its value is that label's text (German: Passwort). On RAGFlow
+  this was 146 of SEC-080's 198 findings. A password-named assignment in code
+  beside the catalogues (`locales/index.ts`) is still reported (#1099).
+- MCP-009 recognizes a detection table keyed by pattern id: each row's
+  description names the attack its pattern detects, and is not tool metadata
+  (#1099).
+- MCP-011 no longer reports text shown to a user in a JSX/TSX component that
+  defines no agent tool ("Upload the credential again to restart"). A
+  component that registers a WebMCP tool or declares an AI SDK `tool()` is
+  still checked, and server code is unchanged (#1099).
+- IAC-294 no longer reports an `emptyDir` that sets a `sizeLimit`. Its
+  pattern made both braces optional, so it matched the bare key and reported
+  every `emptyDir`, flow or block style. It now asks whether the volume itself
+  sets the limit, and reports on the same line as before.
+- IAC-379 ("verify timezone") no longer fires on a CronJob that sets
+  `timeZone`. IAC-385, which notes that `timeZone` needs a recent Kubernetes,
+  is now informational: setting the field is IAC-379's remedy, and scoring it
+  as a medium risk meant one of the two rules fired on every CronJob.
+- IAC-135 recognizes a seccomp profile inherited from the pod when the
+  Deployment is embedded in another document's block scalar (a RollOps
+  RolloutConfig, an Argo CD Application). The same Deployment was clean as a
+  file of its own and reported inside the wrapper.
+- Taint analysis recognizes a host allowlist written as a guard. When every
+  term of a condition pins a URL's host (or scheme) to literals, and the
+  branch exits, throws, raises or returns, SSRF is cleared from then on for
+  the checked value and for the value it was parsed from. Recognized in
+  JavaScript/TypeScript, Python and shell `case` statements. A guard that
+  logs and continues, compares the host to a variable, or checks only the
+  scheme is not a defence and still reports. Other vulnerability classes are
+  unaffected.
+- `nox fix plan` looks for the parent release that frees a held npm upgrade
+  only among the copies on the finding's release line, as #1094 did for
+  reach. On nox-hq.dev the esbuild 0.27.3 item was also told that no release
+  of @astrojs/vue frees it; @astrojs/vue reaches esbuild only through vite's
+  0.25 copy.
+
+## [1.68.0] - 2026-11-15
+
 ### Added
 
 - `nox fix plan` names the release of the package you list that frees a held
@@ -27,6 +69,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   applied, with the `overrides` entry that forces it. On the walkthrough app,
   one `npm install express@4.22.3` cleared three items and eight advisories,
   and the checks apply re-ran verified all three fixed.
+
+### Fixed
+
+- `nox fix plan` and `nox fix` read npm ranges whose bounds carry a
+  pre-release tag, such as vite's peers' `^6.0.0-0`. Each was read as unknown,
+  and an unknown range is treated as a hold, so on nox-hq.dev vite 6.4.1 was
+  reported as "held" below 6.4.5 by four ranges that all allow it. For a
+  release version the tag changes nothing (no release lies between `6.0.0-0`
+  and `6.0.0`), so each comparator is evaluated exactly: `>=`/`>` as `>=`
+  the release, `<`/`<=` as `<` it, and `=` as no match.
+- A range nox still cannot read (a dist-tag, a URL, an alias) keeps holding
+  the move, but the plan now says nox cannot tell whether it allows the fix,
+  instead of "the range excludes" it.
+- A package installed at two majors is judged per copy. nox-hq.dev has nanoid
+  5.1.6 at the root and 3.3.11 under postcss's `^3.3.11`; the 5.x finding's
+  fix, 5.1.16, was reported as held by postcss, whose range governs only the
+  3.x copy. picomatch 4.0.3 and zod 4.3.6 were held the same way. Each finding
+  is now answered for the copy at its own installed version: on nox-hq.dev 18
+  upgrades are safe to apply, up from 13. Apply's lockfile read-back makes the
+  same distinction: it reported the nanoid and picomatch upgrades as not
+  applied because the older lines, rightly untouched, were still below the
+  newer line's fix. On nox-hq.dev 17 of the 18 now verify; the 18th, zod 3.x,
+  is held by astro 5's `^3.25.76`, as the plan says.
+- `findings.json` lists plugin enrichments in the same order on every scan of
+  the same tree. They were written in the order each plugin returned them, and
+  nox/reachability 0.9.0 returns them in Go map order: three scans of the
+  walkthrough app gave its eight reachability enrichments in three different
+  orders. They are now ordered by the finding they annotate, then source,
+  kind, title, body, confidence and metadata. Findings and the enrichments
+  themselves are unchanged.
+
+- The Kubernetes rules no longer fire on GitHub Actions workflows. Their file
+  patterns include every `*.yml`, and in a workflow a pod-spec key is only ever
+  text: Nox-HQ/.github's remediation workflow documents an input as
+  "(privileged: true -> false, runAsNonRoot: false -> true ...)", and IAC-007,
+  IAC-035 and IAC-369 reported it as a privileged container running as root
+  (26 of the repository's 36 grade points). The family's gate asks only
+  whether the document is a workflow (a top-level `jobs:` with steps), so a
+  Helm values file, a manifest anywhere in the tree, an Ansible `k8s` task and
+  IAC-007's CloudFormation and Kustomize forms are all still checked.
 
 ## [1.67.0] - 2026-11-14
 

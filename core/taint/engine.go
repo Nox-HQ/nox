@@ -139,6 +139,17 @@ type Unit struct {
 	// reads them only to decide whether a partial sanitizer (a canonicalizer such
 	// as filepath.Clean) was paired with the check that makes it a sanitizer.
 	Guards []Guard
+	// HostAllowlists are guards that pin a URL's host to literals and leave
+	// when it is anything else (see engine/host_allowlist.go). From Line on,
+	// the value Var holds can reach only those hosts, so SSRF is cleared on it.
+	HostAllowlists []HostAllowlist
+}
+
+// HostAllowlist is one host-pinning guard: after Line, Var's host is one the
+// code names.
+type HostAllowlist struct {
+	Line int
+	Var  string
 }
 
 // Guard is one branch condition: the calls it makes and the variables it reads.

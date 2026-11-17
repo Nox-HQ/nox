@@ -160,8 +160,14 @@ type Advice struct {
 // AdviceFor answers for pkg in dir, reading the workspace for one question.
 func AdviceFor(dir, pkg, fixed string) Advice { return Open(dir).Advice(pkg, fixed) }
 
-// Advice answers for pkg in this workspace.
-func (p *Project) Advice(pkg, fixed string) Advice {
+// AdviceAtFor is AdviceFor for the copy installed at from.
+func AdviceAtFor(dir, pkg, from, fixed string) Advice { return Open(dir).AdviceAt(pkg, from, fixed) }
+
+// Advice answers for pkg in this workspace, about every copy below fixed.
+func (p *Project) Advice(pkg, fixed string) Advice { return p.AdviceAt(pkg, "", fixed) }
+
+// AdviceAt answers for the copy of pkg installed at from (see ReachAt).
+func (p *Project) AdviceAt(pkg, from, fixed string) Advice {
 	version := strings.TrimPrefix(fixed, "v")
 	tool, args := Command(p.dir, pkg, version)
 	adv := Advice{Command: tool + " " + strings.Join(args, " ")}
@@ -169,7 +175,7 @@ func (p *Project) Advice(pkg, fixed string) Advice {
 		return adv
 	}
 	adv.Transitive = true
-	adv.Reach = p.Reach(pkg, version)
+	adv.Reach = p.ReachAt(pkg, from, version)
 	if adv.Reach.Held() {
 		adv.Command = ""
 	}

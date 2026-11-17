@@ -137,7 +137,7 @@ func runDepsFix(inputPath, manifestRoot string, dryRun, includeMajor bool) int {
 		// as a command about to be refused, and is not run: it stays unfixed.
 		if a.ecosystem == "npm" {
 			version := strings.TrimPrefix(a.toVersion, "v")
-			if reach := npmtree.ReachOf(dir, a.pkg, version); reach.Held() {
+			if reach := npmtree.ReachAtOf(dir, a.pkg, a.fromVer, version); reach.Held() {
 				fmt.Printf("held: %s -> %s  (%s) in %s: %v\n",
 					a.pkg, a.toVersion, a.ruleID, describeDir(manifestRoot, dir), heldError(a.pkg, version, reach))
 				unresolved++
@@ -534,7 +534,7 @@ func applyNpmUpgrade(manifestRoot string, a upgradeAction) error {
 	// excludes the fix cannot be moved by an update, whichever manager runs
 	// it; running it to find that out changes nothing and reads as an attempt.
 	if transitive {
-		if reach := npmtree.ReachOf(manifestRoot, a.pkg, version); reach.Held() {
+		if reach := npmtree.ReachAtOf(manifestRoot, a.pkg, a.fromVer, version); reach.Held() {
 			return heldError(a.pkg, version, reach)
 		}
 	}
@@ -547,7 +547,7 @@ func applyNpmUpgrade(manifestRoot string, a upgradeAction) error {
 	// Read back where it landed, in whichever lockfile the manager wrote. An
 	// update moves a transitive package only as far as its parents allow, and
 	// a copy still short of the fix means the advisory is still there.
-	below, err := npmtree.Below(manifestRoot, a.pkg, version)
+	below, err := npmtree.BelowFrom(manifestRoot, a.pkg, a.fromVer, version)
 	if err != nil {
 		return fmt.Errorf("reading the lockfile after %s: %w", name, err)
 	}
@@ -584,7 +584,7 @@ func alreadySatisfied(dir string, a upgradeAction) bool {
 	if err != nil || len(copies) == 0 {
 		return false
 	}
-	below, err := npmtree.Below(dir, a.pkg, strings.TrimPrefix(a.toVersion, "v"))
+	below, err := npmtree.BelowFrom(dir, a.pkg, a.fromVer, strings.TrimPrefix(a.toVersion, "v"))
 	return err == nil && len(below) == 0
 }
 

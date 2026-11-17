@@ -1,6 +1,7 @@
 package iac
 
 import (
+	"bytes"
 	"sort"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -35,6 +36,14 @@ var seccompWorkloadKinds = []string{"Deployment", "StatefulSet", "DaemonSet", "R
 // dropSeccompInheritedFromPod removes IAC-135 findings that sit inside a
 // workload whose pod-level securityContext sets a seccomp profile. A file that
 // does not parse as Kubernetes keeps every finding: unreadable is not refuted.
+//
+// The workload may be a string inside the file rather than a document of it:
+// RollOps' RolloutConfig, an Argo CD Application or a ConfigMap carries its
+// Deployment in a block scalar. The text matcher reads straight through the
+// string, so the finding exists; the parse of the outer document sees only the
+// wrapper, so it was never refuted. Measured on nox-intelligence's
+// .rollops/noxintel.yaml: the same Deployment was clean as a file of its own and
+// reported inside the wrapper.
 func dropSeccompInheritedFromPod(in []findings.Finding, content []byte, drop refuteFunc) []findings.Finding {
 	var any135 bool
 	for i := range in {
@@ -46,36 +55,83 @@ func dropSeccompInheritedFromPod(in []findings.Finding, content []byte, drop ref
 	if !any135 {
 		return in
 	}
-	docs, err := structural.Parse(content)
-	if err != nil {
-		return in
-	}
-	resources := structural.Resources(docs)
-	if len(resources) == 0 {
-		return in
-	}
-	// Resources are ordered by declaration line; a finding belongs to the last
-	// resource declared at or before its line.
-	lines := make([]int, len(resources))
-	for i := range resources {
-		lines[i] = resources[i].Line
-	}
-
+	idx := newSeccompIndex(content, 0)
 	kept := in[:0]
 	for _, f := range in {
 		if f.RuleID != "IAC-135" {
 			kept = append(kept, f)
 			continue
 		}
-		i := sort.SearchInts(lines, f.Location.StartLine+1) - 1
-		if i >= 0 && inheritsPodSeccomp(resources[i]) {
-			drop(f, "the pod-level securityContext of "+resources[i].Type+" sets a seccompProfile, "+
+		if kind, ok := idx.inheritedAt(f.Location.StartLine); ok {
+			drop(f, "the pod-level securityContext of "+kind+" sets a seccompProfile, "+
 				"which every container without its own profile inherits")
 			continue
 		}
 		kept = append(kept, f)
 	}
 	return kept
+}
+
+// maxEmbeddingDepth bounds the descent into block scalars. A manifest inside a
+// manifest inside a manifest is already past anything real.
+const maxEmbeddingDepth = 3
+
+// seccompIndex answers, for a line of one document, whether it lies in a
+// workload whose pod-level securityContext sets a seccomp profile. The
+// document is parsed once; embedded manifests are parsed the first time a line
+// inside one is asked about.
+type seccompIndex struct {
+	content   []byte
+	depth     int
+	resources []structural.Resource
+	lines     []int
+	embedded  []embeddedManifest
+	inner     map[int]*seccompIndex // by index into embedded
+}
+
+func newSeccompIndex(content []byte, depth int) *seccompIndex {
+	idx := &seccompIndex{content: content, depth: depth}
+	if docs, err := structural.Parse(content); err == nil {
+		idx.resources = structural.Resources(docs)
+		// Resources are ordered by declaration line; a line belongs to the last
+		// resource declared at or before it.
+		idx.lines = make([]int, len(idx.resources))
+		for i := range idx.resources {
+			idx.lines[i] = idx.resources[i].Line
+		}
+		// An outer document that does not parse is not descended into either:
+		// unreadable is not refuted.
+		if depth < maxEmbeddingDepth {
+			idx.embedded = extractEmbeddedManifests(content)
+		}
+	}
+	return idx
+}
+
+// inheritedAt returns the kind of the workload that line belongs to when that
+// workload's pod sets a seccomp profile. When the resource at the line is not
+// such a workload, the line may sit inside a manifest embedded in a block
+// scalar, which is asked in turn with the line shifted into it.
+func (x *seccompIndex) inheritedAt(line int) (string, bool) {
+	if i := sort.SearchInts(x.lines, line+1) - 1; i >= 0 && inheritsPodSeccomp(x.resources[i]) {
+		return x.resources[i].Type, true
+	}
+	for i, em := range x.embedded {
+		inner := line - em.lineOffset + 1
+		if inner < 1 || inner > bytes.Count(em.content, []byte("\n")) {
+			continue
+		}
+		if x.inner == nil {
+			x.inner = map[int]*seccompIndex{}
+		}
+		sub, ok := x.inner[i]
+		if !ok {
+			sub = newSeccompIndex(em.content, x.depth+1)
+			x.inner[i] = sub
+		}
+		return sub.inheritedAt(inner)
+	}
+	return "", false
 }
 
 func inheritsPodSeccomp(r structural.Resource) bool {
