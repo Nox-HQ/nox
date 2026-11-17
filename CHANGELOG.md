@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- AUTHN-001 no longer leads on three kinds of route whose claim was false. A Go
+  router served only on a loopback address is not reachable by a caller off the
+  host: gitea's `servePprof` mux (`/debug/pprof/*`, `/debug/fgprof` on
+  `localhost:6060`) gave six leads. A router counts as loopback-only when every
+  serve of it the reader sees (`http.ListenAndServe(addr, mux)`, an
+  `http.Server{Addr, Handler}` literal) names a literal `localhost`, `127.0.0.0/8`
+  or `::1` host; one serve on `:6060`, `0.0.0.0`, an address read from
+  configuration, or none at all keeps the lead. A route that serves a
+  single-page app's HTML shell is the same page for every caller and carries no
+  record, so it is not "something an anonymous caller should not reach": Rails
+  routes to an empty action that a catch-all (`get '/app/*params', to:
+  'dashboard#index'`) also serves, where no callback for the action reads
+  `params` (Chatwoot's 12 `dashboard#index` leads), and an Express `GET`
+  handler whose whole body is `res.sendFile` of a fixed `.html` file; a
+  catch-all that is not a `GET`, an action that loads a record, a callback that
+  reads `params`, and a `sendFile` path built from the request are still read.
+  ASP.NET controllers behind an IdentityServer or JWT-bearer host are no longer
+  leads when the guard is written in a form the reader missed: `AddFallbackPolicy`,
+  `var e = app.MapControllers(); e.RequireAuthorization();`, and controllers in
+  a class library whose host (another project in the tree, one that builds a web
+  host or maps controllers) has a fallback policy, a global `AuthorizeFilter` or
+  `MapControllers().RequireAuthorization()`. `AddIdentityServer()`, `AddJwtBearer`,
+  `UseAuthentication()`, `UseAuthorization()` and a default policy are still not a
+  guard, a guard in a project that is not a host does not count, and an unguarded
+  host's own controllers are still reported.
+
 ## [1.68.1] - 2026-11-17
 
 ### Fixed
