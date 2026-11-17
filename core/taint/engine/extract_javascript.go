@@ -141,7 +141,7 @@ func jsFunctionHeader(trimmed string) (params []string, name string, ok bool) {
 		rest = strings.TrimSpace(strings.TrimPrefix(rest, "*")) // generator
 		nm := ""
 		if p := strings.IndexByte(rest, '('); p > 0 {
-			if cand := strings.TrimSpace(rest[:p]); isSimpleIdent(cand) {
+			if cand := strings.TrimSpace(rest[:p]); isJSFuncName(cand) {
 				nm = cand
 			}
 		}
@@ -214,13 +214,27 @@ func jsMethodParams(body string) (params []string, name string, ok bool) {
 		return nil, "", false
 	}
 	name = strings.TrimSpace(body[:open])
-	for _, mod := range []string{"async", "static", "get", "set", "public", "private", "*"} {
-		name = strings.TrimSpace(strings.TrimPrefix(name, mod))
+	// A modifier is a whole word before the name. Trimming it as a bare
+	// prefix named `getUser(id) {` "User" and `settings() {` "tings".
+	for stripped := true; stripped; {
+		stripped = false
+		for _, mod := range []string{"async ", "static ", "get ", "set ", "public ", "private ", "protected ", "*"} {
+			if rest, ok := strings.CutPrefix(name, mod); ok {
+				name, stripped = strings.TrimSpace(rest), true
+			}
+		}
 	}
-	if !isSimpleIdent(name) {
+	if !isJSFuncName(name) {
 		return nil, "", false
 	}
 	return parseJSParams(body[open+1 : len(body)-1]), name, true
+}
+
+// isJSFuncName reports whether s can name a JavaScript function or method.
+// isSimpleIdent refuses `get` and `set`, Swift's accessor keywords, and in
+// JavaScript both are ordinary names: `export function get(url) {`.
+func isJSFuncName(s string) bool {
+	return isSimpleIdent(s) || s == "get" || s == "set"
 }
 
 // jsBindingName returns the variable a function/arrow is assigned to, so an
