@@ -29,6 +29,9 @@ func extractRust(lines []logicalLine) []unitDraft {
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
 	cur := module
+	// Command builders are followed per function: a binding in one function is
+	// not the receiver of an .arg call in another.
+	cmds := newRustCommands()
 
 	for _, ll := range lines {
 		code := ll.code
@@ -52,6 +55,7 @@ func extractRust(lines []logicalLine) []unitDraft {
 			u.stmts = append(u.stmts, seeds...)
 			units = append(units, u)
 			cur = u
+			cmds = newRustCommands()
 			// Blank the header text (`fn name(params) -> Ret {`) in both views so it
 			// is not itself mis-recognized as a call to `name`, then fall through:
 			// when the whole body is on one line (`fn f() { g(x); }`) the trailing
@@ -63,11 +67,12 @@ func extractRust(lines []logicalLine) []unitDraft {
 				continue
 			}
 		}
-		if st, ok := rustReturnStatement(ll); ok {
+		cmds.beginLine(ll.code)
+		if st, ok := rustReturnStatement(ll, cmds); ok {
 			cur.stmts = append(cur.stmts, st)
 			continue
 		}
-		if st, ok := recognizeStatement(langRust, normalizeRust(ll)); ok {
+		if st, ok := recognizeStatementWith(langRust, normalizeRust(ll), cmds.rewrite); ok {
 			cur.stmts = append(cur.stmts, st)
 		}
 	}
@@ -255,6 +260,15 @@ func rustExtractorSeeds(line int, trimmed string) []stmtDraft {
 		}
 		pattern := strings.TrimSpace(part[:colon])
 		typ := strings.TrimSpace(part[colon+1:])
+		// Every request extractor wraps the type it decodes into -- Query<P>,
+		// Json<T>, web::Path<(u32,)> -- so a parameter whose type names none
+		// is not one. The bare name `Path` is also std::path::Path, which takes
+		// no parameter: `root: &Path` is a filesystem path, and seeding it as
+		// an HTTP source reported every `git -C <root>` as an HTTP query
+		// reaching a command (#1106).
+		if !strings.Contains(typ, "<") {
+			continue
+		}
 		key, ok := rustExtractorSourceKey(rustTypeHead(typ))
 		if !ok {
 			continue
@@ -358,7 +372,7 @@ func topLevelColon(s string) int {
 // returns (a final bare expression with no `return` keyword) are NOT modeled
 // here — that gap is documented on extractRust; only explicit returns are
 // tracked, which is the pragmatic, safe subset. Reports ok=false for non-returns.
-func rustReturnStatement(ll logicalLine) (stmtDraft, bool) {
+func rustReturnStatement(ll logicalLine, cmds *rustCommands) (stmtDraft, bool) {
 	trimmed := strings.TrimSpace(ll.code)
 	if trimmed != "return" && !strings.HasPrefix(trimmed, "return ") &&
 		trimmed != "return;" && !strings.HasPrefix(trimmed, "return;") {
@@ -374,7 +388,7 @@ func rustReturnStatement(ll logicalLine) (stmtDraft, bool) {
 		}
 	}
 	inner := logicalLine{line: ll.line, code: exprCode, raw: exprRaw}
-	st, ok := recognizeStatement(langRust, normalizeRust(inner))
+	st, ok := recognizeStatementWith(langRust, normalizeRust(inner), cmds.rewrite)
 	if !ok {
 		// A bare `return;` still needs a statement so the analyzer sees the line.
 		return stmtDraft{line: ll.line, sinkArgs: map[string]sinkArgDraft{}, isReturn: true}, true

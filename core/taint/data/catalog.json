@@ -3747,18 +3747,32 @@
           "note": "std::process::Command; dangerous when a tainted program name or a tainted arg (.arg/.args) drives an sh -c style invocation"
         },
         {
-          "call": "arg",
+          "call": "shell_arg",
           "vuln_class": "command_injection",
           "cwe": "CWE-78",
           "rule_id": "TAINT-002",
-          "note": "Command::new(\"sh\").arg(\"-c\").arg(user) — the tainted value flows through .arg into the shell"
+          "note": "Command::new(\"sh\").arg(\"-c\").arg(user) — the tainted value flows through .arg into a shell. Synthetic call: the Rust extractor (rust_command.go) renames an .arg whose Command program is a shell, because the sink depends on the program named in Command::new, not on the .arg call."
+        },
+        {
+          "call": "shell_args",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "Command::new(\"sh\").args([\"-c\", user]) — as shell_arg, for .args"
+        },
+        {
+          "call": "arg",
+          "vuln_class": "argument_injection",
+          "cwe": "CWE-88",
+          "rule_id": "TAINT-012",
+          "note": "Command::new(\"git\").arg(user) — an argument vector reaches execve with no shell, so the value is one argument and at worst is read as an option. Not reported after a literal \"--\" in the same builder, nor when the program is a shell (shell_arg)."
         },
         {
           "call": "args",
-          "vuln_class": "command_injection",
-          "cwe": "CWE-78",
-          "rule_id": "TAINT-002",
-          "note": "Command::new(...).args([...]) with a tainted element"
+          "vuln_class": "argument_injection",
+          "cwe": "CWE-88",
+          "rule_id": "TAINT-012",
+          "note": "Command::new(...).args([...]) with a tainted element; as arg"
         },
         {
           "call": "sqlx.query",

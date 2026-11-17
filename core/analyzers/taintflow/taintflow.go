@@ -87,6 +87,10 @@ func severityForClass(class taint.VulnClass) findings.Severity {
 		// The value is not executed or interpreted where it lands; the risk
 		// is later code trusting what the session holds.
 		return findings.SeverityLow
+	case taint.VulnArgumentInjection:
+		// One argument of an argv exec, no shell: at worst read as an option.
+		// Explicitly below command injection, which reports as high.
+		return findings.SeverityMedium
 	default:
 		return findings.SeverityMedium
 	}
