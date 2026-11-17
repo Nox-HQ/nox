@@ -53,20 +53,19 @@ func writeBaselineWorkflow(t *testing.T, dir, body string) {
 
 // iacFingerprint scans dir and returns the shared IAC-018 fingerprint and how
 // many occurrences carry it, so the tests do not hard-code a digest.
-func iacFingerprint(t *testing.T, dir string) (string, int) {
+func iacFingerprint(t *testing.T, dir string) (fingerprint string, occurrences int) {
 	t.Helper()
 	res, err := nox.RunScan(dir)
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
-	fp, n := "", 0
 	for _, f := range res.Findings.Findings() {
 		if f.RuleID == "IAC-018" {
-			fp = f.Fingerprint
-			n++
+			fingerprint = f.Fingerprint
+			occurrences++
 		}
 	}
-	return fp, n
+	return fingerprint, occurrences
 }
 
 // uncovered reports how many findings the baseline at path still leaves
