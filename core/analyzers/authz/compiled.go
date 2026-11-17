@@ -10,7 +10,7 @@ import (
 	nsource "github.com/nox-hq/nox/core/source"
 )
 
-// The route readers for compiled-language servers: Go and ASP.NET Core.
+// The route readers for compiled-language servers: Go, Rust (actix-web) and ASP.NET Core.
 // They are kept apart from the JavaScript and Python readers so that a scan
 // pays nothing for them in a repository that has neither.
 
@@ -23,13 +23,14 @@ const (
 
 type compiledReaders struct {
 	goFiles   []*goFile
+	rsFiles   []*rsFile
 	csFiles   []*csFile
 	csProject map[string]string
 }
 
 // read takes a Go or C# artifact; false means the file is none of its business.
 func (c *compiledReaders) read(art discovery.Artifact, ext string, raw func() []byte) bool {
-	if ext != ".go" && ext != ".cs" {
+	if ext != ".go" && ext != ".cs" && ext != ".rs" {
 		return false
 	}
 	if art.Type != discovery.Source {
@@ -40,6 +41,12 @@ func (c *compiledReaders) read(art discovery.Artifact, ext string, raw func() []
 		return true
 	}
 	p := filepath.ToSlash(art.Path)
+	if ext == ".rs" {
+		if bytes.Contains(b, []byte("actix_web")) { // the only Rust framework read; Rocket's and Axum's macros look alike
+			c.rsFiles = append(c.rsFiles, newRSFile(p, b))
+		}
+		return true
+	}
 	if ext == ".go" {
 		c.goFiles = append(c.goFiles, newGoFile(p, b))
 		return true
@@ -59,6 +66,12 @@ func (c *compiledReaders) routes() ([]Route, []routeView) {
 		gi := newGoIndex(c.goFiles)
 		gi.run()
 		r, v := gi.routes()
+		routes, views = append(routes, r...), append(views, v...)
+	}
+	if len(c.rsFiles) > 0 {
+		ix := newRSIndex(c.rsFiles)
+		ix.run()
+		r, v := ix.routes()
 		routes, views = append(routes, r...), append(views, v...)
 	}
 	if len(c.csFiles) > 0 {
