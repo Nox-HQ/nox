@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Taint analysis ends a function's scope where the function ends in Python,
+  Ruby, Lua, PHP, Perl and PowerShell. Their extractors opened a scope at each
+  function header and never closed it, so top-level code after the first
+  function, an `if __name__ == "__main__":` block or a script's trailing
+  calls, was analysed as part of the function above it. On mojo that joined a
+  handler's `$test` to a route declaration at the end of the file. On kong it
+  hid a module-level flow from `os.getenv` into a socket connect. A PHP
+  closure now returns to the function around it rather than to nothing.
+- Perl: a bareword before a fat comma (`{name => 'x'}`) is the string Perl
+  quotes it to, not the variable `$name`, and an anonymous `sub {` whose body
+  spans lines is a scope of its own, as a JavaScript callback is. Together
+  they stop one Mojolicious handler's request parameter from reaching every
+  route declaration that names a `name` key.
+
 ## [1.68.1] - 2026-11-17
 
 ### Fixed

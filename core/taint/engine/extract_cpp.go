@@ -61,7 +61,7 @@ func extractCPP(lines []logicalLine) []unitDraft {
 		// opens no unit — its `;` was stripped by splitSemicolons, so the following
 		// brace is the reliable definition signal.
 		if name, params, ok := cppFuncHeader(trimmed); ok && cppHeaderHasBody(trimmed, lines, idx) {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 			units = append(units, u)
 			cur = u
 			funcDepth = depth

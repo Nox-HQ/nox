@@ -25,7 +25,7 @@ import "strings"
 func extractPerl(lines []logicalLine) []unitDraft {
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
-	cur := module
+	scopes := newScopeStack(module)
 	// Package globals declared with `our`. Only these join across subs; a `my`
 	// lexical never does.
 	shared := map[string]bool{}
@@ -36,13 +36,31 @@ func extractPerl(lines []logicalLine) []unitDraft {
 		for _, n := range perlOurNames(code) {
 			shared[n] = true
 		}
-		if code == "" || isPerlStructuralLine(code) {
+		if code == "" {
 			continue
 		}
+		// A sub ends at its closing brace (scopestack.go). The scope a line
+		// belongs to is fixed before its braces are counted.
+		cur := scopes.current()
 		if name, params, ok := perlSubHeader(code); ok {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 			units = append(units, u)
-			cur = u
+			scopes.pushBrace(u)
+			scopes.advance(code)
+			continue
+		}
+		// An anonymous sub whose body continues on the following lines — a
+		// route handler, a callback — gets a unit of its own, as a JavaScript
+		// callback does. Folded into the enclosing scope, one handler's
+		// `$name` was another handler's. The line itself (the call the sub is
+		// passed to) stays with the enclosing scope.
+		if perlOpensAnonSub(code) {
+			u := &unitDraft{funcName: "", headerLine: ll.line}
+			units = append(units, u)
+			scopes.pushBrace(u)
+		}
+		scopes.advance(code)
+		if isPerlStructuralLine(code) {
 			continue
 		}
 		if st, ok := perlReturnStatement(ll); ok {
@@ -125,7 +143,7 @@ func normalizePerlLine(ll logicalLine) logicalLine {
 // raw views — they stay aligned to EACH OTHER (all the recognizer needs); their
 // original alignment to the source file's byte offsets is not used after shaping.
 func normalizePerlExpr(s string) string {
-	b := []byte(s)
+	b := []byte(blankFatCommaKeys(s))
 	out := make([]byte, 0, len(b))
 	for i := 0; i < len(b); i++ {
 		// `->` method/deref operator becomes a single `.` so the dotted chain reads
@@ -146,6 +164,48 @@ func normalizePerlExpr(s string) string {
 		out = append(out, b[i])
 	}
 	return string(out)
+}
+
+// blankFatCommaKeys blanks a bareword directly before a fat comma `=>`.
+//
+// Perl quotes it: `{name => 'x'}` is the string "name", not the variable $name.
+// Sigil stripping turns $name into name as well, so without this the key read
+// as the variable, and a tainted $name anywhere in scope reached every call
+// whose arguments named a `name` key — every Mojolicious route declaration in
+// a test file. Blanked in place, so the code and raw views stay aligned.
+func blankFatCommaKeys(s string) string {
+	b := []byte(s)
+	for i := 0; i+1 < len(b); i++ {
+		if b[i] != '=' || b[i+1] != '>' {
+			continue
+		}
+		end := i
+		for end > 0 && b[end-1] == ' ' {
+			end--
+		}
+		start := end
+		for start > 0 && isPerlWordByte(b[start-1]) {
+			start--
+		}
+		if start == end {
+			continue
+		}
+		// A sigil or `::` before it makes it a variable or a qualified name,
+		// which `=>` does not quote.
+		if start > 0 && strings.IndexByte("$@%&:", b[start-1]) >= 0 {
+			continue
+		}
+		for k := start; k < end; k++ {
+			b[k] = ' '
+		}
+	}
+	return string(b)
+}
+
+// isPerlWordByte reports whether c is part of a Perl bareword. Unlike
+// isIdentPart it excludes `$`, which is a sigil here, not a name byte.
+func isPerlWordByte(c byte) bool {
+	return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
 // isPerlSigilNameStart reports whether b can follow a sigil to form a variable
@@ -199,8 +259,8 @@ func perlSubHeader(code string) (name string, params []string, ok bool) {
 	}
 	name = strings.TrimSpace(rest[:end])
 	if name == "" || !isSimpleIdent(strings.TrimRight(name, ":")) {
-		// An anonymous sub (`sub { ... }`) has no name: fold into the enclosing
-		// scope (report not-a-header) so its body statements still count.
+		// An anonymous sub (`sub { ... }`) is not a named header; see
+		// perlOpensAnonSub for how its body is scoped.
 		return "", nil, false
 	}
 	// Optional signature `($a, $b)` — sigils already stripped by normalization, so
@@ -212,6 +272,33 @@ func perlSubHeader(code string) (name string, params []string, ok bool) {
 		}
 	}
 	return name, params, true
+}
+
+// perlOpensAnonSub reports whether code holds an anonymous `sub {` whose body
+// is still open at the end of the line. A body closed on the same line stays
+// in the enclosing scope, which can only merge scopes, never split a flow.
+func perlOpensAnonSub(code string) bool {
+	for i := 0; i+3 <= len(code); i++ {
+		if code[i:i+3] != "sub" || (i > 0 && isIdentPart(code[i-1])) {
+			continue
+		}
+		j := i + 3
+		for j < len(code) && code[j] == ' ' {
+			j++
+		}
+		if j < len(code) && code[j] == '(' {
+			if c := matchParen(code, j); c > 0 {
+				j = c + 1
+			}
+			for j < len(code) && code[j] == ' ' {
+				j++
+			}
+		}
+		if j < len(code) && code[j] == '{' && braceDelta(code[j:]) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // parsePerlParams splits a Perl sub signature into bare positional parameter

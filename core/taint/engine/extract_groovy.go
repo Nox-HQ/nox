@@ -48,7 +48,7 @@ func extractGroovy(lines []logicalLine) []unitDraft {
 		// A method header opens a new unit. Recognize it before statements so its
 		// name is not mistaken for a call and its parameters become the unit's.
 		if name, params, ok := groovyMethodHeader(trimmed); ok {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 			units = append(units, u)
 			cur = u
 			methodDepth = depth

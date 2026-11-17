@@ -97,7 +97,7 @@ func extractDart(lines []logicalLine) []unitDraft {
 		// Recognized before the generic statement recognizer so the header
 		// identifiers (function name, parameter types) are never read as a call.
 		if name, params, ok := dartFuncHeader(trimmed); ok {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 			units = append(units, u)
 			cur = u
 			funDepth = depth
@@ -108,7 +108,7 @@ func extractDart(lines []logicalLine) []unitDraft {
 		// A class-like header opens a frame: its body unit collects the field
 		// initializers, and its methods join through the fields it declares.
 		if funDepth < 0 && isDartClassHead(trimmed) {
-			body := &unitDraft{funcName: ""}
+			body := &unitDraft{funcName: "", headerLine: ll.line}
 			classes = append(classes, &dartClassFrame{
 				depth: depth, start: len(units), body: body, fields: map[string]bool{},
 			})

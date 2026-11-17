@@ -89,7 +89,7 @@ func extractJavaScript(lines []logicalLine) []unitDraft {
 		// depth advances, so the body's statements (which arrive while depth exceeds
 		// openDepth) land in the new unit.
 		if isHeader {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 			// Next.js App Router: a route handler or page receives the
 			// route's dynamic segments and query as a destructured
 			// `{ params }` / `{ searchParams }` argument -- request data.

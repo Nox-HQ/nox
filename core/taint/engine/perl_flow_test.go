@@ -38,6 +38,19 @@ func TestPerlFlowEndToEnd(t *testing.T) {
 		{"clean_placeholder", "my $id = $ENV{ID};\n$dbh->do(\"SELECT * FROM u WHERE id=?\", undef, $id);\n", "TAINT-001", false},
 		{"clean_basename", "my $f = $ENV{F};\nmy $b = basename($f);\nopen(my $fh, \"<\", \"/srv/$b\");\n", "TAINT-004", false},
 		{"clean_const_cmd", "system(\"systemctl status nginx\");\n", "TAINT-002", false},
+
+		// --- scope: a fat-comma key is a string, and an anonymous sub is its
+		// own scope (mojo t/mojolicious/embedded_lite_app.t). ---
+		{"clean_fat_comma_key", "my $name = param('name');\nget('/bye' => {name => 'second'});\n", "TAINT-006", false},
+		{"clean_handler_local_stays_in_handler",
+			"get '/' => sub {\n  my $c = shift;\n  my $name = $c->param('name');\n  $c->render(text => \"Bye $name\");\n};\n\nget('/bye')->to(sub_name($name));\nmy $r = $ua->get($name);\n",
+			"TAINT-006", false},
+		{"clean_sub_ends_at_its_brace",
+			"sub handler {\n  my $test = param('test');\n}\nmy $r = $ua->get($test);\n", "TAINT-006", false},
+		{"fat_comma_value_still_read", "my $u = param('u');\nmy $r = $ua->get($u, timeout => 5);\n", "TAINT-006", true},
+		{"anon_sub_body_still_analysed",
+			"get '/f' => sub {\n  my $c = shift;\n  my $u = $c->param('u');\n  my $r = $ua->get($u);\n};\n", "TAINT-006", true},
+		{"variable_before_fat_comma_still_read", "my $k = param('k');\nmy $r = $ua->get($k => 1);\n", "TAINT-006", true},
 	}
 
 	e := NewStructuralEngine(nil)

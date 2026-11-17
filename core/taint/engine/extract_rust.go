@@ -37,7 +37,7 @@ func extractRust(lines []logicalLine) []unitDraft {
 			continue
 		}
 		if name, params, ok := rustFnHeader(trimmed); ok {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 			// Seed web-framework extractor parameters as taint sources: when a
 			// parameter's TYPE is a known untrusted-input extractor (actix
 			// `web::Query<_>`/`web::Form<_>`/`web::Json<_>`/`web::Path<_>`, axum
