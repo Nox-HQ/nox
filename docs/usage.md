@@ -391,7 +391,13 @@ four real findings and one fingerprint.
 
 So entries are *consumed*, one per finding. If you accept one of those four,
 the other three are still reported, and a fifth added next month is reported
-too. Accept them all with `nox baseline write`, which records one entry each.
+too. Accept them all with `nox baseline write`, `nox baseline add` or
+`nox baseline update`, which record one entry per occurrence. `add` and
+`update` count the way a scan does: an occurrence an existing entry already
+covers gets no second entry, so re-running either command does not grow the
+file. `nox baseline add --fingerprint fp,fp` runs no scan, so a fingerprint
+repeated in the list is the count: it tops the file up to that many entries and
+never removes any.
 
 This does not cost you the thing the v2 fingerprint was designed for: a
 baselined finding that moves up or down its file — an import shift, a `gofmt`,

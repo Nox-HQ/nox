@@ -12,8 +12,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `nox scan --output -` streams one report on stdout: `--format json`, `sarif`,
   `cdx` or `spdx`, no wrapper script or temporary directory. stdout carries only
   the document (every other line the scan prints goes to stderr), no files are
-  written, and exit codes are unchanged. Zero or several formats and `html` are
-  a usage error, exit 2 (#1107).
+  written, and exit codes are unchanged. Several formats, `all` and `html` are a
+  usage error, exit 2; with no `--format` the default, json, is streamed
+  (#1107).
+
+### Fixed
+
+- `nox baseline add` and `nox baseline update` write one entry per occurrence.
+  They kept at most one entry per fingerprint, but a scan consumes one entry per
+  finding, so when several findings shared a fingerprint (two `continue-on-error`
+  steps in one workflow, repeated taint flows in one file) only the first could
+  ever be accepted: `baseline add --rule IAC-018` reported "1 added" and line 11
+  stayed active, with nothing short of hand-editing `baseline.json` to accept
+  it. Both commands now count the way the matcher does, adding an entry for
+  each occurrence no unconsumed entry covers, so a second run still adds
+  nothing and `update` still prunes to one entry per live occurrence.
+  `add --fingerprint fp,fp` runs no scan, so a repeated fingerprint is the
+  count. (#1105)
 
 ## [1.68.1] - 2026-11-17
 
