@@ -16,8 +16,9 @@ import (
 
 // The framework readers these add.
 const (
-	ReaderGo     = "Go"
-	ReaderASPNET = "ASP.NET Core"
+	ReaderGo         = "Go"
+	ReaderGorillaMux = "gorilla/mux"
+	ReaderASPNET     = "ASP.NET Core"
 )
 
 type compiledReaders struct {
