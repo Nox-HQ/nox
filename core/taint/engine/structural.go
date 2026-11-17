@@ -236,6 +236,7 @@ func (e *StructuralEngine) Analyze(unit taint.Unit) []taint.Flow {
 //
 //nolint:gocritic // mirrors the Analyze signature, which the interface fixes.
 func (e *StructuralEngine) AnalyzeWithSuppressions(unit taint.Unit) ([]taint.Flow, []taint.Suppression) {
+	unit = e.withPropertySanitizers([]taint.Unit{unit})[0]
 	res := e.forwardPass(unit.Language, &unit, nil, nil)
 	sortFlows(res.flows)
 	sortSuppressions(res.suppressed)

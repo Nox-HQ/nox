@@ -35,6 +35,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `scan.sast.languages: {dart: off}` was silently ignored. Every extension the
   lexer reads now maps to a language, and a test fails if a language with a
   taint catalog is missing from the profile.
+- A sanitizer written as a property read now clears its class in Swift and
+  Objective-C. `URL(string: p)?.lastPathComponent`, `p.lastPathComponent`
+  and `url.lastPathComponent` are declared sanitizers in the catalog, but the
+  engine only looked for calls, so the idiomatic guard around a path was
+  reported as the traversal it prevents (visible now that `FileManager` calls
+  are sinks). Only sanitizers the catalog already lists are recognized, only
+  for the variables the property wraps, and a property it does not list
+  (`.path`, `.absoluteString`) still reports. Other languages are unchanged.
 - A Dart closure passed as an argument (`(Request r, String id) async {`) is
   now split into statements like the Express and Java ones. Its `async` marker
   hid the opening brace, so the whole handler was one statement and a tainted
