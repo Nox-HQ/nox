@@ -1824,6 +1824,8 @@ var sinkValueSlot = map[string]int{
 	"file_put_contents": 0, "file_get_contents": 0, "fopen": 0, "readfile": 0,
 	"File.WriteAllText": 0, "File.ReadAllText": 0, "File.ReadAllBytes": 0, "File.Open": 0,
 	"os.WriteFile": 0, "ioutil.WriteFile": 0, "os.OpenFile": 0, "os.Create": 0,
+	// Swift: createFile(atPath:contents:) -- the data written is not the path.
+	"createFile.atPath": 0,
 	// Not a bare `open`: Python's takes the path first, Perl's third.
 	// URLs.
 	// Python

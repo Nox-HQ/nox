@@ -5518,6 +5518,101 @@
           "rule_id": "TAINT-004"
         },
         {
+          "call": "contents.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileManager.default.contents(atPath:) reads any file at the given path; the extractor folds the atPath: label so the key matches any receiver (FileManager.default or a variable holding it)"
+        },
+        {
+          "call": "createFile.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileManager.default.createFile(atPath:contents:) creates or overwrites a file at the path"
+        },
+        {
+          "call": "removeItem.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileManager.default.removeItem(atPath:) deletes whatever the path names"
+        },
+        {
+          "call": "copyItem.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileManager.default.copyItem(atPath:toPath:) copies from or to a tainted path"
+        },
+        {
+          "call": "moveItem.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileManager.default.moveItem(atPath:toPath:) moves from or to a tainted path"
+        },
+        {
+          "call": "contentsOfDirectory.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileManager.default.contentsOfDirectory(atPath:) lists an attacker-chosen directory"
+        },
+        {
+          "call": "subpathsOfDirectory.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "createDirectory.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "attributesOfItem.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "removeItem.at",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileManager.default.removeItem(at: URL) with a URL built from tainted input (URL(fileURLWithPath: tainted))"
+        },
+        {
+          "call": "copyItem.at",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "copyItem(at:to:) with a URL built from tainted input"
+        },
+        {
+          "call": "moveItem.at",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "moveItem(at:to:) with a URL built from tainted input"
+        },
+        {
+          "call": "contentsOfDirectory.at",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "contentsOfDirectory(at:includingPropertiesForKeys:) with a URL built from tainted input"
+        },
+        {
+          "call": "createDirectory.at",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "createDirectory(at:withIntermediateDirectories:) with a URL built from tainted input"
+        },
+        {
           "call": "String.contentsOfFile",
           "vuln_class": "path_traversal",
           "cwe": "CWE-22",
@@ -5724,6 +5819,62 @@
         },
         {
           "call": "request.uri",
+          "kind": "http_query"
+        },
+        {
+          "call": "RequestBoundQuery",
+          "kind": "http_query",
+          "note": "sentinel: a shelf_router path parameter, the String parameters that follow the Request in a handler's parameter list (Router()..get('/u/<id>', (Request req, String id) {...})). Parameter names are arbitrary, so the extractor seeds this chain onto them (core/taint/engine/extract_dart.go dartRouteBound); a String parameter of a function with no Request is NOT promoted"
+        },
+        {
+          "call": "request.url",
+          "kind": "http_query",
+          "note": "shelf Request.url is the request URL relative to the handler; its queryParameters and path are attacker-controlled"
+        },
+        {
+          "call": "request.headers",
+          "kind": "http_header"
+        },
+        {
+          "call": "request.readAsString",
+          "kind": "http_body",
+          "note": "shelf Request.readAsString() returns the request body"
+        },
+        {
+          "call": "request.read",
+          "kind": "http_body"
+        },
+        {
+          "call": "request.params",
+          "kind": "http_query",
+          "note": "shelf_router path parameters read through request.params"
+        },
+        {
+          "call": "req.url",
+          "kind": "http_query"
+        },
+        {
+          "call": "req.headers",
+          "kind": "http_header"
+        },
+        {
+          "call": "req.readAsString",
+          "kind": "http_body"
+        },
+        {
+          "call": "req.read",
+          "kind": "http_body"
+        },
+        {
+          "call": "req.params",
+          "kind": "http_query"
+        },
+        {
+          "call": "req.requestedUri",
+          "kind": "http_query"
+        },
+        {
+          "call": "req.uri",
           "kind": "http_query"
         },
         {
