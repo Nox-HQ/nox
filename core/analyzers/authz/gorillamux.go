@@ -36,7 +36,7 @@ var muxStarters = setOf("HandleFunc", "Handle", "Path", "Methods")
 // muxSubrouter evaluates `PathPrefix("/p")[.Methods(..)...].Subrouter()` starting at
 // idx, returning the subrouter and the index of the Subrouter link. A PathPrefix
 // that does not end in Subrouter is not a router: the result is nil.
-func (e *goExec) muxSubrouter(r *goRouter, segs []seg, idx int) (*goRouter, int) {
+func (e *goExec) muxSubrouter(r *goRouter, segs []seg, idx int) (sub *goRouter, link int) {
 	args := splitArgs(e.file.code, segs[idx].args.start, segs[idx].args.end)
 	j := idx + 1
 	for j < len(segs) && segs[j].call && segs[j].name != "Subrouter" && muxIgnoredMatchers[segs[j].name] {

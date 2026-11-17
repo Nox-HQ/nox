@@ -46,6 +46,7 @@ import (
 // public are not actions. The path keeps the action name (`/Users/Index/{id?}`)
 // even where the pattern would let it default away.
 
+// The ASP.NET readers this file adds.
 const (
 	ReaderRazorPages = "ASP.NET Razor Pages"
 	ReaderAspNetMVC  = "ASP.NET Core MVC"
@@ -154,7 +155,7 @@ func (p *csProject) scanPagesAndConventions(f *csFile) {
 func mvcArg(f *csFile, args []span, name string, pos int) (string, bool) {
 	for _, a := range args {
 		text := f.code[a.start:a.end]
-		if m := mvcNamedArgRe.FindStringSubmatch(text); m != nil && m[1] == name {
+		if m := mvcNamedArgRe.FindStringSubmatch(text); len(m) > 1 && m[1] == name {
 			return strictLiteral(f.raw, f.code, trimSpan(f.code, span{a.start + len(m[0]), a.end}))
 		}
 	}

@@ -47,6 +47,7 @@ import (
 // guards (a `guard::Post()` narrows the resource but is not read), apps built
 // in several statements, `wrap_fn`, and a handler registered by a macro.
 
+// ReaderActix names routes read from actix-web.
 const ReaderActix = "actix-web"
 
 var (
@@ -301,7 +302,8 @@ func rsReadChain(code string, pos int) (rsChain, bool) {
 				if code[i] == '<' {
 					depth++
 				} else if code[i] == '>' {
-					if depth--; depth == 0 {
+					depth--
+					if depth == 0 {
 						i++
 						break
 					}
