@@ -25,6 +25,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is always that long. Ten public MCP server repositories give no hit. The
   directive patterns are shared with `AGENT-001` and `AGENT-004` rather than
   copied, so the three cannot drift.
+- IAC-505 reports a workflow that runs on `pull_request_target` or `workflow_run`
+  and checks out the pull request's own commit (a "pwn request"), through
+  `actions/checkout` or a reusable workflow given that ref. A job whose `if:`
+  keeps it off those triggers is not reported, nor is a `ref:` that only an
+  action reading check status receives.
+- IAC-506 reports a cache saved in such a job (`actions/cache`,
+  `actions/cache/save`, or a setup action's `cache:` input): it is saved in the
+  base branch's scope, where a release workflow restores it, the shape of the
+  May 2026 TanStack compromise.
+
+### Fixed
+
+- IAC-011 missed `pull_request_target` written in the scalar, list or sequence
+  form of `on:` (`on: pull_request_target`, `on: [push, pull_request_target]`),
+  because its pattern required a colon after the event. It now reads the
+  workflow's triggers, reports once per workflow at the trigger, and no longer
+  fires on a comment or an `event_name` check in a workflow that does not run
+  on it. Measured on the workflows of 20 large repositories: two workflows newly
+  reported (withastro/astro), none lost.
 
 ## [1.69.0] - 2026-11-18
 

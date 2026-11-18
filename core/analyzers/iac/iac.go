@@ -155,6 +155,9 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	drop := a.refuter(path)
 	out := dropArtifactsWhenAlways(results, content, drop)
 	out = relocateIAC153(path, out, content, drop)
+	// pull_request_target is decided by the workflow's triggers, not by the
+	// word appearing. See pull_request_target.go.
+	out = decidePullRequestTarget(out, content, drop)
 	out = dropMatchesInComments(path, out, content, drop)
 	out = dropKindReferences(path, out, content, drop)
 	// A seccomp profile on the pod is inherited by its containers. See

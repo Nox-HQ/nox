@@ -495,7 +495,7 @@ func builtinBaseIaCRules() []rules.Rule {
 		// =================================================================
 		{
 			id: "IAC-011", severity: findings.SeverityCritical, confidence: findings.ConfidenceMedium,
-			pattern:     `(?i)pull_request_target\s*:`,
+			pattern:     `(?i)\bpull_request_target\b`, // kept only as a trigger; see pull_request_target.go
 			description: "GitHub Actions workflow uses pull_request_target trigger",
 			cwe:         "CWE-94", keywords: []string{"pull_request_target"},
 			filePatterns: []string{"*.yml", "*.yaml"},

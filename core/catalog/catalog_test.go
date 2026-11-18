@@ -131,8 +131,11 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// TAINT-002 for Rust's Command::arg (#1106).
 	// 1506 -> 1507 adds MCP-027, a hidden instruction in an MCP tool
 	// description.
-	if got := len(cat); got != 1507 {
-		t.Errorf("Catalog() returned %d rules, want 1507", got)
+	// 1507 -> 1509 adds IAC-505 (a privileged workflow checks out the pull
+	// request's code) and IAC-506 (that job saves a cache the base branch
+	// restores).
+	if got := len(cat); got != 1509 {
+		t.Errorf("Catalog() returned %d rules, want 1509", got)
 	}
 }
 

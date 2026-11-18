@@ -22,8 +22,9 @@ func TestExpandedRules_Count(t *testing.T) {
 	// a space before the colon.
 	//
 	// 224 -> 227: IAC-502, IAC-503 and IAC-504 were added.
-	if got := len(rules); got != 227 {
-		t.Errorf("expected 227 expanded rules, got %d", got)
+	// 227 -> 229: IAC-505 and IAC-506 were added.
+	if got := len(rules); got != 229 {
+		t.Errorf("expected 229 expanded rules, got %d", got)
 	}
 }
 
