@@ -89,6 +89,9 @@ func Transitive(dir, pkg string) bool {
 }
 
 type lockEntry struct {
+	// Name is set on workspace members, which the lockfile keys by their
+	// directory rather than by a node_modules path.
+	Name                 string            `json:"name"`
 	Version              string            `json:"version"`
 	Dependencies         map[string]string `json:"dependencies"`
 	OptionalDependencies map[string]string `json:"optionalDependencies"`

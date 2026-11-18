@@ -37,6 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- An online scan of an npm workspace whose `package-lock.json` lists a member
+  under a short directory (argotorg/sourcify's `ui`) panicked while building
+  dependency remediation advice (`slice bounds out of range [12:2]` in
+  `npmtree`) and wrote no report. A workspace member is keyed by its directory,
+  not a `node_modules/` path; its name now comes from the entry's `name`.
+  Longer member keys did not crash but were read under a wrong name
+  (`packages/lib-sourcify` as `-sourcify`).
 - `MCP-009`, `MCP-010` and `MCP-011` never saw a payload in a real tool
   description. They claim "MCP tool metadata contains ...", but a match inside a
   string over 96 bytes is dropped as a data blob, and a poisoned docstring or
