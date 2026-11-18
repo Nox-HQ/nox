@@ -540,6 +540,7 @@ var classPhrases = map[string]string{
 	"ldap_injection":         "Untrusted input reaches an LDAP query (LDAP injection)",
 	"xxe":                    "Untrusted XML is parsed with external entities enabled (XXE)",
 	"trust_boundary":         "Untrusted input crosses a trust boundary unchecked",
+	"argument_injection":     "Untrusted input is passed as an argument to a program (argument injection)",
 }
 
 const maxTitle = 90

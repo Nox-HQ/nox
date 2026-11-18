@@ -7,7 +7,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `nox scan --output -` streams one report on stdout: `--format json`, `sarif`,
+  `cdx` or `spdx`, no wrapper script or temporary directory. stdout carries only
+  the document (every other line the scan prints goes to stderr), no files are
+  written, and exit codes are unchanged. Several formats, `all` and `html` are a
+  usage error, exit 2; with no `--format` the default, json, is streamed
+  (#1107).
+
+- Rust: argument injection is its own class, `TAINT-012` (CWE-88, medium).
+  A value passed to `Command::arg`/`.args` reaches `execve` as one argument
+  with no shell, so at worst it is read as an option; it was reported as
+  `TAINT-002` command injection (high). A literal `"--"` earlier in the same
+  builder (`.arg("--").arg(x)`, `.args(["log", "--", x])`, or a `cmd.arg("--")`
+  on a binding) refutes it. A shell as the program is still `TAINT-002`:
+  `Command::new("sh").arg("-c").arg(x)` and `bash`/`/bin/sh`/`env` likewise,
+  the same limit the argv exemption has in Python, JavaScript and Go (#1106).
+
+- Dart shelf handlers are taint sources. `request.url.queryParameters`,
+  `request.headers[...]`, `await request.readAsString()` / `request.read()`
+  and `request.params` (and the same through a `req` alias) reach path,
+  command and SQL sinks, and so do the shelf_router path parameters: the
+  `String` parameters after the `Request` in `(Request req, String id)`, in an
+  inline `router.get('/u/<id>', ...)` handler or a named one. A `String`
+  parameter of a function with no `Request` is not promoted. Before this, only
+  `request.requestedUri` was read; on a handler of five reads, one was found.
+- Swift `FileManager` path sinks (CWE-22): `contents`, `createFile`,
+  `removeItem`, `copyItem`, `moveItem`, `contentsOfDirectory`,
+  `subpathsOfDirectory`, `createDirectory` and `attributesOfItem`, in both the
+  `atPath:` form and the `at: URL` form, on `FileManager.default` or any
+  variable holding it. A URL built with `URL(fileURLWithPath: tainted)` flows
+  into the `at:` forms. The catalog's `FileManager.contents` key could never
+  match, because the call chain is `FileManager.default.contents`; none of
+  these calls was a sink.
+
 ### Fixed
+
+- `nox baseline add` and `nox baseline update` write one entry per occurrence.
+  They kept at most one entry per fingerprint, but a scan consumes one entry per
+  finding, so when several findings shared a fingerprint (two `continue-on-error`
+  steps in one workflow, repeated taint flows in one file) only the first could
+  ever be accepted: `baseline add --rule IAC-018` reported "1 added" and line 11
+  stayed active, with nothing short of hand-editing `baseline.json` to accept
+  it. Both commands now count the way the matcher does, adding an entry for
+  each occurrence no unconsumed entry covers, so a second run still adds
+  nothing and `update` still prunes to one entry per live occurrence.
+  `add --fingerprint fp,fp` runs no scan, so a repeated fingerprint is the
+  count. (#1105)
+
+- Rust: a `&Path` parameter is not an HTTP query. The axum `Path<T>` extractor
+  and `std::path::Path` share a name, and any parameter typed `Path`, `Json`,
+  `Query` or `Form` was seeded as a request source, so `git -C <root>` in a
+  CLI with no server read "http_query via root" at error level. A request
+  extractor always names the type it decodes (`Path<u32>`, `web::Query<P>`);
+  only those are sources now. `env::args` and `env::var` stay `argv` and `env`,
+  and still reach command sinks as `sys.argv` and `os.Args` do in Python and Go
+  (#1106).
+- Rust: `Command::new("git")` is not a tainted executable, and `.arg("-C")`
+  is not charged with every variable the statement reads. A call that names no
+  variable was reported for whatever else its line mentioned; it now reaches
+  no sink (#1106).
+
+- `meta.sast_languages` named 15 languages and left out Scala, Elixir, Dart,
+  Lua, Clojure, Groovy, Perl and PowerShell, each of which has a taint catalog
+  (and Kotlin script, Python stubs, `.phtml`, `.bash` and the other source
+  extensions the lexer reads). A report therefore said nothing about them, and
+  `scan.sast.languages: {dart: off}` was silently ignored. Every extension the
+  lexer reads now maps to a language, and a test fails if a language with a
+  taint catalog is missing from the profile.
+- A sanitizer written as a property read now clears its class in Swift and
+  Objective-C. `URL(string: p)?.lastPathComponent`, `p.lastPathComponent`
+  and `url.lastPathComponent` are declared sanitizers in the catalog, but the
+  engine only looked for calls, so the idiomatic guard around a path was
+  reported as the traversal it prevents (visible now that `FileManager` calls
+  are sinks). Only sanitizers the catalog already lists are recognized, only
+  for the variables the property wraps, and a property it does not list
+  (`.path`, `.absoluteString`) still reports. Other languages are unchanged.
+- A Dart closure passed as an argument (`(Request r, String id) async {`) is
+  now split into statements like the Express and Java ones. Its `async` marker
+  hid the opening brace, so the whole handler was one statement and a tainted
+  value anywhere in it reached every sink in it.
 
 - AUTHN-001 no longer leads on three kinds of route whose claim was false. A Go
   router served only on a loopback address is not reachable by a caller off the

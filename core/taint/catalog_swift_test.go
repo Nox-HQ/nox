@@ -21,6 +21,21 @@ func TestSwiftCatalogSinks(t *testing.T) {
 		{"Data.contentsOf path", "Data.contentsOf", VulnPathTraversal, "CWE-22", "TAINT-004"},
 		{"dataTask.with ssrf", "dataTask.with", VulnSSRF, "CWE-918", "TAINT-006"},
 		{"unarchiveObject.with deser", "unarchiveObject.with", VulnUnsafeDeserialization, "CWE-502", "TAINT-005"},
+		// FileManager path calls, keyed on the folded label so any receiver matches.
+		{"contents(atPath:)", "contents.atPath", VulnPathTraversal, "CWE-22", "TAINT-004"},
+		{"createFile(atPath:)", "createFile.atPath", VulnPathTraversal, "CWE-22", "TAINT-004"},
+		{"removeItem(atPath:)", "removeItem.atPath", VulnPathTraversal, "CWE-22", "TAINT-004"},
+		{"copyItem(atPath:)", "copyItem.atPath", VulnPathTraversal, "CWE-22", "TAINT-004"},
+		{"moveItem(atPath:)", "moveItem.atPath", VulnPathTraversal, "CWE-22", "TAINT-004"},
+		{"contentsOfDirectory(atPath:)", "contentsOfDirectory.atPath", VulnPathTraversal, "CWE-22", "TAINT-004"},
+		{"subpathsOfDirectory(atPath:)", "subpathsOfDirectory.atPath", VulnPathTraversal, "CWE-22", "TAINT-004"},
+		{"createDirectory(atPath:)", "createDirectory.atPath", VulnPathTraversal, "CWE-22", "TAINT-004"},
+		{"attributesOfItem(atPath:)", "attributesOfItem.atPath", VulnPathTraversal, "CWE-22", "TAINT-004"},
+		{"removeItem(at:)", "removeItem.at", VulnPathTraversal, "CWE-22", "TAINT-004"},
+		{"copyItem(at:)", "copyItem.at", VulnPathTraversal, "CWE-22", "TAINT-004"},
+		{"moveItem(at:)", "moveItem.at", VulnPathTraversal, "CWE-22", "TAINT-004"},
+		{"contentsOfDirectory(at:)", "contentsOfDirectory.at", VulnPathTraversal, "CWE-22", "TAINT-004"},
+		{"createDirectory(at:)", "createDirectory.at", VulnPathTraversal, "CWE-22", "TAINT-004"},
 		{"loadHTMLString xss", "loadHTMLString", VulnXSS, "CWE-79", "TAINT-003"},
 	}
 	for _, tt := range tests {

@@ -6,6 +6,7 @@ package report
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"time"
@@ -493,6 +494,18 @@ func (r *JSONReporter) Generate(fs *findings.FindingSet) ([]byte, error) {
 	report.Meta.AdvisoryLookup = r.AdvisoryLookup
 
 	return json.MarshalIndent(report, "", "  ")
+}
+
+// Write generates the JSON report and writes it to w. Nothing is written when
+// generation fails, so a stream never holds half a document. WriteToFile uses
+// the same Generate, so file and stream carry the same bytes.
+func (r *JSONReporter) Write(w io.Writer, fs *findings.FindingSet) error {
+	data, err := r.Generate(fs)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
 }
 
 // WriteToFile generates the JSON report and writes it to the specified path

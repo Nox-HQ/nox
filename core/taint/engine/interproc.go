@@ -119,6 +119,7 @@ func (e *StructuralEngine) AnalyzeFileWithSuppressions(units []taint.Unit) ([]ta
 		return nil, nil
 	}
 	lang := units[0].Language
+	units = e.withPropertySanitizers(units)
 
 	summaries := e.computeSummaries(lang, units)
 
