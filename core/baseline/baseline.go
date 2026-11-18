@@ -141,6 +141,27 @@ func (b *Baseline) live(fingerprint string) []*Entry {
 	return out
 }
 
+// Covered returns how many unexpired entries accept fingerprint.
+func (b *Baseline) Covered(fingerprint string) int {
+	return len(b.live(fingerprint))
+}
+
+// Uncovered returns the indexes into current of the findings that no unconsumed
+// entry accepts, assigning entries to findings exactly as a Matcher does. It is
+// the add side of the counting rule: accepting those findings, one new entry
+// each, leaves nothing reported and nothing spare. An entry that already covers
+// an occurrence is never duplicated, so adding is idempotent.
+func (b *Baseline) Uncovered(current []findings.Finding) []int {
+	m := b.NewMatcher()
+	var out []int
+	for i := range current {
+		if m.Match(&current[i]) == nil {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
 // Add appends an entry to the baseline and updates the index.
 func (b *Baseline) Add(e *Entry) {
 	if e == nil {

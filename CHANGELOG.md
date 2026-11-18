@@ -9,7 +9,113 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `nox scan --output -` streams one report on stdout: `--format json`, `sarif`,
+  `cdx` or `spdx`, no wrapper script or temporary directory. stdout carries only
+  the document (every other line the scan prints goes to stderr), no files are
+  written, and exit codes are unchanged. Several formats, `all` and `html` are a
+  usage error, exit 2; with no `--format` the default, json, is streamed
+  (#1107).
+
+- Rust: argument injection is its own class, `TAINT-012` (CWE-88, medium).
+  A value passed to `Command::arg`/`.args` reaches `execve` as one argument
+  with no shell, so at worst it is read as an option; it was reported as
+  `TAINT-002` command injection (high). A literal `"--"` earlier in the same
+  builder (`.arg("--").arg(x)`, `.args(["log", "--", x])`, or a `cmd.arg("--")`
+  on a binding) refutes it. A shell as the program is still `TAINT-002`:
+  `Command::new("sh").arg("-c").arg(x)` and `bash`/`/bin/sh`/`env` likewise,
+  the same limit the argv exemption has in Python, JavaScript and Go (#1106).
+
+- Dart shelf handlers are taint sources. `request.url.queryParameters`,
+  `request.headers[...]`, `await request.readAsString()` / `request.read()`
+  and `request.params` (and the same through a `req` alias) reach path,
+  command and SQL sinks, and so do the shelf_router path parameters: the
+  `String` parameters after the `Request` in `(Request req, String id)`, in an
+  inline `router.get('/u/<id>', ...)` handler or a named one. A `String`
+  parameter of a function with no `Request` is not promoted. Before this, only
+  `request.requestedUri` was read; on a handler of five reads, one was found.
+- Swift `FileManager` path sinks (CWE-22): `contents`, `createFile`,
+  `removeItem`, `copyItem`, `moveItem`, `contentsOfDirectory`,
+  `subpathsOfDirectory`, `createDirectory` and `attributesOfItem`, in both the
+  `atPath:` form and the `at: URL` form, on `FileManager.default` or any
+  variable holding it. A URL built with `URL(fileURLWithPath: tainted)` flows
+  into the `at:` forms. The catalog's `FileManager.contents` key could never
+  match, because the call chain is `FileManager.default.contents`; none of
+  these calls was a sink.
+
 - **Four route gaps closed: gorilla/mux, actix-web, Razor Pages and conventionally routed MVC.** Each was probed on the built binary against a small realistic project first and read no route at all. gorilla/mux: `r.HandleFunc("/x", h).Methods("POST", "PUT")` (one route per verb, ALL with no `Methods`), `r.Handle`, the builder form `r.Methods("GET").Path("/x").HandlerFunc(h)` and `r.PathPrefix("/api").Subrouter()` prefixes, read by the Go reader's interpreter, so a `*mux.Router` handed to a function is followed. `Use(mw)` covers the routes of its router and of its subrouters whatever the order, because mux applies it when a request matches; a subrouter's `Use` covers neither its sibling nor its parent, and `Methods` or a path that is not a literal is skipped, not guessed. actix-web (Rust): `#[get("/x")]`/`#[post]`/`#[route("/x", method = "GET")]` handlers that a `.service(handler)` registers (an unregistered handler answers nothing), `web::resource("/x").route(web::post().to(h))`, `.route("/x", web::get().to(h))`, nested `web::scope("/api")` prefixes, tuples of services and `.configure(f)`; `.wrap(mw)` on the App, a scope or a resource, a `wrap = "Name"` attribute argument, an auth extractor (`BearerAuth`, `AuthenticatedUser`, `Identity` but not `Option<Identity>`) or a 401/403 in the handler authenticates, a `Logger` does not, and a configure function nothing calls is listed but never a lead. Only files that name `actix_web` are read, so Rocket's look-alike macros are not routes, and a handler name two modules share is not guessed. ASP.NET Razor Pages: `Pages/**/*.cshtml` whose first directive is `@page` (the path under `Pages`, an `Index` as its directory, `Areas/X/Pages` under `/X`, a rooted `@page "/x"` replacing it and a relative one appended) with the public `OnGet`/`OnPost`/`OnPut`/`OnDelete`/`OnPatch[Handler][Async]` methods of its PageModel; `[Authorize]` on the model, a base model or a handler, `@attribute [Authorize]`, and `options.Conventions.AuthorizeFolder`/`AuthorizePage`/`AuthorizeAreaFolder` authenticate (a folder covers itself and what is under it, never a folder that shares a prefix), `[AllowAnonymous]` and `AllowAnonymousTo*` make a page public on purpose, and `MapRazorPages().RequireAuthorization()`, a fallback policy, a base model outside the tree or a model the project does not declare leave it unseen. A view with no `@page`, `@page` in a Razor comment, `@pageTitle`, a page outside `Pages`, a private or `[NonHandler]` method are not routes. Conventional MVC: `MapControllerRoute(pattern: ...)`, `MapDefaultControllerRoute()`, `MapAreaControllerRoute` and `UseMvc(r => r.MapRoute(...))` assign a path to each public action of a controller with no attribute route (`/Users/Delete/{id?}`), `[HttpPost]` narrowing the verb and a template, `[Route]`, `[NonAction]`, a static, protected or overriding method, an `[ApiController]`, an internal or abstract class and an area controller under a non-area pattern leaving it out. Routes carry the new readers' names (`gorilla/mux`, `actix-web`, `ASP.NET Razor Pages`, `ASP.NET Core MVC`), join the route table, AUTHN-001 and `nox model`, and the "checks completed" line names them.
+
+### Fixed
+
+- `nox baseline add` and `nox baseline update` write one entry per occurrence.
+  They kept at most one entry per fingerprint, but a scan consumes one entry per
+  finding, so when several findings shared a fingerprint (two `continue-on-error`
+  steps in one workflow, repeated taint flows in one file) only the first could
+  ever be accepted: `baseline add --rule IAC-018` reported "1 added" and line 11
+  stayed active, with nothing short of hand-editing `baseline.json` to accept
+  it. Both commands now count the way the matcher does, adding an entry for
+  each occurrence no unconsumed entry covers, so a second run still adds
+  nothing and `update` still prunes to one entry per live occurrence.
+  `add --fingerprint fp,fp` runs no scan, so a repeated fingerprint is the
+  count. (#1105)
+
+- Rust: a `&Path` parameter is not an HTTP query. The axum `Path<T>` extractor
+  and `std::path::Path` share a name, and any parameter typed `Path`, `Json`,
+  `Query` or `Form` was seeded as a request source, so `git -C <root>` in a
+  CLI with no server read "http_query via root" at error level. A request
+  extractor always names the type it decodes (`Path<u32>`, `web::Query<P>`);
+  only those are sources now. `env::args` and `env::var` stay `argv` and `env`,
+  and still reach command sinks as `sys.argv` and `os.Args` do in Python and Go
+  (#1106).
+- Rust: `Command::new("git")` is not a tainted executable, and `.arg("-C")`
+  is not charged with every variable the statement reads. A call that names no
+  variable was reported for whatever else its line mentioned; it now reaches
+  no sink (#1106).
+
+- `meta.sast_languages` named 15 languages and left out Scala, Elixir, Dart,
+  Lua, Clojure, Groovy, Perl and PowerShell, each of which has a taint catalog
+  (and Kotlin script, Python stubs, `.phtml`, `.bash` and the other source
+  extensions the lexer reads). A report therefore said nothing about them, and
+  `scan.sast.languages: {dart: off}` was silently ignored. Every extension the
+  lexer reads now maps to a language, and a test fails if a language with a
+  taint catalog is missing from the profile.
+- A sanitizer written as a property read now clears its class in Swift and
+  Objective-C. `URL(string: p)?.lastPathComponent`, `p.lastPathComponent`
+  and `url.lastPathComponent` are declared sanitizers in the catalog, but the
+  engine only looked for calls, so the idiomatic guard around a path was
+  reported as the traversal it prevents (visible now that `FileManager` calls
+  are sinks). Only sanitizers the catalog already lists are recognized, only
+  for the variables the property wraps, and a property it does not list
+  (`.path`, `.absoluteString`) still reports. Other languages are unchanged.
+- A Dart closure passed as an argument (`(Request r, String id) async {`) is
+  now split into statements like the Express and Java ones. Its `async` marker
+  hid the opening brace, so the whole handler was one statement and a tainted
+  value anywhere in it reached every sink in it.
+
+- AUTHN-001 no longer leads on three kinds of route whose claim was false. A Go
+  router served only on a loopback address is not reachable by a caller off the
+  host: gitea's `servePprof` mux (`/debug/pprof/*`, `/debug/fgprof` on
+  `localhost:6060`) gave six leads. A router counts as loopback-only when every
+  serve of it the reader sees (`http.ListenAndServe(addr, mux)`, an
+  `http.Server{Addr, Handler}` literal) names a literal `localhost`, `127.0.0.0/8`
+  or `::1` host; one serve on `:6060`, `0.0.0.0`, an address read from
+  configuration, or none at all keeps the lead. A route that serves a
+  single-page app's HTML shell is the same page for every caller and carries no
+  record, so it is not "something an anonymous caller should not reach": Rails
+  routes to an empty action that a catch-all (`get '/app/*params', to:
+  'dashboard#index'`) also serves, where no callback for the action reads
+  `params` (Chatwoot's 12 `dashboard#index` leads), and an Express `GET`
+  handler whose whole body is `res.sendFile` of a fixed `.html` file; a
+  catch-all that is not a `GET`, an action that loads a record, a callback that
+  reads `params`, and a `sendFile` path built from the request are still read.
+  ASP.NET controllers behind an IdentityServer or JWT-bearer host are no longer
+  leads when the guard is written in a form the reader missed: `AddFallbackPolicy`,
+  `var e = app.MapControllers(); e.RequireAuthorization();`, and controllers in
+  a class library whose host (another project in the tree, one that builds a web
+  host or maps controllers) has a fallback policy, a global `AuthorizeFilter` or
+  `MapControllers().RequireAuthorization()`. `AddIdentityServer()`, `AddJwtBearer`,
+  `UseAuthentication()`, `UseAuthorization()` and a default policy are still not a
+  guard, a guard in a project that is not a host does not count, and an unguarded
+  host's own controllers are still reported.
 
 ## [1.68.1] - 2026-11-17
 

@@ -17,9 +17,11 @@ type csExec struct {
 	code     string
 	vars     map[string]*csRouter
 	builders map[string]bool
-	ret      *csRouter
-	opaque   bool
-	depth    int
+	// ctlVars: variables that hold a MapControllers() convention builder.
+	ctlVars map[string]bool
+	ret     *csRouter
+	opaque  bool
+	depth   int
 }
 
 func (ix *csIndex) minimalRoutes() {
@@ -143,8 +145,24 @@ func (e *csExec) statement(s span) {
 		e.assign(name, rhs)
 		return
 	}
+	e.requireOnControllers(s)
 	e.chain(s)
 	e.scanCalls(s)
+}
+
+// requireOnControllers reads `endpoints.RequireAuthorization()` where endpoints
+// holds the builder MapControllers() returned: the convention applies to every
+// controller action, whichever statement it is written in.
+func (e *csExec) requireOnControllers(s span) {
+	segs, ok := parseChain(e.code, s)
+	if !ok || len(segs) < 2 || !e.ctlVars[segs[0].name] {
+		return
+	}
+	for _, sg := range segs[1:] {
+		if sg.call && sg.name == "RequireAuthorization" {
+			e.p.ctlGuard = true
+		}
+	}
 }
 
 func (e *csExec) assign(name string, rhs span) {
@@ -153,11 +171,23 @@ func (e *csExec) assign(name string, rhs span) {
 		e.builders[name] = true
 		return
 	}
+	if segs, ok := parseChain(e.code, rhs); ok && len(segs) > 1 && csMapsControllers(segs[len(segs)-1]) {
+		if e.ctlVars == nil {
+			e.ctlVars = map[string]bool{}
+		}
+		e.ctlVars[name] = true
+	} else {
+		delete(e.ctlVars, name)
+	}
 	if r := e.chain(rhs); r != nil {
 		e.vars[name] = r
 		return
 	}
 	delete(e.vars, name)
+}
+
+func csMapsControllers(sg seg) bool {
+	return sg.call && (sg.name == "MapControllers" || sg.name == "MapDefaultControllerRoute")
 }
 
 // chain executes a call chain and returns the route builder it ends on.

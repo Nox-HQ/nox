@@ -71,7 +71,13 @@ type routeView struct {
 	// permission class, @login_not_required). That is intent, not absence, so
 	// it is never a missing-authentication lead.
 	declaredPublic bool
-	framework      string
+	// loopbackOnly: the program serves the route's router only on a loopback
+	// address, so no caller off the host can reach it (see listener.go).
+	loopbackOnly bool
+	// spaShell: the route serves a single-page app's HTML shell, a static page
+	// the same for every caller; the data lives behind the app's API routes.
+	spaShell  bool
+	framework string
 }
 
 // ---- comment stripping ----
@@ -216,7 +222,7 @@ func nonProductionPath(p string) bool {
 // lead that records it.
 func missingAuthLead(v routeView) (Lead, bool) {
 	r := v.route
-	if r.Authn != "" || r.Authz != "" || v.guardUnseen || v.declaredPublic || nonProductionPath(r.FilePath) {
+	if r.Authn != "" || r.Authz != "" || v.guardUnseen || v.declaredPublic || v.loopbackOnly || v.spaShell || nonProductionPath(r.FilePath) {
 		return Lead{}, false
 	}
 	if r.Path == "" || r.Path == "/" || strings.Contains(r.Path, "*") && len(pathSegments(r.Path)) == 0 {

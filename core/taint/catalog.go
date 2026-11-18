@@ -53,6 +53,11 @@ const (
 	VulnLDAPInjection         VulnClass = "ldap_injection"         // CWE-90
 	VulnXXE                   VulnClass = "xxe"                    // CWE-611
 	VulnTrustBoundary         VulnClass = "trust_boundary"         // CWE-501
+	// VulnArgumentInjection is a tainted value passed as one argument of an
+	// argv-vector exec (no shell): at worst it is read as an option, not as
+	// a command line. Reported below command injection, which a shell
+	// program as the executable still is.
+	VulnArgumentInjection VulnClass = "argument_injection" // CWE-88
 )
 
 // vulnClasses is every class above, in a fixed order. It is the one list: a
@@ -65,7 +70,7 @@ var vulnClasses = []VulnClass{
 	VulnSSTI, VulnPathTraversal, VulnSSRF, VulnUnsafeDeserialization,
 	VulnPromptInjection, VulnOpenRedirect, VulnXPathInjection, VulnLDAPInjection,
 	VulnXXE,
-	VulnTrustBoundary,
+	VulnTrustBoundary, VulnArgumentInjection,
 }
 
 // AllVulnClasses returns every vulnerability class, in a fixed order.

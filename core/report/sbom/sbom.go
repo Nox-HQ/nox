@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -331,6 +332,18 @@ func (r *CycloneDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, 
 	return json.MarshalIndent(doc, "", "  ")
 }
 
+// Write generates the CycloneDX report and writes it to w. Nothing is written when
+// generation fails, so a stream never holds half a document. WriteToFile uses
+// the same Generate, so file and stream carry the same bytes.
+func (r *CycloneDXReporter) Write(w io.Writer, inventory *deps.PackageInventory) error {
+	data, err := r.Generate(inventory)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
+}
+
 // WriteToFile generates the CycloneDX report and writes it to the given path.
 func (r *CycloneDXReporter) WriteToFile(inventory *deps.PackageInventory, path string) error {
 	data, err := r.Generate(inventory)
@@ -550,6 +563,18 @@ func (r *SPDXReporter) Generate(inventory *deps.PackageInventory) ([]byte, error
 	}
 
 	return json.MarshalIndent(doc, "", "  ")
+}
+
+// Write generates the SPDX report and writes it to w. Nothing is written when
+// generation fails, so a stream never holds half a document. WriteToFile uses
+// the same Generate, so file and stream carry the same bytes.
+func (r *SPDXReporter) Write(w io.Writer, inventory *deps.PackageInventory) error {
+	data, err := r.Generate(inventory)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
 }
 
 // WriteToFile generates the SPDX report and writes it to the given path.

@@ -94,6 +94,9 @@ func TestRazorPagesMissingAuthenticationLeads(t *testing.T) {
 		want  []string
 	}{
 		{"an admin page with nothing in front", adminPage("", get), []string{"GET /Admin/Users"}},
+		// MapControllers().RequireAuthorization() guards the endpoints
+		// MapControllers maps; pages are mapped by MapRazorPages.
+		{"a controller guard does not guard pages", merge(adminPage("", get), map[string]string{"Program.cs": "var app = WebApplication.Create(args);\napp.MapControllers().RequireAuthorization();\napp.MapRazorPages();\n"}), []string{"GET /Admin/Users"}},
 		{"a delete handler", rzPage("Pages/Posts/Remove", "@page", "RemoveModel", pageModel("RemoveModel", "", "    public void OnDelete(int id) { }")), []string{"DELETE /Posts/Remove"}},
 		{"Authorize on a sibling page", merge(adminPage("", get),
 			rzPage("Pages/Admin/Other", "@page", "OtherModel", pageModel("OtherModel", "[Authorize]\n", get))), []string{"GET /Admin/Users"}},
@@ -258,6 +261,8 @@ func TestAspNetConventionalMissingAuthenticationLeads(t *testing.T) {
 	}{
 		{"a delete action with nothing in front", merge(mvcCtl("UsersController", "public class UsersController : Controller\n{\n    [HttpDelete]\n    public IActionResult Remove(int id) => Ok();\n}"), mvcProgram(defaultRoute)),
 			[]string{"DELETE /Users/Remove/{id?}"}},
+		{"a Razor Pages guard does not guard controllers", merge(mvcCtl("UsersController", "public class UsersController : Controller\n{\n    [HttpDelete]\n    public IActionResult Remove(int id) => Ok();\n}"),
+			mvcProgram("app.MapRazorPages().RequireAuthorization();\n"+defaultRoute)), []string{"DELETE /Users/Remove/{id?}"}},
 		{"an admin controller", merge(mvcCtl("AdminController", "public class AdminController : Controller\n{\n    public IActionResult Dashboard() => View();\n}"), mvcProgram(defaultRoute)),
 			[]string{"ALL /Admin/Dashboard/{id?}"}},
 		{"Authorize on a sibling controller", merge(

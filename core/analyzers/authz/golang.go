@@ -87,6 +87,9 @@ type goRoot struct {
 	wrap string
 	// late: Echo-level Use, which Echo applies when a request arrives.
 	late string
+	// loopback / exposed: where the program serves this router. Loopback-only
+	// means every serve the reader saw names a loopback host; see listener.go.
+	loopback, exposed bool
 }
 
 // goRouter is one router, group or sub-router.
@@ -477,6 +480,7 @@ func (e *goExec) statement(s span) {
 		}
 		return
 	}
+	e.bindListeners(s)
 	text := code[s.start:s.end]
 	if m := goAssignRe.FindStringSubmatchIndex(text); m != nil {
 		name := strings.Join(strings.Fields(text[m[2]:m[3]]), "")
@@ -1107,7 +1111,8 @@ func (ix *goIndex) routes() ([]Route, []routeView) {
 		}
 		rt := Route{Method: rec.method, Path: p, FilePath: rec.file.path, Line: rec.line, Authn: authn, Authz: authz, Reader: reader}
 		routes = append(routes, rt)
-		views = append(views, routeView{route: rt, guardUnseen: opaque, framework: "go"})
+		root := rec.rt.root
+		views = append(views, routeView{route: rt, guardUnseen: opaque, loopbackOnly: root.loopback && !root.exposed, framework: "go"})
 	}
 	return routes, views
 }

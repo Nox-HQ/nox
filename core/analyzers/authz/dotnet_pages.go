@@ -104,7 +104,7 @@ func newRazorPage(p, project string, raw []byte) *razorPage {
 // scanPagesAndConventions reads what a file declares for Razor Pages and MVC.
 func (p *csProject) scanPagesAndConventions(f *csFile) {
 	if razorRequireRe.MatchString(f.code) {
-		p.ctlGuard = true
+		p.pagesGuard = true
 	}
 	for _, m := range razorConvRe.FindAllStringSubmatch(f.sans, -1) {
 		c := razorConv{text: compact(m[0][1:]), anon: strings.HasPrefix(m[1], "AllowAnonymous"), folder: strings.HasSuffix(m[1], "Folder")}
@@ -241,7 +241,10 @@ func (ix *csIndex) razorPage(pg *razorPage) {
 		external = e.external
 	}
 	guardedFor := func(ev csEvidence) bool {
-		return (p.guarded || p.ctlGuard || opaque || external) && !ev.public
+		// A page is guarded by a project-wide policy or by
+		// MapRazorPages().RequireAuthorization(); MapControllers' guard covers
+		// only what MapControllers maps.
+		return (p.guarded || p.pagesGuard || opaque || external) && !ev.public
 	}
 	emit := func(file string, line int, verb string, ev csEvidence) {
 		rt := Route{Method: verb, Path: route, FilePath: file, Line: line, Authn: ev.authn, Authz: ev.authz, Reader: ReaderRazorPages}
@@ -378,7 +381,7 @@ func (ix *csIndex) conventional(p *csProject, c *csClass, e csEffective) {
 			ev.authn = inlineAuthLabel
 		}
 		opaque := e.external && ev.authn == "" && ev.authz == "" && !ev.public
-		guarded := (p.guarded || p.ctlGuard || opaque) && !ev.public
+		guarded := (p.guarded || p.ctlGuard || p.hostGuard || opaque) && !ev.public
 		line := lineAt(f.lineStarts, m.declStart)
 		if len(m.attrs) > 0 {
 			line = lineAt(f.lineStarts, m.attrs[0].start)
