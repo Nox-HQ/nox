@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   usage error, exit 2; with no `--format` the default, json, is streamed
   (#1107).
 
+- Rust: argument injection is its own class, `TAINT-012` (CWE-88, medium).
+  A value passed to `Command::arg`/`.args` reaches `execve` as one argument
+  with no shell, so at worst it is read as an option; it was reported as
+  `TAINT-002` command injection (high). A literal `"--"` earlier in the same
+  builder (`.arg("--").arg(x)`, `.args(["log", "--", x])`, or a `cmd.arg("--")`
+  on a binding) refutes it. A shell as the program is still `TAINT-002`:
+  `Command::new("sh").arg("-c").arg(x)` and `bash`/`/bin/sh`/`env` likewise,
+  the same limit the argv exemption has in Python, JavaScript and Go (#1106).
+
 ### Fixed
 
 - `nox baseline add` and `nox baseline update` write one entry per occurrence.
@@ -29,6 +38,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nothing and `update` still prunes to one entry per live occurrence.
   `add --fingerprint fp,fp` runs no scan, so a repeated fingerprint is the
   count. (#1105)
+
+- Rust: a `&Path` parameter is not an HTTP query. The axum `Path<T>` extractor
+  and `std::path::Path` share a name, and any parameter typed `Path`, `Json`,
+  `Query` or `Form` was seeded as a request source, so `git -C <root>` in a
+  CLI with no server read "http_query via root" at error level. A request
+  extractor always names the type it decodes (`Path<u32>`, `web::Query<P>`);
+  only those are sources now. `env::args` and `env::var` stay `argv` and `env`,
+  and still reach command sinks as `sys.argv` and `os.Args` do in Python and Go
+  (#1106).
+- Rust: `Command::new("git")` is not a tainted executable, and `.arg("-C")`
+  is not charged with every variable the statement reads. A call that names no
+  variable was reported for whatever else its line mentioned; it now reaches
+  no sink (#1106).
 
 ## [1.68.1] - 2026-11-17
 

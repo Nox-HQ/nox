@@ -587,6 +587,7 @@ var needsByClass = map[string]string{
 	"ldap_injection":         "A change to the query: escape the input for LDAP filters, or use the library's parameter form.",
 	"xxe":                    "A change to the parser setup: turn off external entities and DTD loading.",
 	"trust_boundary":         "A decision from you: where this input is validated before it is trusted, and what it is checked against.",
+	"argument_injection":     "A change to the call: put a literal \"--\" before the value so the program reads it as an operand, or validate that it does not start with \"-\".",
 }
 
 func ruleIDs(ff []findings.Finding, fps []string) []string {

@@ -127,8 +127,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1503 -> 1505 adds AUTHN-001 (a route with no visible authentication,
 	// opt-in) and WEBHOOK-001 (a Stripe, GitHub or Slack webhook payload
 	// accepted without signature verification).
-	if got := len(cat); got != 1505 {
-		t.Errorf("Catalog() returned %d rules, want 1505", got)
+	// 1505 -> 1506 adds TAINT-012 (argument injection, CWE-88), split out of
+	// TAINT-002 for Rust's Command::arg (#1106).
+	if got := len(cat); got != 1506 {
+		t.Errorf("Catalog() returned %d rules, want 1506", got)
 	}
 }
 

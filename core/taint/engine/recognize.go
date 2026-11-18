@@ -38,6 +38,14 @@ const (
 // syntax simply yields no statement, which is the safe degrade (a missed flow,
 // never a crash or a spurious finding).
 func recognizeStatement(lang langKind, ll logicalLine) (st stmtDraft, ok bool) {
+	return recognizeStatementWith(lang, ll, nil)
+}
+
+// recognizeStatementWith is recognizeStatement with an optional hook that may
+// rewrite the statement's call chains before they are recorded. A language
+// whose sink depends on state the chain text alone does not carry (the program
+// a Rust Command builder was started with) classifies the call there.
+func recognizeStatementWith(lang langKind, ll logicalLine, rewrite func(lhs string, calls []callChain) []callChain) (st stmtDraft, ok bool) {
 	code := ll.code
 	st.line = ll.line
 	st.sinkArgs = map[string]sinkArgDraft{}
@@ -62,6 +70,9 @@ func recognizeStatement(lang langKind, ll logicalLine) (st stmtDraft, ok bool) {
 
 	// Extract every call chain and its argument text from the expression side.
 	calls := extractCalls(lang, exprCode, rawExpr)
+	if rewrite != nil {
+		calls = rewrite(lhs, calls)
+	}
 	// A store into a property is a sink when the property is one:
 	// `el.innerHTML = q`, `resp.StatusDescription = msg`. It is recorded as a
 	// call of the property with the right-hand side as its argument, so the
