@@ -164,7 +164,7 @@ make build
 
 ## What Nox Detects
 
-Nox ships with **1506 built-in rules** across five analyzer suites:
+Nox ships with **1508 built-in rules** across five analyzer suites:
 
 ### Secrets (884 rules)
 
@@ -206,7 +206,7 @@ Detects AI/ML application security risks aligned with the **OWASP LLM Top 10**:
 | Supply Chain | AI-008, AI-014 | LLM03 | Unpinned models, insecure HTTP model downloads |
 | Resource Management | AI-017 | LLM10 | Unlimited token limits |
 
-### Infrastructure as Code (485 rules)
+### Infrastructure as Code (487 rules)
 
 Detects misconfigurations across **7 IaC categories**:
 
@@ -215,7 +215,7 @@ Detects misconfigurations across **7 IaC categories**:
 | Dockerfile | IAC-001 -- IAC-003, IAC-022 -- IAC-025 | Root user, unpinned images, secrets in ARG, curl-pipe-sh |
 | Terraform/Cloud | IAC-004 -- IAC-006, IAC-036 -- IAC-045 | Public access, disabled encryption, wildcard IAM, public S3 |
 | Kubernetes | IAC-007 -- IAC-010, IAC-026 -- IAC-035 | Privileged pods, host namespaces, dangerous capabilities, cluster-admin |
-| GitHub Actions | IAC-011 -- IAC-018 | pull_request_target, script injection, mutable action tags, write-all |
+| GitHub Actions | IAC-011 -- IAC-018, IAC-505, IAC-506 | pull_request_target, pwn requests, cache poisoning, script injection, mutable action tags, write-all |
 | Docker Compose | IAC-019 -- IAC-021, IAC-049 | Privileged mode, host networking, Docker socket mount |
 | Helm | IAC-046 -- IAC-048 | Tiller deployment, hardcoded passwords, RBAC disabled |
 | CI/CD General | IAC-050 | Disabled security checks |

@@ -639,8 +639,11 @@ func TestAllIaCRules_Count(t *testing.T) {
 	// Kubernetes/Helm and in Compose) and IAC-504 (Terraform S3 public access
 	// block disabled) report changes that used to read as a clean scan.
 	// IAC-296 keeps its ID and is now a checkable claim distinct from IAC-149.
-	if got := len(rules); got != 479 {
-		t.Errorf("expected 479 IaC rules, got %d", got)
+	//
+	// 479 -> 481: IAC-505 (a privileged workflow checks out the pull request's
+	// code) and IAC-506 (that job saves a cache the base branch restores).
+	if got := len(rules); got != 481 {
+		t.Errorf("expected 481 IaC rules, got %d", got)
 	}
 }
 

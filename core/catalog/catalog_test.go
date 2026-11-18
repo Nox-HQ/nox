@@ -129,8 +129,11 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// accepted without signature verification).
 	// 1505 -> 1506 adds TAINT-012 (argument injection, CWE-88), split out of
 	// TAINT-002 for Rust's Command::arg (#1106).
-	if got := len(cat); got != 1506 {
-		t.Errorf("Catalog() returned %d rules, want 1506", got)
+	// 1506 -> 1508 adds IAC-505 (a privileged workflow checks out the pull
+	// request's code) and IAC-506 (that job saves a cache the base branch
+	// restores).
+	if got := len(cat); got != 1508 {
+		t.Errorf("Catalog() returned %d rules, want 1508", got)
 	}
 }
 

@@ -2672,6 +2672,40 @@ func builtinExpandedIaCRules() []rules.Rule {
 			remediation:  "Set block_public_acls, block_public_policy, ignore_public_acls and restrict_public_buckets to true on aws_s3_bucket_public_access_block, or on aws_s3_account_public_access_block for the whole account. Each switch closes a different route to a public object.",
 			references:   []string{"https://cwe.mitre.org/data/definitions/284.html", "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html"},
 		},
+		{
+			id: "IAC-505", severity: findings.SeverityCritical, confidence: findings.ConfidenceHigh,
+			// The "pwn request": a privileged trigger that checks out the pull
+			// request's own commit puts the fork's code (its build scripts, its
+			// lockfile's install hooks, its tool configs) in a job holding the
+			// base repository's secrets and token, where any step that builds,
+			// installs or reads configuration from it runs it. The pattern matches the checkout ref; pull_request_target.go
+			// keeps it only when the workflow runs on pull_request_target or
+			// workflow_run, since under pull_request the same checkout is the
+			// default and unprivileged.
+			pattern:      `(?im)^[ \t]*(?:-[ \t]+)?ref:[ \t]*['"]?[^#\n]*(?:\$\{\{[^}\n]*\b(?:github\.event\.pull_request\.head\.(?:sha|ref)|github\.head_ref|github\.event\.workflow_run\.head_(?:sha|branch))\b[^}\n]*\}\}|refs/pull/)`,
+			description:  "Privileged workflow checks out the pull request's code (pwn request)",
+			cwe:          "CWE-829",
+			keywords:     []string{"ref:"},
+			filePatterns: []string{"*.yml", "*.yaml"},
+			tags:         []string{"iac", "github-actions", "ci-cd", "supply-chain"},
+			remediation:  "Run untrusted pull request code under the pull_request trigger, which has no secrets and a read-only token. If a privileged step needs its results, split the work: an unprivileged pull_request workflow uploads them as an artifact, and a workflow_run job reads the artifact as data without checking out or executing the pull request's code.",
+			references:   []string{"https://securitylab.github.com/research/github-actions-preventing-pwn-requests/", "https://cwe.mitre.org/data/definitions/829.html"},
+		},
+		{
+			id: "IAC-506", severity: findings.SeverityHigh, confidence: findings.ConfidenceHigh,
+			// A cache saved by a job that ran a fork's code is saved in the base
+			// branch's scope, where every other workflow on that branch, a release
+			// included, restores it. pull_request_target.go keeps this only in a
+			// workflow where IAC-505 holds.
+			pattern:      `(?im)^[ \t]*(?:-[ \t]+)?(?:uses:[ \t]*actions/cache(?:/save)?@|cache:[ \t]*['"]?(?:npm|yarn|pnpm|pip|pipenv|poetry|gradle|maven|sbt|bundler|true)\b)`,
+			description:  "Cache written by a job that runs pull request code under a privileged trigger (cache poisoning)",
+			cwe:          "CWE-345",
+			keywords:     []string{"cache"},
+			filePatterns: []string{"*.yml", "*.yaml"},
+			tags:         []string{"iac", "github-actions", "ci-cd", "supply-chain"},
+			remediation:  "Do not save a cache from a job that checked out or executed pull request code under pull_request_target or workflow_run: remove the cache, use actions/cache/restore only, or move the job to the pull_request trigger. Release workflows should not restore caches a pull request could have written.",
+			references:   []string{"https://adnanthekhan.com/2024/05/06/the-monsters-in-your-build-cache-github-actions-cache-poisoning/", "https://cwe.mitre.org/data/definitions/345.html"},
+		},
 	}
 
 	out := make([]rules.Rule, len(defs))
