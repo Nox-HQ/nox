@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `MCP-027` reports a hidden instruction in the description of a tool an MCP
+  server registers (tool poisoning, OWASP MCP03): an order to keep something
+  from the user ("do not mention this to the user"), to read another tool's
+  config (`~/.cursor/mcp.json`) or a credential and pass it on, or to disregard
+  prior instructions. It reads Python `@mcp.tool`/`@server.tool` docstrings and
+  `description=` keywords, and TypeScript/JavaScript `server.tool(name,
+  "...")`, `registerTool(name, {description})` and `tools: [{name,
+  description}]` lists, in files that import an MCP server library
+  (`mcp`, `fastmcp`, `@modelcontextprotocol/*`). A docstring of a function that
+  is not a tool, a comment, a string in another role and a file that defines no
+  tool are not reported. The poisoned `add` tool of the public demonstration
+  produced no finding before; `MCP-009`/`010`/`011` could not see it, because a
+  match inside a string over 96 bytes is dropped as a data blob and a payload
+  is always that long. Ten public MCP server repositories give no hit. The
+  directive patterns are shared with `AGENT-001` and `AGENT-004` rather than
+  copied, so the three cannot drift.
+
 ## [1.69.0] - 2026-11-18
 
 ### Added

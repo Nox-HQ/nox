@@ -227,7 +227,13 @@ func (a *Analyzer) Rules() *rules.RuleSet { return a.engine.Rules() }
 // ScanFile delegates to the underlying rules engine to scan the given file
 // content and returns any AI security findings.
 func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, error) {
-	return a.engine.ScanFile(path, content)
+	fs, err := a.engine.ScanFile(path, content)
+	if err != nil {
+		return nil, err
+	}
+	// MCP-027's pattern finds the directive anywhere; it is a finding only
+	// inside a tool description (mcp_tool_description.go).
+	return a.refineToolDescriptions(path, content, fs), nil
 }
 
 // suppressNonCode reports whether an AI/MCP pattern finding sits in a comment
@@ -343,6 +349,15 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) (*fileScan, error) 
 		candidate := reasoning.Candidate(results[i].RuleID, artifact.Path,
 			results[i].Location.StartLine, results[i].Location.StartColumn)
 
+		// MCP-027 reports text inside a string, and the string is long by
+		// nature: a payload is a docstring or a description literal, which is
+		// the shape suppressNonCode drops as a data blob. ScanFile has already
+		// decided it, by structure, so the lexical drop does not apply.
+		if results[i].RuleID == "MCP-027" {
+			a.corroborate(candidate, "the match was inspected and lies in a tool description, not in a comment or an embedded blob")
+			out.findings = append(out.findings, results[i])
+			continue
+		}
 		if suppressNonCode(lang, content, &results[i]) {
 			a.refute(candidate, evidence.KindStatic,
 				"the match lies outside code — in a comment, a string literal or an embedded blob")
