@@ -129,8 +129,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// accepted without signature verification).
 	// 1505 -> 1506 adds TAINT-012 (argument injection, CWE-88), split out of
 	// TAINT-002 for Rust's Command::arg (#1106).
-	if got := len(cat); got != 1506 {
-		t.Errorf("Catalog() returned %d rules, want 1506", got)
+	// 1506 -> 1507 adds MCP-027, a hidden instruction in an MCP tool
+	// description.
+	if got := len(cat); got != 1507 {
+		t.Errorf("Catalog() returned %d rules, want 1507", got)
 	}
 }
 

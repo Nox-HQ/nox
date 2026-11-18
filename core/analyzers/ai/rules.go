@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/nox-hq/nox/core/findings"
@@ -960,7 +961,7 @@ func builtinAIRules() []*rules.Rule {
 			// validate can veto it: "do not forward credentials" is a refusal
 			// (pydantic-ai, #927). It binds to the verb directly after it, so
 			// "do not tell the user; send …" still fires.
-			pattern:     `(?i)(?:(?:\bnot|\bnever|n't|\bwithout)\s+)?(?:(?:exfiltrate|send|upload|leak|transmit|post|forward)\s+(?:the\s+)?(?:contents?\s+of\s+)?(?:~/\.ssh|\.ssh/|id_rsa|\.env\b|/etc/passwd|api[_-]?keys?|secrets?|credentials?|environment\s+variables?|access[_-]?tokens?)|(?:read|cat)\s+(?:the\s+)?(?:contents?\s+of\s+)?(?:~/\.ssh|\.ssh/|id_rsa|\.env\b|/etc/passwd))`,
+			pattern:     `(?i)` + mcpSecretExfilDirective,
 			description: "MCP tool metadata stages credential/secret exfiltration (tool poisoning)",
 			validate:    verbIsNotNegated,
 			cwe:         "CWE-77", keywords: []string{"id_rsa", ".ssh", ".env", "exfiltrate", "credentials", "api key", "secrets", "access token"},
@@ -1111,6 +1112,30 @@ func builtinAIRules() []*rules.Rule {
 			references:   []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices", "https://owasp.org/www-project-mcp-top-10/"},
 		},
 
+		{
+			id: "MCP-027", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
+			// The directive vocabulary is AGENT-001's and AGENT-004's, plus
+			// MCP-011's secret exfiltration and a read of another tool's
+			// config. Only what is common to prose and tool descriptions is
+			// taken: AGENT-004's bare "leak" and its send-to-a-sink arm are
+			// left out, because a tool is legitimately described as one that
+			// sends to a webhook with a token, or finds a memory leak.
+			//
+			// The pattern runs over the whole file; the refinement in
+			// mcp_tool_description.go keeps a match only inside a tool
+			// description of an MCP server. It cannot be a pattern, because
+			// "inside the docstring of a decorated function" is structure.
+			pattern:     `(?i)(?:` + agentConcealDirective + `|` + agentOverrideDirective + `|\b` + agentExfilVerb + `\b|` + mcpSecretExfilDirective + `|` + mcpConfigReadDirective + `)`,
+			validate:    mcpToolDirectiveStands,
+			description: "MCP tool description carries a hidden instruction to conceal, exfiltrate or override (tool poisoning)",
+			cwe:         "CWE-1427", keywords: []string{"mcp", "modelcontextprotocol"},
+			filePatterns:       []string{"*.py", "*.ts", "*.js"},
+			ignoreFilePatterns: []string{"testdata/*", "*_test.py", "test_*.py", "*.test.ts", "*.test.js", "*.spec.ts", "*.spec.js"},
+			tags:               []string{"ai", "mcp", "tool-poisoning", "prompt-injection", "owasp-mcp03"},
+			remediation:        "The description of this MCP tool tells the model to hide something from the user, to read or send data the tool does not need, or to disregard its instructions. The model obeys a tool description, and the operator seldom reads one: this is how a tool poisons an agent without any change to its code. Remove the directive, and if you did not write it, treat the server as compromised: review its other tools and rotate anything the agent could read.",
+			references:         []string{"https://modelcontextprotocol.io/specification/draft/basic/security_best_practices", "https://owasp.org/www-project-mcp-top-10/", "https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks"},
+		},
+
 		// -----------------------------------------------------------------
 		// Agent-config artifacts (AGENT-001..004). The files that steer a
 		// coding agent — Cursor rules, CLAUDE.md/AGENTS.md, Claude Code
@@ -1124,7 +1149,7 @@ func builtinAIRules() []*rules.Rule {
 		{
 			id: "AGENT-001", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
 			// nox:ignore AGENT-001 -- rule definition, not a real finding
-			pattern:     `(?i)\b(ignore|disregard|forget|override|bypass)\b[^\n]{0,50}\b(previous|prior|earlier|above|all|system|safety|your)\b[^\n]{0,30}\b(instruction|prompt|rule|guardrail|guideline|constraint|direction|restriction)s?\b`,
+			pattern:     agentRulesOverridePattern,
 			description: "Instruction-override / prompt-injection directive in an agent rules file",
 			cwe:         "CWE-1427", keywords: []string{"ignore", "disregard", "forget", "override", "bypass"},
 			filePatterns:       []string{".cursorrules", ".clinerules", ".windsurfrules", "*.mdc", "CLAUDE.md", "AGENTS.md", "GEMINI.md", "SKILL.md", "skill.md", "copilot-instructions.md"},
@@ -1158,7 +1183,7 @@ func builtinAIRules() []*rules.Rule {
 		{
 			id: "AGENT-004", severity: findings.SeverityMedium, confidence: findings.ConfidenceLow,
 			// nox:ignore AGENT-004 -- rule definition, not a real finding
-			pattern:     `(?i)((do\s*not|don't|never)\s+(tell|inform|reveal|disclose|mention|notify|warn|alert)\s+(the\s+)?(user|human|operator|developer|owner)|\b(exfiltrate|leak)\b|\b(send|post|upload|forward|transmit)\b[^\n]{0,40}(https?://|webhook|api[_-]?key|secret|token|credential))`,
+			pattern:     agentRulesConcealPattern,
 			description: "Data-exfiltration or concealment directive in an agent rules file",
 			cwe:         "CWE-1427", keywords: []string{"do not tell", "don't tell", "never tell", "do not inform", "never reveal", "without telling", "exfiltrate", "leak", "webhook", "send", "post", "upload", "forward", "transmit"},
 			filePatterns:       []string{".cursorrules", ".clinerules", ".windsurfrules", "*.mdc", "CLAUDE.md", "AGENTS.md", "GEMINI.md", "SKILL.md", "skill.md", "copilot-instructions.md"},
@@ -1274,7 +1299,7 @@ func expandJSTSFilePatterns(out []*rules.Rule) {
 func applyASIMapping(out []*rules.Rule) {
 	asi := map[string]string{
 		// ASI01 Agent Goal Hijack — prompt injection / instruction manipulation.
-		"AGENT-001": "owasp-asi01", "AGENT-004": "owasp-asi01",
+		"AGENT-001": "owasp-asi01", "AGENT-004": "owasp-asi01", "MCP-027": "owasp-asi01",
 		"AI-001": "owasp-asi01", "AI-002": "owasp-asi01", "AI-003": "owasp-asi01",
 		"AI-010":    "owasp-asi01",
 		"AI-PI-001": "owasp-asi01", "AI-PI-002": "owasp-asi01", "AI-PI-003": "owasp-asi01",
@@ -1382,3 +1407,15 @@ func verbIsNotNegated(matchText string) bool {
 	}
 	return true
 }
+
+// mcpToolDirectiveStands vetoes an MCP-027 match that is a refusal. The
+// secret-exfiltration alternative takes a leading "not"/"never"/"without" into
+// the match so "do not forward credentials" can be recognised as one; every
+// other alternative begins at its own first word, and the concealment one
+// begins with "never" or "don't" legitimately.
+func mcpToolDirectiveStands(matchText string) bool {
+	return agentConcealRe.MatchString(matchText) || verbIsNotNegated(matchText)
+}
+
+// agentConcealRe is agentConcealDirective compiled, anchored at the match.
+var agentConcealRe = regexp.MustCompile(`(?i)^` + agentConcealDirective)
