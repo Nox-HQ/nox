@@ -31,9 +31,12 @@ import "strings"
 //   - Cross-method flow through a class FIELD or a top-level variable IS joined
 //     (see sharedstate.go): fields are shared per class, top-level names per
 //     file. The join is flow-insensitive across methods.
-//   - A typed function PARAMETER arriving as untrusted input (a shelf `Request`)
-//     is not a source CALL, so it is not tainted from its type — the same
-//     documented gap as the other web extractors.
+//   - A shelf `Request` parameter is not itself tainted from its type; the
+//     request is read through catalog sources (`request.url`, `.headers`,
+//     `.readAsString`). The String parameters that FOLLOW a `Request` in a
+//     handler's parameter list are shelf_router path parameters
+//     (`(Request req, String id)`) and are seeded as request-bound; see
+//     dartRouteBound. Any other typed parameter is not promoted.
 func extractDart(lines []logicalLine) []unitDraft {
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
@@ -97,7 +100,7 @@ func extractDart(lines []logicalLine) []unitDraft {
 		// Recognized before the generic statement recognizer so the header
 		// identifiers (function name, parameter types) are never read as a call.
 		if name, params, ok := dartFuncHeader(trimmed); ok {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, requestBound: dartRouteBound(trimmed), headerLine: ll.line}
 			units = append(units, u)
 			cur = u
 			funDepth = depth
@@ -145,6 +148,11 @@ func extractDart(lines []logicalLine) []unitDraft {
 			}
 		}
 
+		// An inline handler (`router.get('/u/<id>', (Request r, String id) {`)
+		// opens no unit of its own; its path parameters are seeded into the
+		// enclosing one, ahead of the statement that declares them.
+		cur.stmts = append(cur.stmts, dartRouteSeeds(ll.line, dartRouteBound(trimmed))...)
+
 		if st, ok := recognizeStatement(langDart, ll); ok {
 			cur.stmts = append(cur.stmts, st)
 		}
@@ -158,6 +166,7 @@ func extractDart(lines []logicalLine) []unitDraft {
 
 	out := make([]unitDraft, 0, len(units))
 	for _, u := range units {
+		seedRequestBoundParams(u)
 		out = append(out, *u)
 	}
 	return joinSharedState(out, topShared)
@@ -475,4 +484,80 @@ func dartReturnStatement(ll logicalLine) (stmtDraft, bool) {
 	st.returns = append([]string(nil), st.reads...)
 	st.isReturn = true
 	return st, true
+}
+
+// dartBlockWords: `(Request r, String id) async {` opens a closure body with
+// the async marker, not a paren, so the brace needs the word to be read as a
+// block rather than a map literal.
+var dartBlockWords = map[string]bool{"async": true}
+
+// dartRouteBound returns the shelf_router path parameters declared on a line:
+// in a handler whose parameter list is `(Request req, String id, String name)`,
+// every String after the Request is bound from the route template
+// (`/u/<id>`), so each maps to the request-bound sentinel. Anything else —
+// a String parameter of a function with no Request, a non-String parameter — is
+// not promoted, because only the Request-first shape marks a handler.
+func dartRouteBound(line string) map[string]string {
+	var out map[string]string
+	for i := 0; i < len(line); i++ {
+		if line[i] != '(' {
+			continue
+		}
+		end := matchParen(line, i)
+		if end < 0 {
+			continue
+		}
+		slots := splitTopLevelArgs(line[i+1 : end])
+		if len(slots) < 2 || !isDartRequestSlot(slots[0]) {
+			continue
+		}
+		for _, slot := range slots[1:] {
+			if name, ok := dartStringSlot(slot); ok {
+				if out == nil {
+					out = map[string]string{}
+				}
+				out[name] = requestBoundQuery
+			}
+		}
+	}
+	return out
+}
+
+// isDartRequestSlot reports whether a parameter slot is `Request name`, with or
+// without a library prefix (`shelf.Request req`).
+func isDartRequestSlot(slot string) bool {
+	f := strings.Fields(strings.TrimSpace(slot))
+	if len(f) < 2 || !isSimpleIdent(f[len(f)-1]) {
+		return false
+	}
+	typ := f[len(f)-2]
+	return typ == "Request" || strings.HasSuffix(typ, ".Request")
+}
+
+// dartStringSlot returns the bound name of a `String name` parameter slot.
+func dartStringSlot(slot string) (string, bool) {
+	f := strings.Fields(strings.TrimSpace(slot))
+	if len(f) != 2 || (f[0] != "String" && f[0] != "String?") || !isSimpleIdent(f[1]) {
+		return "", false
+	}
+	return f[1], true
+}
+
+// dartRouteSeeds builds one `name = RequestBoundQuery()` statement per route
+// parameter, in name order so output never depends on map iteration.
+func dartRouteSeeds(line int, bound map[string]string) []stmtDraft {
+	if len(bound) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(bound))
+	for n := range bound {
+		names = append(names, n)
+	}
+	sortStrings(names)
+	seeds := make([]stmtDraft, 0, len(names))
+	for _, n := range names {
+		sentinel := bound[n]
+		seeds = append(seeds, stmtDraft{line: line, assigns: n, calls: []string{sentinel}, chains: []string{sentinel}})
+	}
+	return seeds
 }

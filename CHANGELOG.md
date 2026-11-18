@@ -25,6 +25,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Command::new("sh").arg("-c").arg(x)` and `bash`/`/bin/sh`/`env` likewise,
   the same limit the argv exemption has in Python, JavaScript and Go (#1106).
 
+- Dart shelf handlers are taint sources. `request.url.queryParameters`,
+  `request.headers[...]`, `await request.readAsString()` / `request.read()`
+  and `request.params` (and the same through a `req` alias) reach path,
+  command and SQL sinks, and so do the shelf_router path parameters: the
+  `String` parameters after the `Request` in `(Request req, String id)`, in an
+  inline `router.get('/u/<id>', ...)` handler or a named one. A `String`
+  parameter of a function with no `Request` is not promoted. Before this, only
+  `request.requestedUri` was read; on a handler of five reads, one was found.
+- Swift `FileManager` path sinks (CWE-22): `contents`, `createFile`,
+  `removeItem`, `copyItem`, `moveItem`, `contentsOfDirectory`,
+  `subpathsOfDirectory`, `createDirectory` and `attributesOfItem`, in both the
+  `atPath:` form and the `at: URL` form, on `FileManager.default` or any
+  variable holding it. A URL built with `URL(fileURLWithPath: tainted)` flows
+  into the `at:` forms. The catalog's `FileManager.contents` key could never
+  match, because the call chain is `FileManager.default.contents`; none of
+  these calls was a sink.
+
 ### Fixed
 
 - `nox baseline add` and `nox baseline update` write one entry per occurrence.
@@ -51,6 +68,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is not charged with every variable the statement reads. A call that names no
   variable was reported for whatever else its line mentioned; it now reaches
   no sink (#1106).
+
+- `meta.sast_languages` named 15 languages and left out Scala, Elixir, Dart,
+  Lua, Clojure, Groovy, Perl and PowerShell, each of which has a taint catalog
+  (and Kotlin script, Python stubs, `.phtml`, `.bash` and the other source
+  extensions the lexer reads). A report therefore said nothing about them, and
+  `scan.sast.languages: {dart: off}` was silently ignored. Every extension the
+  lexer reads now maps to a language, and a test fails if a language with a
+  taint catalog is missing from the profile.
+- A sanitizer written as a property read now clears its class in Swift and
+  Objective-C. `URL(string: p)?.lastPathComponent`, `p.lastPathComponent`
+  and `url.lastPathComponent` are declared sanitizers in the catalog, but the
+  engine only looked for calls, so the idiomatic guard around a path was
+  reported as the traversal it prevents (visible now that `FileManager` calls
+  are sinks). Only sanitizers the catalog already lists are recognized, only
+  for the variables the property wraps, and a property it does not list
+  (`.path`, `.absoluteString`) still reports. Other languages are unchanged.
+- A Dart closure passed as an argument (`(Request r, String id) async {`) is
+  now split into statements like the Express and Java ones. Its `async` marker
+  hid the opening brace, so the whole handler was one statement and a tainted
+  value anywhere in it reached every sink in it.
 
 ## [1.68.1] - 2026-11-17
 

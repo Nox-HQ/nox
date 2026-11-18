@@ -94,6 +94,37 @@ var extensionLanguages = map[string]string{
 	// Objective-C / Objective-C++ implementation files (headers stay C/C++).
 	".m":  "objc",
 	".mm": "objc",
+	// Languages the taint engine has a catalog for but that were left out, so
+	// meta.sast_languages omitted them and `scan.sast.languages: {dart: off}`
+	// silently did nothing. TestExtensionLanguagesCoverEverySourceExtension and
+	// TestProfileCoversEveryTaintCatalogLanguage fail if a source extension or a
+	// catalog language is missing again.
+	".scala":   "scala",
+	".sc":      "scala",
+	".ex":      "elixir",
+	".exs":     "elixir",
+	".dart":    "dart",
+	".lua":     "lua",
+	".clj":     "clojure",
+	".cljs":    "clojure",
+	".cljc":    "clojure",
+	".edn":     "clojure",
+	".groovy":  "groovy",
+	".gradle":  "groovy",
+	".pl":      "perl",
+	".pm":      "perl",
+	".cgi":     "perl",
+	".t":       "perl",
+	".ps1":     "powershell",
+	".psm1":    "powershell",
+	".psd1":    "powershell",
+	".kts":     "kotlin",
+	".gemspec": "ruby",
+	".rake":    "ruby",
+	".phtml":   "php",
+	".pyi":     "python",
+	".pyw":     "python",
+	".bash":    "shell",
 }
 
 // LanguageForExtension returns the canonical language name for a file path
