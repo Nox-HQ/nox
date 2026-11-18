@@ -252,11 +252,17 @@ type csProject struct {
 	all      []*csFunc
 	guarded  bool // something project-wide decides authentication
 	ctlGuard bool // MapControllers().RequireAuthorization()
+	// pagesGuard: MapRazorPages().RequireAuthorization(), which guards the
+	// pages and nothing MapControllers maps (ctlGuard is the converse).
+	pagesGuard bool
 	// hostGuard: this project holds controllers but no host of its own (a class
 	// library), and a project that is a host guards everything it serves.
 	hostGuard bool
 	handled   map[*csFunc]bool
 	memo      map[string]*csRouter
+	// convs are the Razor Pages conventions, patterns the conventional MVC routes.
+	convs    []razorConv
+	patterns []mvcPattern
 }
 
 type csRec struct {
@@ -274,6 +280,9 @@ type csIndex struct {
 	recs     []csRec
 	out      []Route
 	views    []routeView
+	// pages are the Razor Pages of the scan; extraSeen dedupes their routes and conventional MVC's.
+	pages     []*razorPage
+	extraSeen map[string]bool
 }
 
 func newCSFile(p, project string, raw []byte) *csFile {
@@ -341,6 +350,7 @@ func (p *csProject) index() {
 				p.guarded = true
 			}
 		}
+		p.scanPagesAndConventions(f)
 		p.scanTypes(f, 0, len(f.code))
 	}
 	p.deriveAuthAttrs()
@@ -566,7 +576,7 @@ func (p *csProject) effective(c *csClass, seen map[*csClass]bool) csEffective {
 	}
 	seen[c] = true
 	switch bases := p.classes[c.base]; {
-	case c.base == "" || c.base == "Controller" || c.base == "ControllerBase":
+	case c.base == "" || c.base == "Controller" || c.base == "ControllerBase" || c.base == "PageModel":
 	case len(bases) != 1 || seen[bases[0]]:
 		e.external = true
 	default:
@@ -597,6 +607,7 @@ func (ix *csIndex) controller(p *csProject, c *csClass) {
 	for _, m := range csScan(c.file.code, c.body.start, c.body.end) {
 		ix.action(p, c, m, e.ev, e.external, routes, ctlName, e.area)
 	}
+	ix.conventional(p, c, e)
 }
 
 func (ix *csIndex) action(p *csProject, c *csClass, m csMember, class csEvidence, external bool, routes []string, ctl, area string) {

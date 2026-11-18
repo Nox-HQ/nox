@@ -100,10 +100,12 @@
 // over their handlers, and WEBHOOK-001 is not judged for Rails and Laravel
 // (their delegates are not followed).
 //
-// Go (net/http ServeMux, Gin, Echo, Chi: golang.go) and ASP.NET Core
-// (attribute-routed controllers and minimal APIs: dotnet.go) join the table the
-// same way. A Go route's middleware is read by interpreting the registration
-// code in order; an ASP.NET route's by its attributes and endpoint conventions.
+// Go (net/http ServeMux, Gin, Echo, Chi: golang.go; gorilla/mux:
+// gorillamux.go), Rust actix-web (actix.go) and ASP.NET Core (attribute-routed
+// controllers and minimal APIs: dotnet.go; Razor Pages and conventionally
+// routed MVC controllers: dotnet_pages.go) join the table the same way. A Go
+// or actix route's middleware is read by interpreting the registration code; an
+// ASP.NET route's by its attributes, conventions and endpoint conventions.
 //
 // NOT read: other decorator frameworks (routing-controllers, tsoa), NestJS GraphQL
 // resolvers and gateways, Flask class-based views and Flask-RESTful
@@ -232,10 +234,10 @@ func (a *Analyzer) Leads() []Lead { return a.leads }
 // Coverage names, for the scan's "Checks completed", exactly the frameworks
 // whose routes this analyzer reads. Keep it equal to the package
 // documentation's SCOPE.
-const Coverage = "Express, Fastify, Flask, FastAPI, Next.js, NestJS, Django, Spring, JAX-RS, Go, ASP.NET Core, Rails and Laravel routes"
+const Coverage = "Express, Fastify, Flask, FastAPI, Next.js, NestJS, Django, Spring, JAX-RS, Go (net/http, Gin, Echo, Chi and gorilla/mux), actix-web, ASP.NET Core (controllers, minimal APIs, Razor Pages), Rails and Laravel routes"
 
 // ObjectLevelCoverage is the subset of Coverage AUTHZ-001's body analysis
-// (object-level authorization) runs over. Next.js, NestJS, Django, Spring, JAX-RS, Go, ASP.NET Core, Rails and Laravel routes enter the
+// (object-level authorization) runs over. Next.js, NestJS, Django, Spring, JAX-RS, Go (net/http, Gin, Echo, Chi and gorilla/mux), actix-web, ASP.NET Core (controllers, minimal APIs, Razor Pages), Rails and Laravel routes enter the
 // route table, AUTHN-001 and WEBHOOK-001, but their handlers are not analysed
 // for ownership checks, and the scan says so rather than claiming otherwise.
 const ObjectLevelCoverage = "Express, Fastify, Flask and FastAPI"

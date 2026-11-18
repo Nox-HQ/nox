@@ -40,7 +40,7 @@ import (
 //     function) is opaque: its routes are listed, never claimed to be
 //     unauthenticated, and never a lead.
 //
-// What it does not do: gorilla/mux and other routers, routes registered
+// gorilla/mux joins through gorillamux.go. What it does not do: other routers, routes registered
 // through a path held in a constant or a concatenation, Chi Mount of a handler
 // that is not a router built in the scanned tree, routers returned through
 // interfaces or stored in maps, and middleware judged by anything but its name
@@ -65,6 +65,7 @@ var (
 		goGin:  {"Engine": true, "RouterGroup": true, "IRouter": true, "IRoutes": true},
 		goEcho: {"Echo": true, "Group": true},
 		goChi:  {"Router": true, "Mux": true},
+		goMux:  {"Router": true},
 		goStd:  {"ServeMux": true},
 	}
 	goVerbs = map[string]string{"GET": "GET", "POST": "POST", "PUT": "PUT", "DELETE": "DELETE", "PATCH": "PATCH", "HEAD": "HEAD", "OPTIONS": "OPTIONS", "CONNECT": "CONNECT", "TRACE": "TRACE"}
@@ -77,6 +78,7 @@ const (
 	goGin
 	goEcho
 	goChi
+	goMux // gorilla/mux
 )
 
 // goRoot is the application a tree of routers belongs to.
@@ -102,6 +104,9 @@ type goRouter struct {
 	// inherited: what a parent contributed when this router was mounted late.
 	inherited string
 	engine    bool
+	// late: gorilla/mux applies a router's middleware when a request matches
+	// one of its routes, so a Use covers the routes written before it too.
+	late string
 }
 
 func (r *goRouter) fullPrefix() string {
@@ -115,7 +120,7 @@ func (r *goRouter) fullPrefix() string {
 func (r *goRouter) covered() (authn string, opaque bool) {
 	for c := r; c != nil; c = c.parent {
 		opaque = opaque || c.opaque
-		for _, s := range []string{c.root.wrap, c.root.late, c.inherited} {
+		for _, s := range []string{c.root.wrap, c.root.late, c.inherited, c.late} {
 			if authn == "" {
 				authn = s
 			}
@@ -236,6 +241,8 @@ func goKindOfImport(p string) goKind {
 		return goEcho
 	case trim("github.com/go-chi/chi"):
 		return goChi
+	case trim("github.com/gorilla/mux"):
+		return goMux
 	}
 	return 0
 }
@@ -592,6 +599,10 @@ func (e *goExec) evalSegs(segs []seg) *goRouter {
 		cur = e.lookup(base)
 	}
 	for ; cur != nil && idx < len(segs); idx++ {
+		if cur.kind == goMux && segs[idx].call && segs[idx].name == "PathPrefix" {
+			cur, idx = e.muxSubrouter(cur, segs, idx)
+			continue
+		}
 		cur = e.derive(cur, segs[idx])
 	}
 	return cur
@@ -612,7 +623,8 @@ func (e *goExec) newRoot(k goKind) *goRouter {
 func (e *goExec) qualified(alias string, sg seg) *goRouter {
 	switch k, name := goKindOfImport(e.file.imports[alias]), sg.name; {
 	case k == goGin && (name == "Default" || name == "New"), k == goEcho && name == "New",
-		k == goChi && (name == "NewRouter" || name == "NewMux"), k == goStd && name == "NewServeMux":
+		k == goChi && (name == "NewRouter" || name == "NewMux"), k == goStd && name == "NewServeMux",
+		k == goMux && name == "NewRouter":
 		return e.newRoot(k)
 	}
 	return e.callFunc(alias+"."+sg.name, sg)
@@ -688,6 +700,14 @@ func (e *goExec) literal(s span) (string, bool) {
 }
 
 func (e *goExec) use(r *goRouter, args []span) {
+	if r.kind == goMux {
+		for _, a := range args {
+			if authn, _ := e.mwEvidence(a); authn != "" && r.late == "" {
+				r.late = authn
+			}
+		}
+		return
+	}
 	if r.kind == goEcho && r.engine {
 		for _, a := range args {
 			if authn, _ := e.mwEvidence(a); authn != "" && r.root.late == "" {
@@ -752,6 +772,9 @@ func (e *goExec) mwEvidence(a span) (authn, authz string) {
 			return inlineAuthLabel, ""
 		}
 		return "", ""
+	}
+	if inner, ok := strings.CutPrefix(text, "mux.MiddlewareFunc("); ok && strings.HasSuffix(inner, ")") {
+		text = strings.TrimSpace(strings.TrimSuffix(inner, ")")) // the conversion adds nothing: the function inside is the middleware
 	}
 	name := text
 	if i := strings.IndexByte(name, '('); i >= 0 {
@@ -830,6 +853,9 @@ func firstNonEmpty(a, b string) string {
 
 // chainStatement handles `receiver.Action(args)`; false when the receiver is no router.
 func (e *goExec) chainStatement(segs []seg, s span) bool {
+	if e.muxChain(segs) {
+		return true
+	}
 	last := segs[len(segs)-1]
 	var rt *goRouter
 	if len(segs) == 2 && !segs[0].call && goKindOfImport(e.file.imports[segs[0].name]) == goStd && (last.name == "Handle" || last.name == "HandleFunc") {
@@ -927,7 +953,12 @@ func (e *goExec) register(rt *goRouter, sg seg, args []span) {
 			return
 		}
 	}
-	rec := goRec{rt: rt, method: method, rel: pat, file: e.file, line: lineAt(e.file.lineStarts, sg.start), snapAuthn: rt.authn, snapAuthz: rt.authz}
+	e.record(rt, method, pat, lineAt(e.file.lineStarts, sg.start), handlers)
+}
+
+// record files one registration with the evidence of its middleware and handler.
+func (e *goExec) record(rt *goRouter, method, pat string, line int, handlers goHandlers) {
+	rec := goRec{rt: rt, method: method, rel: pat, file: e.file, line: line, snapAuthn: rt.authn, snapAuthz: rt.authz}
 	for _, h := range handlers.mw {
 		n, z := e.mwEvidence(h)
 		rec.authn, rec.authz = firstNonEmpty(rec.authn, n), firstNonEmpty(rec.authz, z)
@@ -1074,7 +1105,11 @@ func (ix *goIndex) routes() ([]Route, []routeView) {
 			continue
 		}
 		seen[key] = true
-		rt := Route{Method: rec.method, Path: p, FilePath: rec.file.path, Line: rec.line, Authn: authn, Authz: authz, Reader: ReaderGo}
+		reader := ReaderGo
+		if rec.rt.kind == goMux {
+			reader = ReaderGorillaMux
+		}
+		rt := Route{Method: rec.method, Path: p, FilePath: rec.file.path, Line: rec.line, Authn: authn, Authz: authz, Reader: reader}
 		routes = append(routes, rt)
 		root := rec.rt.root
 		views = append(views, routeView{route: rt, guardUnseen: opaque, loopbackOnly: root.loopback && !root.exposed, framework: "go"})

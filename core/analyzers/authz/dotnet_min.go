@@ -423,5 +423,6 @@ func (ix *csIndex) routes() ([]Route, []routeView) {
 		ix.out = append(ix.out, rt)
 		ix.views = append(ix.views, routeView{route: rt, guardUnseen: (opaque || rec.project.guarded) && !ev.public, declaredPublic: ev.public, framework: "aspnet"})
 	}
+	ix.razorRoutes()
 	return ix.out, ix.views
 }
