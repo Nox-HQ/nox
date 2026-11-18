@@ -9,7 +9,7 @@
 - SEC rules: 938 (was 160)
 - AI rules: 50 (was 18)
 - IaC rules: 500 (was 365)
-- Total rules: 1506
+- Total rules: 1509
 
 ## Future Enhancements
 - Add more IaC rules if needed
