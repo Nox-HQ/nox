@@ -336,17 +336,13 @@ func baselineUpdate(args []string) int {
 
 	// Add new findings not already in baseline.
 	added := 0
-	existing := make(map[string]struct{}, bl.Len())
-	for i := range bl.Entries {
-		existing[bl.Entries[i].Fingerprint] = struct{}{}
-	}
+	// One entry per occurrence no existing entry covers: the matcher consumes
+	// an entry per finding, so a presence set would leave every occurrence
+	// after the first of a shared fingerprint reported (nox-hq/nox#1105).
 	entries := baseline.FromFindings(ff)
-	for i := range entries {
-		if _, ok := existing[entries[i].Fingerprint]; !ok {
-			bl.Add(&entries[i])
-			existing[entries[i].Fingerprint] = struct{}{}
-			added++
-		}
+	for _, i := range bl.Uncovered(ff) {
+		bl.Add(&entries[i])
+		added++
 	}
 
 	// Prune stale entries.
@@ -411,28 +407,34 @@ func baselineAdd(args []string) int {
 		return 2
 	}
 
-	existing := make(map[string]struct{}, bl.Len())
-	for i := range bl.Entries {
-		existing[bl.Entries[i].Fingerprint] = struct{}{}
-	}
-
 	added := 0
 	if fpFilter != "" {
 		// Surgical: no scan, no rule-id filter — just the explicit
 		// fingerprints. RuleID/FilePath stay empty (the operator can
 		// fill them in later via an editor).
+		//
+		// No scan runs, so the number of occurrences is not known: a
+		// fingerprint repeated in the list is the count. `--fingerprint
+		// fp,fp` accepts two occurrences, and only the entries the file does
+		// not already hold are added, so re-running is idempotent.
+		want := make(map[string]int)
+		var order []string
 		for _, fp := range splitCSV(fpFilter) {
-			if _, ok := existing[fp]; ok {
-				continue
+			if want[fp] == 0 {
+				order = append(order, fp)
 			}
-			bl.Add(&baseline.Entry{
-				Fingerprint: fp,
-				CreatedAt:   time.Now().UTC(),
-				Reason:      reason,
-				Owner:       owner,
-			})
-			existing[fp] = struct{}{}
-			added++
+			want[fp]++
+		}
+		for _, fp := range order {
+			for n := bl.Covered(fp); n < want[fp]; n++ {
+				bl.Add(&baseline.Entry{
+					Fingerprint: fp,
+					CreatedAt:   time.Now().UTC(),
+					Reason:      reason,
+					Owner:       owner,
+				})
+				added++
+			}
 		}
 	} else {
 		// Scan + additive merge.
@@ -444,10 +446,9 @@ func baselineAdd(args []string) int {
 		ruleAllow := buildSet(splitCSV(ruleFilter))
 		ff := result.Findings.Findings()
 		entries := baseline.FromFindings(ff)
-		for i := range entries {
-			if _, ok := existing[entries[i].Fingerprint]; ok {
-				continue
-			}
+		// Counted like the matcher: an entry already present covers one
+		// occurrence, the rest each get their own (nox-hq/nox#1105).
+		for _, i := range bl.Uncovered(ff) {
 			if len(ruleAllow) > 0 {
 				if _, ok := ruleAllow[entries[i].RuleID]; !ok {
 					continue
@@ -461,7 +462,6 @@ func baselineAdd(args []string) int {
 				e.Owner = owner
 			}
 			bl.Add(&e)
-			existing[e.Fingerprint] = struct{}{}
 			added++
 		}
 	}

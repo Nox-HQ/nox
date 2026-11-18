@@ -90,6 +90,7 @@ Untrusted-input entry points. Catalog kinds:
 | Vuln class                | CWE        | Rule ID       | Python examples                                             | JS/TS examples                                       |
 |---------------------------|------------|---------------|------------------------------------------------------------|------------------------------------------------------|
 | command_injection         | CWE-78     | TAINT-002     | `os.system`, `os.popen`, `subprocess.run/Popen` (shell=True) | `child_process.exec/execSync/spawn/execFile`        |
+| argument_injection        | CWE-88     | TAINT-012     | (n/a in catalog v1)                                        | (n/a in catalog v1); Rust `Command::new("git").arg(x)`, absent after a literal `"--"` |
 | sql_injection             | CWE-89     | TAINT-001     | `cursor.execute`, `session.execute`, `sqlalchemy.text`     | `connection.query`, `knex.raw`, `sequelize.query`    |
 | code_injection            | CWE-95     | TAINT-005     | `eval`, `exec`, `compile`                                  | `eval`, `Function`, `vm.runInNewContext`, string `setTimeout` |
 | unsafe_deserialization    | CWE-502    | TAINT-005     | `pickle.loads`, `yaml.load`, `marshal.loads`               | (n/a in catalog v1)                                  |
