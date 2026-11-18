@@ -92,6 +92,13 @@ func BuildGo(root string) *Graph {
 	for _, p := range files {
 		collectCalls(g, p.file, p.dir)
 	}
+	// Pass 3: functions passed as values, by line, so a route registration
+	// can name its handler (MarkGoRoutes).
+	g.funcRefs = map[string]map[int][]string{}
+	methods := methodIndex(g)
+	for _, p := range files {
+		collectFuncRefs(g, fset, p.file, p.dir, p.path, methods)
+	}
 
 	for target, cs := range g.callers {
 		sort.Strings(cs)
@@ -109,6 +116,112 @@ func BuildGo(root string) *Graph {
 		sort.Strings(f.Calls)
 	}
 	return g
+}
+
+// collectFuncRefs records, per line, the declared functions passed as
+// arguments: `r.HandleFunc("/u", createUser)`, `mux.Handle("/", h.Show)`,
+// `http.HandlerFunc(api.List)`. A method value binds only when one method of
+// that name exists in the package, since the receiver's type is not known.
+func collectFuncRefs(g *Graph, fset *token.FileSet, f *ast.File, dir, path string, methods map[string][]string) {
+	imports := importAliases(f)
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		for _, arg := range call.Args {
+			key, ok := g.funcRef(arg, dir, imports, methods)
+			if !ok {
+				continue
+			}
+			line := fset.Position(arg.Pos()).Line
+			byLine := g.funcRefs[path]
+			if byLine == nil {
+				byLine = map[int][]string{}
+				g.funcRefs[path] = byLine
+			}
+			byLine[line] = appendUnique(byLine[line], key)
+		}
+		return true
+	})
+}
+
+// methodIndex maps a package directory and method name to the methods of that
+// name declared there, so a method value resolves by lookup: scanning every
+// function per argument made a scan of nox's own tree take ten minutes.
+func methodIndex(g *Graph) map[string][]string {
+	out := map[string][]string{}
+	for k := range g.funcs {
+		open := strings.LastIndex(k, ".(")
+		if open < 0 && strings.HasPrefix(k, "(") {
+			open = -1
+		} else if open < 0 {
+			continue
+		}
+		dir := "."
+		if open >= 0 {
+			dir = k[:open]
+		}
+		closeP := strings.Index(k[open+1:], ").")
+		if closeP < 0 {
+			continue
+		}
+		name := k[open+1+closeP+2:]
+		out[dir+"\x00"+name] = append(out[dir+"\x00"+name], k)
+	}
+	return out
+}
+
+func (g *Graph) funcRef(e ast.Expr, dir string, imports map[string]string, methods map[string][]string) (string, bool) {
+	switch x := e.(type) {
+	case *ast.Ident:
+		if _, ok := g.funcs[declKey(dir, "", x.Name)]; ok {
+			return declKey(dir, "", x.Name), true
+		}
+	case *ast.SelectorExpr:
+		id, ok := x.X.(*ast.Ident)
+		if !ok {
+			return "", false
+		}
+		if importPath, isImport := imports[id.Name]; isImport {
+			if d, ok := g.moduleDir(importPath); ok {
+				if _, found := g.funcs[declKey(d, "", x.Sel.Name)]; found {
+					return declKey(d, "", x.Sel.Name), true
+				}
+			}
+			return "", false
+		}
+		// A method value: the one method of that name declared in this
+		// package, whatever its receiver.
+		d := dir
+		if d == "" {
+			d = "."
+		}
+		return one(methods[d+"\x00"+x.Sel.Name])
+	}
+	return "", false
+}
+
+// MarkGoRoutes makes the functions a Go route registration names entry points
+// a request reaches. root is the scan root the routes' paths are relative to.
+// A handler written as a function literal is not a declaration and marks
+// nothing: its calls already belong to the function that registers it.
+func (g *Graph) MarkGoRoutes(root string, routes []Route) {
+	if g == nil {
+		return
+	}
+	for _, r := range routes {
+		if !strings.HasSuffix(r.File, ".go") {
+			continue
+		}
+		for _, key := range g.funcRefs[filepath.Join(root, r.File)][r.Line] {
+			fn := g.funcs[key]
+			if fn != nil && fn.Kind < EntryRoute {
+				fn.Kind = EntryRoute
+				fn.EntryReason = "handles " + strings.TrimSpace(r.Method+" "+r.Path) + " (" + r.Reader + ")"
+			}
+		}
+	}
 }
 
 // declKey builds the unique identifier for a declaration. The directory rather

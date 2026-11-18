@@ -186,6 +186,11 @@ type Route struct {
 	// Reader names the framework reader that found the registration (one of
 	// the Reader* constants), so a report can say what actually read it.
 	Reader string
+	// HandlerFile and HandlerFunc locate the handler when it is declared
+	// elsewhere and the reader resolved it: a Rails `to: 'users#show'` is
+	// show in app/controllers/users_controller.rb. Empty when the handler is
+	// beside the registration or was not resolved.
+	HandlerFile, HandlerFunc string
 }
 
 // The framework readers a Route can name.

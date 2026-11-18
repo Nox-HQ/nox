@@ -126,14 +126,25 @@ advisories:
     min_relevance: undetermined
 ```
 
+**A call path, in every ecosystem nox reads source for.** Go, npm, PyPI,
+RubyGems, Cargo and pub advisories reach `call_reachable` when a function in
+your project calls into the affected package (a module your file imports, or
+for a Rails app a gem `Bundler.require` loads) and nox finds a call path to that
+function from where execution begins: module code, `main`, or the handler of an
+HTTP route. The finding carries the path (`call_path`) and where it starts
+(`entry_kind`; `entry_reason` names the route). The path reaches the package,
+not necessarily the advisory's vulnerable function, which is why
+`attacker_reachable` stays unclaimed even from a route. No path found proves
+nothing and never lowers a finding.
+
 **npm: a referenced export.** When NOX Intelligence lists a publicly exported
 function that the fix changed and your non-test source references it (any import
 or `require` spelling), the advisory is `call_reachable` and the reason names the
-file and line. That is a reference, not a call path from an entry point: nox has
-no JavaScript call graph. No reference proves nothing and never lowers a finding.
+file and line. That is a reference, not a call path from an entry point; a call
+path found as above replaces it.
 
-**Linked is not called.** For every ecosystem except Go, linked is as far as
-nox gets, so a merge gate that accepted `symbol_used` would be a merge gate on
+**Linked is not called.** Where no call path is found, linked is as far as nox
+gets, so a merge gate that accepted `symbol_used` would be a merge gate on
 severity alone. The default remediate gate is therefore `call_reachable`, and
 an npm or PyPI project is prepared as a pull request for a person to merge.
 A repository that decides linkage is enough says so itself:

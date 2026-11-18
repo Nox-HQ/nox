@@ -111,7 +111,7 @@ func extractDart(lines []logicalLine) []unitDraft {
 		// A class-like header opens a frame: its body unit collects the field
 		// initializers, and its methods join through the fields it declares.
 		if funDepth < 0 && isDartClassHead(trimmed) {
-			body := &unitDraft{funcName: ""}
+			body := &unitDraft{funcName: "", headerLine: ll.line}
 			classes = append(classes, &dartClassFrame{
 				depth: depth, start: len(units), body: body, fields: map[string]bool{},
 			})

@@ -32,6 +32,13 @@ import (
 // generated banner must lead the file; a hand-written tool that emits it as
 // data is not generated.
 func Walk(ctx context.Context, artifacts []discovery.Artifact, fn func(path string, units []taint.Unit)) error {
+	return WalkContent(ctx, artifacts, func(path string, _ []byte, units []taint.Unit) { fn(path, units) })
+}
+
+// WalkContent is Walk that also hands fn the file's bytes, for a consumer that
+// reads something the units do not carry: the call graph reads a file's
+// imports to tell a call into a dependency from a call to a local name.
+func WalkContent(ctx context.Context, artifacts []discovery.Artifact, fn func(path string, content []byte, units []taint.Unit)) error {
 	ordered := make([]discovery.Artifact, len(artifacts))
 	copy(ordered, artifacts)
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Path < ordered[j].Path })
@@ -55,7 +62,7 @@ func Walk(ctx context.Context, artifacts []discovery.Artifact, fn func(path stri
 		if source.IsGeneratedHeader(content) {
 			continue
 		}
-		fn(art.Path, engine.ExtractUnits(art.Path, lang, content))
+		fn(art.Path, content, engine.ExtractUnits(art.Path, lang, content))
 	}
 	return nil
 }

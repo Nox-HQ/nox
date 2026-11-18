@@ -44,6 +44,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Four route gaps closed: gorilla/mux, actix-web, Razor Pages and conventionally routed MVC.** Each was probed on the built binary against a small realistic project first and read no route at all. gorilla/mux: `r.HandleFunc("/x", h).Methods("POST", "PUT")` (one route per verb, ALL with no `Methods`), `r.Handle`, the builder form `r.Methods("GET").Path("/x").HandlerFunc(h)` and `r.PathPrefix("/api").Subrouter()` prefixes, read by the Go reader's interpreter, so a `*mux.Router` handed to a function is followed. `Use(mw)` covers the routes of its router and of its subrouters whatever the order, because mux applies it when a request matches; a subrouter's `Use` covers neither its sibling nor its parent, and `Methods` or a path that is not a literal is skipped, not guessed. actix-web (Rust): `#[get("/x")]`/`#[post]`/`#[route("/x", method = "GET")]` handlers that a `.service(handler)` registers (an unregistered handler answers nothing), `web::resource("/x").route(web::post().to(h))`, `.route("/x", web::get().to(h))`, nested `web::scope("/api")` prefixes, tuples of services and `.configure(f)`; `.wrap(mw)` on the App, a scope or a resource, a `wrap = "Name"` attribute argument, an auth extractor (`BearerAuth`, `AuthenticatedUser`, `Identity` but not `Option<Identity>`) or a 401/403 in the handler authenticates, a `Logger` does not, and a configure function nothing calls is listed but never a lead. Only files that name `actix_web` are read, so Rocket's look-alike macros are not routes, and a handler name two modules share is not guessed. ASP.NET Razor Pages: `Pages/**/*.cshtml` whose first directive is `@page` (the path under `Pages`, an `Index` as its directory, `Areas/X/Pages` under `/X`, a rooted `@page "/x"` replacing it and a relative one appended) with the public `OnGet`/`OnPost`/`OnPut`/`OnDelete`/`OnPatch[Handler][Async]` methods of its PageModel; `[Authorize]` on the model, a base model or a handler, `@attribute [Authorize]`, and `options.Conventions.AuthorizeFolder`/`AuthorizePage`/`AuthorizeAreaFolder` authenticate (a folder covers itself and what is under it, never a folder that shares a prefix), `[AllowAnonymous]` and `AllowAnonymousTo*` make a page public on purpose, and `MapRazorPages().RequireAuthorization()`, a fallback policy, a base model outside the tree or a model the project does not declare leave it unseen. A view with no `@page`, `@page` in a Razor comment, `@pageTitle`, a page outside `Pages`, a private or `[NonHandler]` method are not routes. Conventional MVC: `MapControllerRoute(pattern: ...)`, `MapDefaultControllerRoute()`, `MapAreaControllerRoute` and `UseMvc(r => r.MapRoute(...))` assign a path to each public action of a controller with no attribute route (`/Users/Delete/{id?}`), `[HttpPost]` narrowing the verb and a template, `[Route]`, `[NonAction]`, a static, protected or overriding method, an `[ApiController]`, an internal or abstract class and an area controller under a non-area pattern leaving it out. Routes carry the new readers' names (`gorilla/mux`, `actix-web`, `ASP.NET Razor Pages`, `ASP.NET Core MVC`), join the route table, AUTHN-001 and `nox model`, and the "checks completed" line names them.
 
+- Call paths and entry points for every language the taint engine reads, not
+  only Go. The call graph is built from the functions and calls the taint
+  extractor already records, during the same walk, and binds a call only when
+  it names one function (a bare name defined once, a call on `self`/`this`, a
+  module that is a file in the tree). A finding in code now carries
+  `call_path` and `entry_kind` in Python, JavaScript/TypeScript, Java, Kotlin,
+  C#, Ruby, PHP, Rust and the rest, where its capability matrix read
+  `unsupported` before. Like the Go graph it never reports that no path exists.
+- HTTP route handlers are entry points (`entry_kind: route`, with the route in
+  `entry_reason`), in Go and in every framework the route reader reads: a
+  decorated or annotated handler, a callback, a handler the registration
+  names, and a Rails or Laravel controller action reached through its routes
+  file.
+- Dependency advisories climb to `call_reachable` in npm, PyPI, RubyGems, Cargo
+  and pub, as they did only in Go: when a function that calls into the
+  affected package, in a file that imports it, is reached from an entry point.
+  The witness is the call path. A Rails application's gems count as imported
+  when `config/application.rb` calls `Bundler.require`, except development and
+  test groups and `require: false`. The climb stops at `call_reachable` even
+  from a route, because a call into the package is not a call into the
+  vulnerable function. The fingerprint does not move, so baselines, waivers
+  and VEX statements still apply; more advisories now pass the default
+  remediate gate, which is `call_reachable`.
+
 ### Fixed
 
 - `nox baseline add` and `nox baseline update` write one entry per occurrence.
@@ -116,6 +140,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `UseAuthentication()`, `UseAuthorization()` and a default policy are still not a
   guard, a guard in a project that is not a host does not count, and an unguarded
   host's own controllers are still reported.
+
+- JavaScript methods are named correctly: a modifier was trimmed as a bare
+  prefix, so `getUser(id) {` was "User" and `settings() {` "tings", and a
+  function named `get` or `set` had no name.
+
+- Taint analysis ends a function's scope where the function ends in Python,
+  Ruby, Lua, PHP, Perl and PowerShell. Their extractors opened a scope at each
+  function header and never closed it, so top-level code after the first
+  function, an `if __name__ == "__main__":` block or a script's trailing
+  calls, was analysed as part of the function above it. On mojo that joined a
+  handler's `$test` to a route declaration at the end of the file. On kong it
+  hid a module-level flow from `os.getenv` into a socket connect. A PHP
+  closure now returns to the function around it rather than to nothing.
+- Perl: a bareword before a fat comma (`{name => 'x'}`) is the string Perl
+  quotes it to, not the variable `$name`, and an anonymous `sub {` whose body
+  spans lines is a scope of its own, as a JavaScript callback is. Together
+  they stop one Mojolicious handler's request parameter from reaching every
+  route declaration that names a `name` key.
 
 ## [1.68.1] - 2026-11-17
 

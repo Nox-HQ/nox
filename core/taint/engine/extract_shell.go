@@ -49,7 +49,7 @@ func extractShell(lines []logicalLine) []unitDraft {
 			continue
 		}
 		if name, ok := shellFuncHeader(trimmed); ok {
-			u := &unitDraft{funcName: name}
+			u := &unitDraft{funcName: name, headerLine: ll.line}
 			units = append(units, u)
 			cur = u
 			continue

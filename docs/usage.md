@@ -1618,7 +1618,8 @@ A Go finding can carry the chain of calls that reaches it:
 
 | kind | means |
 |---|---|
-| `concrete` | `main` or `init` — execution genuinely begins here when the program runs |
+| `route` | the handler of an HTTP route the route reader found; `entry_reason` names it. A request starts it |
+| `concrete` | `main` or `init`, or a script's top-level code — execution genuinely begins here when the program runs or the file is loaded |
 | `test` | the test runner reaches it; real execution, of the test suite |
 | `exported` | an outside caller *could* reach it. Not evidence that anybody does |
 
@@ -1628,9 +1629,16 @@ generated code — each is a call it does not have, and each is a place a path
 could hide. So a finding with no `call_path` is one nox did not find a route to,
 never one it showed unreachable, and nothing here can suppress a finding.
 
-Go only. For every other language a finding's own capability matrix reads
-`unsupported` for `call_graph` and `entry_point` — nothing could have asked, as
-distinct from nobody having asked. A Go project with no `go.mod` is also
+Go is read with its own parser. Every other language the taint engine reads
+(Python, JavaScript/TypeScript, Java, Kotlin, C#, Ruby, PHP, Rust, Swift, Dart,
+Scala, C/C++, Objective-C, Lua, Perl, PowerShell, shell, Groovy, Elixir) is
+read through the functions and calls the taint extractor already records. A
+call binds only when it names one function: a bare name defined once in the
+file or once in the project, a call on `self`/`this`, or a call qualified by a
+module that is a file in the tree. A method on a value of unknown type binds to
+nothing. A finding in a file neither reads (a manifest, a config, YAML) reads
+`unsupported` for `call_graph` and `entry_point` — nothing could have asked,
+as distinct from nobody having asked. A Go project with no `go.mod` is also
 `unsupported`: without the module path the cross-package edges cannot be
 resolved, and a mostly-disconnected graph's silence would mean nothing.
 

@@ -70,6 +70,7 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) (units []ta
 		units = append(units, taint.Unit{
 			FilePath: filePath,
 			FuncName: d.funcName,
+			Line:     d.headerLine,
 			Language: lang.String(),
 			Stmts:    stmts,
 			Params:   append([]string(nil), d.params...),

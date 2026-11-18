@@ -44,7 +44,7 @@ func extractElixir(lines []logicalLine) []unitDraft {
 			continue
 		}
 		if name, params, ok := elixirDefHeader(trimmed); ok {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 			units = append(units, u)
 			cur = u
 			// A single-line `def f(x), do: expr` form carries its body inline; the

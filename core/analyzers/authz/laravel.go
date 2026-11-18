@@ -1480,6 +1480,9 @@ func (p *laravelParser) finish(files map[string]*phpFile, order []string) ([]Rou
 			}
 			v.handler = ev.body
 			v.guardUnseen = v.guardUnseen || ev.unseen
+			if ev.defined {
+				rt.HandlerFile, rt.HandlerFunc = cls.file.path, r.action
+			}
 			if ev.complete && !ev.defined && r.method != "GET" && r.method != "ALL" {
 				v.guardUnseen = true // a method nothing defines is a 500, not the data
 			}

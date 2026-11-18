@@ -5,15 +5,14 @@ import "strings"
 // extractPython turns Python logical lines into unit drafts. Function bodies
 // (`def name(...):`) become their own units keyed by name; everything else
 // accumulates into the module-level unit (funcName ""). Scoping is by `def`
-// only — nested defs and classes fold into the enclosing unit, which is
-// conservative (it can only ever merge scopes, never split a real flow) and
-// keeps the recognizer simple.
+// only — a class body folds into the enclosing unit. A def's unit ends at the
+// first line indented no deeper than its header (see scopestack.go).
 func extractPython(lines []logicalLine) []unitDraft {
 	// Literal-keyed containers become one variable per key; see keyed.go.
 	rewriteKeyedContainers(langPython, lines)
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
-	cur := module
+	scopes := newScopeStack(module)
 	var blocks pyBlocks
 	// Dead-branch pruning; see pydead.go.
 	single := pySingleAssigned(lines)
@@ -27,15 +26,16 @@ func extractPython(lines []logicalLine) []unitDraft {
 			continue
 		}
 		indent := pyIndent(ll.raw)
+		cur := scopes.dedent(indent)
 		blocks.enter(indent)
 		if !strings.HasPrefix(trimmed, "elif") && !strings.HasPrefix(trimmed, "else") {
 			delete(chains, indent)
 		}
 		dead := blocks.dead()
 		if name, params, ok := pyDefHeader(trimmed); ok {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 			units = append(units, u)
-			cur = u
+			scopes.pushIndent(u, indent)
 			blocks.open(indent, false)
 			continue
 		}

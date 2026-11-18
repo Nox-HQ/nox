@@ -782,6 +782,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// Both flow analyzers read the same files' taint units, and extracting
 	// them is most of what either costs, so a scan running both extracts once.
 	flowsTogether := opts.Scopes.RunsAnalyzer("taintflow") && opts.Scopes.RunsAnalyzer("agentflow")
+	// The call graph for every language but Go is built from the units the
+	// flow analyzers extract, during the same walk (see buildSourceGraph).
+	sourceUnits := callgraph.NewSourceBuilder()
 	all := []struct {
 		analyzer string
 		run      analyzerTask
@@ -882,7 +885,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}},
 		{"taintflow", func(c context.Context) error {
 			if flowsTogether {
-				return scanFlowsTogether(c, artifacts, taintflowAnalyzer, agentflowAnalyzer, addFindings)
+				return scanFlowsTogether(c, artifacts, taintflowAnalyzer, agentflowAnalyzer, addFindings, sourceUnits)
 			}
 			fs, err := taintflowAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
@@ -1157,7 +1160,13 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// a larger change than this one and are left to the E track.
 	recordObservations(reasons, allFindings)
 	recordCapabilityCoverage(coverage, allFindings)
-	recordCallGraphCoverage(coverage, allFindings, target)
+	var graphRoutes []callgraph.Route
+	if opts.Scopes.RunsAnalyzer("authz") {
+		graphRoutes = callgraphRoutes(authzAnalyzer)
+	}
+	sourceGraph := buildSourceGraph(ctx, sourceUnits, artifacts, graphRoutes, scanRootDir(target))
+	recordCallGraphCoverage(coverage, allFindings, target, sourceGraph, graphRoutes)
+	raiseDependencyReachability(allFindings, sourceGraph)
 	competenceProfiles := assignCompetenceProfiles(coverage, allFindings)
 	recordAnalysisLimitations(allFindings, target, reasons)
 	divergences, conflicts := adjudicateFindings(reasons, allFindings)
@@ -1838,11 +1847,12 @@ type analyzerTask func(context.Context) error
 // scanFlowsTogether runs taintflow and agentflow over one walk of the source
 // files (see flowunits), each into its own FindingSet, so the findings are
 // what each would report on its own.
-func scanFlowsTogether(ctx context.Context, artifacts []discovery.Artifact, tf *taintflow.Analyzer, af *agentflow.Analyzer, addFindings func(*findings.FindingSet)) error {
+func scanFlowsTogether(ctx context.Context, artifacts []discovery.Artifact, tf *taintflow.Analyzer, af *agentflow.Analyzer, addFindings func(*findings.FindingSet), unitsOut *callgraph.SourceBuilder) error {
 	taintFS, agentFS := findings.NewFindingSet(), findings.NewFindingSet()
-	err := flowunits.Walk(ctx, artifacts, func(path string, units []taint.Unit) {
+	err := flowunits.WalkContent(ctx, artifacts, func(path string, content []byte, units []taint.Unit) {
 		tf.ScanUnits(taintFS, path, units)
 		af.ScanUnits(agentFS, units)
+		unitsOut.Add(path, content, units)
 	})
 	if err != nil {
 		return err
@@ -2703,61 +2713,55 @@ func adjudicateFindings(store *reasoning.Store, fs *findings.FindingSet) ([]adju
 // The states are chosen to make a wrong answer impossible in the direction that
 // matters. Positive when a path was found — existential, and the witness is a
 // real chain of call expressions. NEVER Negative: a syntactic graph cannot see
-// interface dispatch, function values or reflection, so "no path found" is
-// Unknown, and Unknown cannot suppress a finding. Unsupported outside Go,
-// because there the question genuinely cannot be put and NotEvaluated would
-// read as a gap somebody could close.
+// dynamic dispatch, function values or reflection, so "no path found" is
+// Unknown, and Unknown cannot suppress a finding.
 //
-// The graph is built once per scan and only when the target holds a Go module.
-// On nox's own tree that is ~0.2s for 7,600 functions; a repository with no
-// go.mod pays nothing.
-func recordCallGraphCoverage(cov *capability.Coverage, fs *findings.FindingSet, target string) {
+// Go findings are answered by the go/ast graph, built only when the target
+// holds a Go module. Every other language the taint extractor reads is
+// answered by the source graph (see buildSourceGraph). A finding in a file
+// neither graph read — a manifest, a config, a language with no extractor —
+// is Unsupported, because there the question genuinely cannot be put and
+// NotEvaluated would read as a gap somebody could close.
+func recordCallGraphCoverage(cov *capability.Coverage, fs *findings.FindingSet, target string, source *callgraph.Graph, routes []callgraph.Route) {
 	if cov == nil || fs == nil {
 		return
 	}
 	items := fs.Findings()
-
-	// Non-Go findings first, and unconditionally: they are Unsupported whether
-	// or not a graph was built, and saying so is the whole reason declaring
-	// these capabilities at installation level stays honest.
-	var anyGo bool
-	for _, f := range items {
-		if strings.HasSuffix(f.Location.FilePath, ".go") {
-			anyGo = true
-			continue
-		}
-		subject := SubjectForFinding(f)
+	unsupported := func(subject evidence.Subject) {
 		cov.Record(subject, capability.CallGraph, capability.Unsupported)
 		cov.Record(subject, capability.EntryPoint, capability.Unsupported)
 	}
-	if !anyGo {
-		return
-	}
 
+	var goGraph *callgraph.Graph
 	root := scanRootDir(target)
-	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
-		// Go files with no module: the import paths cannot be resolved, so a
-		// graph would be mostly disconnected. Unsupported rather than a bad
-		// answer.
-		for _, f := range items {
-			if !strings.HasSuffix(f.Location.FilePath, ".go") {
-				continue
-			}
-			subject := SubjectForFinding(f)
-			cov.Record(subject, capability.CallGraph, capability.Unsupported)
-			cov.Record(subject, capability.EntryPoint, capability.Unsupported)
-		}
-		return
-	}
-
-	g := callgraph.BuildGo(root)
 	for i := range items {
 		f := items[i]
-		if !strings.HasSuffix(f.Location.FilePath, ".go") {
+		subject := SubjectForFinding(f)
+		var g *callgraph.Graph
+		key, ok := "", false
+		switch {
+		case strings.HasSuffix(f.Location.FilePath, ".go"):
+			if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
+				// Go files with no module: the import paths cannot be
+				// resolved, so a graph would be mostly disconnected.
+				unsupported(subject)
+				continue
+			}
+			if goGraph == nil {
+				// Built once per scan, and only when a Go finding asks: on
+				// nox's own tree ~0.2s for 7,600 functions.
+				goGraph = callgraph.BuildGo(root)
+				goGraph.MarkGoRoutes(root, routes)
+			}
+			g = goGraph
+			key, ok = g.FuncAt(filepath.Join(root, f.Location.FilePath), f.Location.StartLine)
+		case source.Covers(f.Location.FilePath):
+			g = source
+			key, ok = g.FuncAt(f.Location.FilePath, f.Location.StartLine)
+		default:
+			unsupported(subject)
 			continue
 		}
-		subject := SubjectForFinding(f)
-		key, ok := g.FuncAt(filepath.Join(root, f.Location.FilePath), f.Location.StartLine)
 		if !ok {
 			// The line is outside any function — a package-level declaration,
 			// an import. There is no call path to a var.
@@ -2765,30 +2769,64 @@ func recordCallGraphCoverage(cov *capability.Coverage, fs *findings.FindingSet, 
 			cov.Record(subject, capability.EntryPoint, capability.Unknown)
 			continue
 		}
-		path, reached := g.PathToFunc(key)
-		// A path of one is the function itself, reached from nothing. It means
-		// no caller was resolved, which is the opposite of establishing that a
-		// call path exists — reach.CallPathExists is "a call path reaches the
-		// symbol FROM somewhere". Recording Positive for it would turn "we
-		// found no caller" into "we found a route".
-		if len(path) > 1 {
-			cov.Record(subject, capability.CallGraph, capability.Positive)
-			fs.SetMetadata(i, "call_path", strings.Join(path, " -> "))
-		} else {
-			cov.Record(subject, capability.CallGraph, capability.Unknown)
-		}
-		// EntryPoint is the stronger question and gets the stricter answer.
-		// Reaching an exported function establishes that an outside caller
-		// COULD arrive, not that execution begins anywhere — so only a
-		// concrete or test entry counts as answered.
-		switch reached {
-		case callgraph.EntryConcrete, callgraph.EntryTest:
-			cov.Record(subject, capability.EntryPoint, capability.Positive)
-			fs.SetMetadata(i, "entry_kind", reached.String())
-		default:
-			cov.Record(subject, capability.EntryPoint, capability.Unknown)
-		}
+		recordPath(cov, fs, i, subject, g, key)
 	}
+}
+
+// recordPath records what the graph established about one finding's function.
+func recordPath(cov *capability.Coverage, fs *findings.FindingSet, i int, subject evidence.Subject, g *callgraph.Graph, key string) {
+	path, reached := g.PathToFunc(key)
+	// A path of one is the function itself, reached from nothing — unless the
+	// function is itself where execution begins (a route handler, module
+	// code), in which case the entry question is answered and the call-path
+	// question is not: reach.CallPathExists is "a call path reaches the
+	// symbol FROM somewhere", and recording Positive for a path of one would
+	// turn "we found no caller" into "we found a route".
+	if len(path) > 1 {
+		cov.Record(subject, capability.CallGraph, capability.Positive)
+		fs.SetMetadata(i, "call_path", strings.Join(path, " -> "))
+	} else {
+		cov.Record(subject, capability.CallGraph, capability.Unknown)
+	}
+	// EntryPoint is the stronger question and gets the stricter answer.
+	// Reaching an exported function establishes that an outside caller COULD
+	// arrive, not that execution begins anywhere — so only a route, concrete
+	// or test entry counts as answered.
+	switch reached {
+	case callgraph.EntryRoute, callgraph.EntryConcrete, callgraph.EntryTest:
+		cov.Record(subject, capability.EntryPoint, capability.Positive)
+		fs.SetMetadata(i, "entry_kind", reached.String())
+		if fn, ok := g.Func(path[0]); ok && reached == callgraph.EntryRoute {
+			fs.SetMetadata(i, "entry_reason", fn.EntryReason)
+		}
+	default:
+		cov.Record(subject, capability.EntryPoint, capability.Unknown)
+	}
+}
+
+// buildSourceGraph builds the call graph for every non-Go language from the
+// units the flow analyzers extracted. When they did not run together (one of
+// them scoped out) nothing was collected, and the files are walked here.
+func buildSourceGraph(ctx context.Context, units *callgraph.SourceBuilder, artifacts []discovery.Artifact, routes []callgraph.Route, root string) *callgraph.Graph {
+	if units.Len() == 0 {
+		_ = flowunits.WalkContent(ctx, artifacts, func(path string, content []byte, us []taint.Unit) {
+			units.Add(path, content, us)
+		})
+	}
+	units.AddLoaded("RubyGems", bundlerRequiredGems(root))
+	return units.Build(routes)
+}
+
+// callgraphRoutes hands the route reader's registrations to the call graph,
+// which marks their handlers as entry points a request reaches.
+func callgraphRoutes(a *authz.Analyzer) []callgraph.Route {
+	rs := a.Routes()
+	out := make([]callgraph.Route, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, callgraph.Route{Method: r.Method, Path: r.Path, File: r.FilePath, Line: r.Line, Reader: r.Reader,
+			HandlerFile: r.HandlerFile, HandlerFunc: r.HandlerFunc})
+	}
+	return out
 }
 
 // assignCompetenceProfiles groups findings by what was NOT answered about them

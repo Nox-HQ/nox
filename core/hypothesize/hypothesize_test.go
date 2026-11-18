@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nox-hq/nox/core/capability"
+
 	nox "github.com/nox-hq/nox/core"
 	"github.com/nox-hq/nox/core/hypothesize"
 )
@@ -132,16 +134,28 @@ func TestUnansweredCapabilitiesSayWhetherAnythingCouldAnswerThem(t *testing.T) {
 		t.Fatal("no hypotheses")
 	}
 
-	var flagged int
-	for _, u := range plan.Hypotheses[0].Unknowns {
-		if strings.Contains(u, "nothing on this installation can answer it") {
-			flagged++
+	h := plan.Hypotheses[0]
+	// The Python finding's call graph was asked: core/callgraph reads Python
+	// through the taint units. It may not have found a caller, but "nothing
+	// could answer it" would be false.
+	for _, u := range h.Unknowns {
+		if strings.HasPrefix(u, "call_graph") && strings.Contains(u, "nothing on this installation can answer it") {
+			t.Errorf("call_graph is implemented for Python and still reads unanswerable: %q", u)
 		}
 	}
-	// call_graph and entry_point have no implementation on a stock build.
-	if flagged < 2 {
-		t.Errorf("%d unknowns are marked unanswerable; call_graph and entry_point have no "+
-			"implementation here and both should be", flagged)
+
+	// Where a capability genuinely cannot apply — a finding in a file no
+	// graph reads — the unknown must say so. Recorded directly, because every
+	// language with a hypothesis-producing rule is now one the graph reads.
+	res.Coverage.Record(h.Subject, capability.CallGraph, capability.Unsupported)
+	var flagged bool
+	for _, u := range hypothesize.UnknownsFor(res)(h.Subject) {
+		if strings.HasPrefix(u, "call_graph") && strings.Contains(u, "nothing on this installation can answer it") {
+			flagged = true
+		}
+	}
+	if !flagged {
+		t.Error("an unsupported call_graph is not marked unanswerable")
 	}
 }
 

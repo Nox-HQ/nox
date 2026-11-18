@@ -1154,6 +1154,17 @@ func (fs *FindingSet) SetMetadata(i int, key, value string) {
 	fs.items[i].Metadata[key] = value
 }
 
+// SetMessage replaces finding i's message. For a scan stage that establishes
+// more than the analyzer could (core.raiseDependencyReachability); the
+// fingerprint was fixed when the finding was added and does not move, so a
+// baseline, waiver or VEX statement written against it still applies.
+func (fs *FindingSet) SetMessage(i int, msg string) {
+	if i < 0 || i >= len(fs.items) {
+		return
+	}
+	fs.items[i].Message = msg
+}
+
 // GatesByDefault reports whether an active finding fails a scan that has no
 // policy. Every finding does, except a dependency vulnerability (VULN-001)
 // nox decided is not impacting: the scan established deterministically that

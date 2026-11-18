@@ -20,7 +20,7 @@ import "strings"
 func extractRuby(lines []logicalLine) []unitDraft {
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
-	cur := module
+	scopes := newScopeStack(module)
 	// Names assigned through a shared-state sigil (`@ivar`, `@@cvar`, `$global`).
 	// Only these join across units; a plain local never does.
 	shared := map[string]bool{}
@@ -31,13 +31,15 @@ func extractRuby(lines []logicalLine) []unitDraft {
 		if trimmed == "" {
 			continue
 		}
+		// A method ends at the `end` level with its `def` (scopestack.go).
+		cur := scopes.dedent(pyIndent(ll.raw))
 		if n := rubyStateSigilName(trimmed); n != "" {
 			shared[n] = true
 		}
 		if name, params, ok := rubyDefHeader(trimmed); ok {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 			units = append(units, u)
-			cur = u
+			scopes.pushIndent(u, pyIndent(ll.raw))
 			continue
 		}
 		// `end`, `else`, block openers, etc. carry no dataflow; skip structural

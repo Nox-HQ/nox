@@ -46,7 +46,7 @@ func extractScala(lines []logicalLine) []unitDraft {
 		// A `def` header opens a new unit. Recognize it before statements so its
 		// name/parameters are never read as a data-flow call.
 		if name, params, brace, bodyLL, ok := scalaDefHeader(ll); ok {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 			units = append(units, u)
 			cur = u
 			if brace {

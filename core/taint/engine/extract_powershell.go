@@ -51,19 +51,24 @@ import "strings"
 func extractPowerShell(lines []logicalLine) []unitDraft {
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
-	cur := module
+	scopes := newScopeStack(module)
 
 	for _, raw := range lines {
 		trimmed := strings.TrimSpace(raw.code)
 		if trimmed == "" {
 			continue
 		}
+		// A function ends at its closing brace (scopestack.go). The scope a
+		// line belongs to is fixed before its braces are counted.
+		cur := scopes.current()
 		if name, params, ok := powerShellFuncHeader(trimmed); ok {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: raw.line}
 			units = append(units, u)
-			cur = u
+			scopes.pushBrace(u)
+			scopes.advance(trimmed)
 			continue
 		}
+		scopes.advance(trimmed)
 		if isPowerShellStructuralLine(trimmed) {
 			continue
 		}

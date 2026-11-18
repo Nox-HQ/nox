@@ -69,7 +69,7 @@ func extractObjC(lines []logicalLine) []unitDraft {
 		// statement recognizer so its selector/parameter identifiers are never read
 		// as a data-flow call.
 		if name, params, ok := objcMethodHeader(trimmed); ok && cppHeaderHasBody(trimmed, lines, idx) {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 			units = append(units, u)
 			cur = u
 			funcDepth = depth
@@ -80,7 +80,7 @@ func extractObjC(lines []logicalLine) []unitDraft {
 		// A C function-DEFINITION header opens a new unit. Same rule as extractCPP:
 		// a header is a definition only when a body brace `{` follows.
 		if name, params, ok := cppFuncHeader(trimmed); ok && cppHeaderHasBody(trimmed, lines, idx) {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 			units = append(units, u)
 			cur = u
 			funcDepth = depth

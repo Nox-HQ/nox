@@ -35,7 +35,7 @@ func extractPHP(lines []logicalLine) []unitDraft {
 	jb := newJavaBranches(norm)
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
-	cur := module
+	scopes := newScopeStack(module)
 	depth := 0
 
 	for li, ll := range norm {
@@ -49,23 +49,28 @@ func extractPHP(lines []logicalLine) []unitDraft {
 		depthHere := before - (len(code) - len(strings.TrimLeft(code, "}")))
 		jb.enter(depthHere)
 
-		if name, params, ok := phpFuncHeader(code); ok {
-			u := &unitDraft{funcName: name, params: params}
+		// A function ends at its closing brace, returning to the scope that
+		// held it: the module, or the function around a closure (see
+		// scopestack.go). A line belongs to the scope current when it starts.
+		cur := scopes.current()
+		name, params, isHeader := phpFuncHeader(code)
+		if !isHeader {
+			scopes.advance(code)
+		}
+		if isHeader {
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 			units = append(units, u)
-			cur = u
+			scopes.pushBrace(u)
+			scopes.advance(code)
 			// F4: a header line may carry the body on the SAME line with the brace on
 			// the header — `function run($c){ system($c); }`. The multi-line form
 			// (brace-on-header, body on following lines) is handled by the ordinary
 			// loop, but a same-line body was previously discarded (stmts=0). Recognize
-			// those inline statements into the new unit; if the body is complete on the
-			// line (a matching close brace), the function ends here, so reset the
-			// current scope to the module for the statements that follow.
-			body, complete := phpInlineBody(ll)
+			// those inline statements into the new unit; a body complete on the
+			// line has already closed its scope in advance above.
+			body, _ := phpInlineBody(ll)
 			for i := range body {
 				phpRecognizeInto(u, body[i])
-			}
-			if complete {
-				cur = module
 			}
 			continue
 		}

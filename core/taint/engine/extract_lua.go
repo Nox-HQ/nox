@@ -21,18 +21,24 @@ import "strings"
 func extractLua(lines []logicalLine) []unitDraft {
 	module := &unitDraft{funcName: ""}
 	units := []*unitDraft{module}
-	cur := module
+	scopes := newScopeStack(module)
 
 	for _, raw := range lines {
 		ll := normalizeLuaLine(raw)
 		code := strings.TrimSpace(ll.code)
-		if code == "" || isLuaStructuralLine(code) {
+		if code == "" {
+			continue
+		}
+		// A function ends at the `end` level with its header (scopestack.go);
+		// that `end` is structural, so the scope is settled before the skip.
+		cur := scopes.dedent(pyIndent(raw.raw))
+		if isLuaStructuralLine(code) {
 			continue
 		}
 		if name, params, ok := luaFuncHeader(code); ok {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: raw.line}
 			units = append(units, u)
-			cur = u
+			scopes.pushIndent(u, pyIndent(raw.raw))
 			continue
 		}
 		if st, ok := luaReturnStatement(ll); ok {

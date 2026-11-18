@@ -59,7 +59,7 @@ func extractSwift(lines []logicalLine) []unitDraft {
 		// recognizer so the header identifiers (function name, parameter labels) are
 		// never read as a data-flow call.
 		if name, params, ok := swiftFuncHeader(trimmed); ok {
-			u := &unitDraft{funcName: name, params: params}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 			units = append(units, u)
 			cur = u
 			funcDepth = depth

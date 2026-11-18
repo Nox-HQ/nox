@@ -53,7 +53,7 @@ func extractCSharp(lines []logicalLine) []unitDraft {
 		// `return ...;` line is never a header (`return new Foo(x)`).
 		if !strings.HasPrefix(trimmed, "return") {
 			if name, params, ok := csharpMethodHeader(trimmed); ok {
-				u := &unitDraft{funcName: name, params: params}
+				u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
 				units = append(units, u)
 				cur = u
 				methodDepth = depth
