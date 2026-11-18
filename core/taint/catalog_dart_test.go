@@ -50,6 +50,11 @@ func TestDartCatalogSources(t *testing.T) {
 	for _, call := range []string{
 		"Platform.environment", "args",
 		"request.uri.queryParameters", "request.requestedUri", "stdin",
+		// shelf: Request.url / headers / body readers, the req alias, and the
+		// sentinel seeded onto shelf_router path parameters.
+		"request.url", "request.headers", "request.readAsString", "request.read",
+		"request.params", "req.url", "req.headers", "req.readAsString", "req.read",
+		"req.params", "req.requestedUri", "req.uri", "RequestBoundQuery",
 	} {
 		if !cat.IsSource("dart", call) {
 			t.Errorf("IsSource(dart, %q) = false, want true", call)

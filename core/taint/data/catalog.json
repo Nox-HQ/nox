@@ -3747,18 +3747,32 @@
           "note": "std::process::Command; dangerous when a tainted program name or a tainted arg (.arg/.args) drives an sh -c style invocation"
         },
         {
-          "call": "arg",
+          "call": "shell_arg",
           "vuln_class": "command_injection",
           "cwe": "CWE-78",
           "rule_id": "TAINT-002",
-          "note": "Command::new(\"sh\").arg(\"-c\").arg(user) — the tainted value flows through .arg into the shell"
+          "note": "Command::new(\"sh\").arg(\"-c\").arg(user) — the tainted value flows through .arg into a shell. Synthetic call: the Rust extractor (rust_command.go) renames an .arg whose Command program is a shell, because the sink depends on the program named in Command::new, not on the .arg call."
+        },
+        {
+          "call": "shell_args",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "Command::new(\"sh\").args([\"-c\", user]) — as shell_arg, for .args"
+        },
+        {
+          "call": "arg",
+          "vuln_class": "argument_injection",
+          "cwe": "CWE-88",
+          "rule_id": "TAINT-012",
+          "note": "Command::new(\"git\").arg(user) — an argument vector reaches execve with no shell, so the value is one argument and at worst is read as an option. Not reported after a literal \"--\" in the same builder, nor when the program is a shell (shell_arg)."
         },
         {
           "call": "args",
-          "vuln_class": "command_injection",
-          "cwe": "CWE-78",
-          "rule_id": "TAINT-002",
-          "note": "Command::new(...).args([...]) with a tainted element"
+          "vuln_class": "argument_injection",
+          "cwe": "CWE-88",
+          "rule_id": "TAINT-012",
+          "note": "Command::new(...).args([...]) with a tainted element; as arg"
         },
         {
           "call": "sqlx.query",
@@ -5518,6 +5532,101 @@
           "rule_id": "TAINT-004"
         },
         {
+          "call": "contents.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileManager.default.contents(atPath:) reads any file at the given path; the extractor folds the atPath: label so the key matches any receiver (FileManager.default or a variable holding it)"
+        },
+        {
+          "call": "createFile.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileManager.default.createFile(atPath:contents:) creates or overwrites a file at the path"
+        },
+        {
+          "call": "removeItem.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileManager.default.removeItem(atPath:) deletes whatever the path names"
+        },
+        {
+          "call": "copyItem.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileManager.default.copyItem(atPath:toPath:) copies from or to a tainted path"
+        },
+        {
+          "call": "moveItem.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileManager.default.moveItem(atPath:toPath:) moves from or to a tainted path"
+        },
+        {
+          "call": "contentsOfDirectory.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileManager.default.contentsOfDirectory(atPath:) lists an attacker-chosen directory"
+        },
+        {
+          "call": "subpathsOfDirectory.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "createDirectory.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "attributesOfItem.atPath",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "removeItem.at",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "FileManager.default.removeItem(at: URL) with a URL built from tainted input (URL(fileURLWithPath: tainted))"
+        },
+        {
+          "call": "copyItem.at",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "copyItem(at:to:) with a URL built from tainted input"
+        },
+        {
+          "call": "moveItem.at",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "moveItem(at:to:) with a URL built from tainted input"
+        },
+        {
+          "call": "contentsOfDirectory.at",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "contentsOfDirectory(at:includingPropertiesForKeys:) with a URL built from tainted input"
+        },
+        {
+          "call": "createDirectory.at",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "createDirectory(at:withIntermediateDirectories:) with a URL built from tainted input"
+        },
+        {
           "call": "String.contentsOfFile",
           "vuln_class": "path_traversal",
           "cwe": "CWE-22",
@@ -5724,6 +5833,62 @@
         },
         {
           "call": "request.uri",
+          "kind": "http_query"
+        },
+        {
+          "call": "RequestBoundQuery",
+          "kind": "http_query",
+          "note": "sentinel: a shelf_router path parameter, the String parameters that follow the Request in a handler's parameter list (Router()..get('/u/<id>', (Request req, String id) {...})). Parameter names are arbitrary, so the extractor seeds this chain onto them (core/taint/engine/extract_dart.go dartRouteBound); a String parameter of a function with no Request is NOT promoted"
+        },
+        {
+          "call": "request.url",
+          "kind": "http_query",
+          "note": "shelf Request.url is the request URL relative to the handler; its queryParameters and path are attacker-controlled"
+        },
+        {
+          "call": "request.headers",
+          "kind": "http_header"
+        },
+        {
+          "call": "request.readAsString",
+          "kind": "http_body",
+          "note": "shelf Request.readAsString() returns the request body"
+        },
+        {
+          "call": "request.read",
+          "kind": "http_body"
+        },
+        {
+          "call": "request.params",
+          "kind": "http_query",
+          "note": "shelf_router path parameters read through request.params"
+        },
+        {
+          "call": "req.url",
+          "kind": "http_query"
+        },
+        {
+          "call": "req.headers",
+          "kind": "http_header"
+        },
+        {
+          "call": "req.readAsString",
+          "kind": "http_body"
+        },
+        {
+          "call": "req.read",
+          "kind": "http_body"
+        },
+        {
+          "call": "req.params",
+          "kind": "http_query"
+        },
+        {
+          "call": "req.requestedUri",
+          "kind": "http_query"
+        },
+        {
+          "call": "req.uri",
           "kind": "http_query"
         },
         {

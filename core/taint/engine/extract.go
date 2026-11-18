@@ -256,7 +256,7 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// Dart statements are `;`-terminated and method/function bodies are
 		// brace-delimited, so it recognizes headers for per-function units (with
 		// params). See extract_dart.go.
-		return extractDart(splitSemicolons(logicalLines(content, regions, true)))
+		return extractDart(splitSemicolons(logicalLinesWith(content, regions, true, dartBlockWords)))
 	case lexctx.LangGroovy:
 		// Groovy is brace-delimited like Java/Kotlin/Groovy-on-the-JVM: paren/array
 		// continuations merge physical lines, then each logical line splits on
@@ -333,6 +333,13 @@ func conditionGuard(lang langKind, ll logicalLine) (stmtDraft, bool) {
 // non-code byte to a space, preserving offsets so a call spanning a string is
 // still recognized by its code parentheses.
 func logicalLines(content []byte, regions []lexctx.Region, bracesAreBlocks bool) []logicalLine {
+	return logicalLinesWith(content, regions, bracesAreBlocks, nil)
+}
+
+// logicalLinesWith is logicalLines for a language with block-opening words of
+// its own: a brace directly after one of blockWords, inside parens, opens a
+// function body (see bracketNest).
+func logicalLinesWith(content []byte, regions []lexctx.Region, bracesAreBlocks bool, blockWords map[string]bool) []logicalLine {
 	// codeMask is content with non-code bytes replaced by spaces (newlines kept
 	// so line counting stays correct).
 	codeMask := make([]byte, len(content))
@@ -351,7 +358,7 @@ func logicalLines(content []byte, regions []lexctx.Region, bracesAreBlocks bool)
 	var out []logicalLine
 	lineNo := 1
 	depth := 0
-	var nest bracketNest
+	nest := bracketNest{words: blockWords}
 	var codeBuf, rawBuf strings.Builder
 	startLine := 1
 	flush := func() {
@@ -423,6 +430,8 @@ type bracketNest struct {
 	prev  byte   // the last non-space token: a punctuation byte, or 'a' for a word
 	word  string // that word, when prev is 'a'
 	cur   []byte // the identifier being read
+	// words are block-opening words beyond blockKeywords, for one language.
+	words map[string]bool
 }
 
 // blockKeywords open a block with a brace that follows them directly.
@@ -449,7 +458,7 @@ func (n *bracketNest) feed(code string) bool {
 			// A brace matters only inside a paren or bracket.
 			if len(n.stack) > 0 {
 				kind := byte('l')
-				if n.prev == ')' || n.prev == '>' || (n.prev == 'a' && blockKeywords[n.word]) {
+				if n.prev == ')' || n.prev == '>' || (n.prev == 'a' && (blockKeywords[n.word] || n.words[n.word])) {
 					kind = 'b'
 				}
 				n.stack = append(n.stack, kind)

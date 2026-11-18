@@ -48,7 +48,7 @@ import (
 var (
 	csTypeRe       = regexp.MustCompile(`\b(class|struct|interface|record|enum|namespace)\s+([A-Za-z_][\w.]*)`)
 	csAssignRe     = regexp.MustCompile(`^(?:[A-Za-z_][\w<>\[\]?.,]*\s+)?([A-Za-z_]\w*)\s*=([^=>]|$)`)
-	csGlobalAuthRe = regexp.MustCompile(`\bFallbackPolicy\s*=\s*\S|\.\s*SetFallbackPolicy\s*\(|\bnew\s+AuthorizeFilter\b|\bAdd\s*<\s*AuthorizeFilter\b`)
+	csGlobalAuthRe = regexp.MustCompile(`\bFallbackPolicy\s*=\s*\S|\.\s*SetFallbackPolicy\s*\(|\.\s*AddFallbackPolicy\s*\(|\bnew\s+AuthorizeFilter\b|\bAdd\s*<\s*AuthorizeFilter\b`)
 	// csNegatedRe: [NoPermissionRequired] and the like say the opposite of what authzMWRe hears in them.
 	csNegatedRe      = regexp.MustCompile(`^(?:No|Skip|Bypass|Ignore|Disable)(?:Auth|Permission|Role|Policy|Security)`)
 	csNullFallbackRe = regexp.MustCompile(`\bFallbackPolicy\s*=\s*null\b`)
@@ -252,8 +252,17 @@ type csProject struct {
 	all      []*csFunc
 	guarded  bool // something project-wide decides authentication
 	ctlGuard bool // MapControllers().RequireAuthorization()
-	handled  map[*csFunc]bool
-	memo     map[string]*csRouter
+	// pagesGuard: MapRazorPages().RequireAuthorization(), which guards the
+	// pages and nothing MapControllers maps (ctlGuard is the converse).
+	pagesGuard bool
+	// hostGuard: this project holds controllers but no host of its own (a class
+	// library), and a project that is a host guards everything it serves.
+	hostGuard bool
+	handled   map[*csFunc]bool
+	memo      map[string]*csRouter
+	// convs are the Razor Pages conventions, patterns the conventional MVC routes.
+	convs    []razorConv
+	patterns []mvcPattern
 }
 
 type csRec struct {
@@ -271,6 +280,9 @@ type csIndex struct {
 	recs     []csRec
 	out      []Route
 	views    []routeView
+	// pages are the Razor Pages of the scan; extraSeen dedupes their routes and conventional MVC's.
+	pages     []*razorPage
+	extraSeen map[string]bool
 }
 
 func newCSFile(p, project string, raw []byte) *csFile {
@@ -338,6 +350,7 @@ func (p *csProject) index() {
 				p.guarded = true
 			}
 		}
+		p.scanPagesAndConventions(f)
 		p.scanTypes(f, 0, len(f.code))
 	}
 	p.deriveAuthAttrs()
@@ -523,6 +536,7 @@ func attrEnd(f *csFile, a csAttr) int {
 // ---- controllers ----
 
 func (ix *csIndex) controllerRoutes() {
+	ix.markHostGuards()
 	for _, d := range ix.order {
 		p := ix.projects[d]
 		for _, name := range sortedClassNames(p) {
@@ -562,7 +576,7 @@ func (p *csProject) effective(c *csClass, seen map[*csClass]bool) csEffective {
 	}
 	seen[c] = true
 	switch bases := p.classes[c.base]; {
-	case c.base == "" || c.base == "Controller" || c.base == "ControllerBase":
+	case c.base == "" || c.base == "Controller" || c.base == "ControllerBase" || c.base == "PageModel":
 	case len(bases) != 1 || seen[bases[0]]:
 		e.external = true
 	default:
@@ -593,6 +607,7 @@ func (ix *csIndex) controller(p *csProject, c *csClass) {
 	for _, m := range csScan(c.file.code, c.body.start, c.body.end) {
 		ix.action(p, c, m, e.ev, e.external, routes, ctlName, e.area)
 	}
+	ix.conventional(p, c, e)
 }
 
 func (ix *csIndex) action(p *csProject, c *csClass, m csMember, class csEvidence, external bool, routes []string, ctl, area string) {
@@ -642,7 +657,7 @@ func (ix *csIndex) action(p *csProject, c *csClass, m csMember, class csEvidence
 		ev.authn = inlineAuthLabel
 	}
 	opaque := external && ev.authn == "" && ev.authz == "" && !ev.public
-	guarded := (p.guarded || p.ctlGuard || opaque) && !ev.public
+	guarded := (p.guarded || p.ctlGuard || p.hostGuard || opaque) && !ev.public
 	line := lineAt(f.lineStarts, m.declStart)
 	if len(m.attrs) > 0 {
 		line = lineAt(f.lineStarts, m.attrs[0].start)
@@ -680,4 +695,43 @@ func csTokens(t, ctl, action, area string) string {
 		}
 		return area
 	})
+}
+
+// csHostRe: code that makes a project an application: it builds and runs a web
+// host, or maps controllers onto endpoints.
+var csHostRe = regexp.MustCompile(`\bWebApplication\s*\.\s*Create\w*\s*\(|\bHost\s*\.\s*CreateDefaultBuilder\b|\bCreateHostBuilder\b|\bWebHost\s*\.\s*CreateDefaultBuilder\b|\.\s*UseStartup\s*<|\.\s*MapControllers\s*\(|\.\s*UseEndpoints\s*\(`)
+
+func (p *csProject) isHost() bool {
+	for _, f := range p.files {
+		if csHostRe.MatchString(f.code) {
+			return true
+		}
+	}
+	return false
+}
+
+// markHostGuards handles controllers that live apart from the application that
+// serves them. A class library of controllers has no Program.cs: the host that
+// references it maps them and decides what guards them. When a project in the
+// scanned tree is such a host and it guards everything it serves (a fallback
+// policy, a global AuthorizeFilter, MapControllers().RequireAuthorization()),
+// the library's controllers are served behind that guard, so an empty Authn on
+// them proves nothing. A project that is not a host (a guard written in a
+// policies file nothing runs) does not count, and a host that guards nothing
+// does not either.
+func (ix *csIndex) markHostGuards() {
+	guardedHost := false
+	for _, d := range ix.order {
+		if p := ix.projects[d]; p.isHost() && (p.guarded || p.ctlGuard) {
+			guardedHost = true
+		}
+	}
+	if !guardedHost {
+		return
+	}
+	for _, d := range ix.order {
+		if p := ix.projects[d]; !p.isHost() {
+			p.hostGuard = true
+		}
+	}
 }

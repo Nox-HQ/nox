@@ -245,6 +245,38 @@ var swiftDiscriminatingLabels = map[string]bool{
 	"with":           true, // session.dataTask(with:) / NSKeyedUnarchiver(with:)
 }
 
+// swiftFileManagerLabels maps each FileManager method that takes a path to the
+// first-argument labels that carry it: `atPath:` for a String path, `at:` for a
+// URL. The label alone cannot be folded globally (`items.insert(x, at: 0)`,
+// `view.item(at: i)` are everywhere), so the fold is keyed on the pair, and
+// `removeItem(atPath: p)` becomes `removeItem.atPath(p)`: a key that matches
+// whatever holds the FileManager (`FileManager.default`, `let fm = ...`).
+var swiftFileManagerLabels = map[string]map[string]bool{
+	"contents":            {"atPath": true},
+	"createFile":          {"atPath": true},
+	"removeItem":          {"atPath": true, "at": true},
+	"copyItem":            {"atPath": true, "at": true},
+	"moveItem":            {"atPath": true, "at": true},
+	"contentsOfDirectory": {"atPath": true, "at": true},
+	"subpathsOfDirectory": {"atPath": true},
+	"createDirectory":     {"atPath": true, "at": true},
+	"attributesOfItem":    {"atPath": true},
+}
+
+func swiftFileManagerLabel(callee, label string) bool {
+	return swiftFileManagerLabels[callee][label]
+}
+
+// swiftCalleeBefore returns the identifier ending just before b[open], the `(`
+// of a call.
+func swiftCalleeBefore(b []byte, open int) string {
+	start := open
+	for start > 0 && isIdentPart(b[start-1]) {
+		start--
+	}
+	return string(b[start:open])
+}
+
 // normalizeSwift folds a discriminating first-argument label into the callee for
 // the initializer/method forms whose danger depends on that label, so the shared
 // recognizer sees a plain dotted call the catalog keys on. `String(contentsOfFile:
@@ -298,7 +330,8 @@ func normalizeSwiftText(s string) string {
 		if k >= n || b[k] != ':' {
 			continue
 		}
-		if !swiftDiscriminatingLabels[string(b[labelStart:j])] {
+		if !swiftDiscriminatingLabels[string(b[labelStart:j])] &&
+			!swiftFileManagerLabel(swiftCalleeBefore(b, i), string(b[labelStart:j])) {
 			continue
 		}
 		// Rewrite: `(` -> `.` at i, and the label's `:` -> `(` at k.

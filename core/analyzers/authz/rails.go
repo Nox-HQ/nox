@@ -849,6 +849,9 @@ type rbEvidence struct {
 	// action. complete: every class and module in the chain was read, so that
 	// "not defined" means not defined.
 	defined, complete bool
+	// paramsRead: a callback that runs for the action reads `params`, so what
+	// the action renders can depend on the request, whatever its own body says.
+	paramsRead bool
 }
 
 type rbState struct {
@@ -974,6 +977,9 @@ func (ix *rbIndex) evidence(c *rbClass, action string) rbEvidence {
 			ev.unseen = true // a gate that applies only sometimes
 			continue
 		}
+		if rbParamsRe.MatchString(defs[n]) {
+			ev.paramsRead = true
+		}
 		if class == "authn" && ev.authn == "" {
 			ev.authn = op.label
 		}
@@ -988,6 +994,16 @@ func (ix *rbIndex) evidence(c *rbClass, action string) rbEvidence {
 		ev.authn = inlineAuthLabel
 	}
 	return ev
+}
+
+var rbParamsRe = regexp.MustCompile(`\bparams\b`)
+
+// rbEmptyDef: the action's whole text is `def name … end` with nothing between,
+// so Rails renders the action's template and nothing else.
+var rbEmptyDefRe = regexp.MustCompile(`^def\s+\w+[?!]?\s*(?:\([^)]*\))?\s*;?\s*end$`)
+
+func rbEmptyDef(body string) bool {
+	return rbEmptyDefRe.MatchString(strings.Join(strings.Fields(body), " "))
 }
 
 // rbDefs collects the methods the chain and its modules define; the leaf wins.
@@ -1095,26 +1111,61 @@ func readRails(files map[string]*rbFile, order []string) ([]Route, []routeView) 
 	}
 	var routes []Route
 	var views []routeView
-	for _, r := range parser.routes {
-		rt, v := ix.finish(r)
-		routes, views = append(routes, rt), append(views, v)
+	statics := make([]bool, len(parser.routes))
+	for i, r := range parser.routes {
+		rt, v, static := ix.finish(r)
+		routes, views, statics[i] = append(routes, rt), append(views, v), static
 	}
+	rbMarkShells(parser.routes, views, statics)
 	return routes, views
+}
+
+// rbMarkShells marks the routes that serve a single-page app's HTML shell. The
+// shell is one action registered as a catch-all (`get '/app/*params', to:
+// 'dashboard#index'`), and the client router then owns every URL under it, so a
+// narrower route to the same action (`get '/app/accounts/:id/settings', to:
+// 'dashboard#index'`, written so a path helper exists) serves the same page and
+// is not another door to a record. That needs the action to be the shell: an
+// empty action, in a controller whose callbacks for it never read `params`.
+// static is that, per route.
+func rbMarkShells(routes []rbRoute, views []routeView, static []bool) {
+	type target struct{ ctrl, action string }
+	globs := map[target][]string{}
+	isGet := func(r rbRoute) bool { return r.method == "GET" || r.method == "ALL" }
+	for i, r := range routes {
+		if i < len(static) && static[i] && isGet(r) {
+			if at := strings.Index(r.path, "*"); at >= 0 {
+				k := target{r.ctrl, r.action}
+				globs[k] = append(globs[k], r.path[:at])
+			}
+		}
+	}
+	for i, r := range routes {
+		if !static[i] || !isGet(r) {
+			continue
+		}
+		for _, prefix := range globs[target{r.ctrl, r.action}] {
+			if strings.HasPrefix(r.path, prefix) {
+				views[i].spaShell = true
+				break
+			}
+		}
+	}
 }
 
 var rbControllerFileRe = regexp.MustCompile(`(?:^|/)(?:controllers|concerns)/.+\.rb$`)
 
-func (ix *rbIndex) finish(r rbRoute) (Route, routeView) {
+func (ix *rbIndex) finish(r rbRoute) (Route, routeView, bool) {
 	rt := Route{Method: r.method, Path: r.path, FilePath: r.file.path, Line: r.line, Authn: r.authn, Reader: ReaderRails}
 	v := routeView{route: rt, framework: "rails", guardUnseen: r.unseen}
 	if r.ctrl == "" || r.action == "" {
 		v.guardUnseen = true
-		return rt, v
+		return rt, v, false
 	}
 	cls, ok := ix.lookup(strings.ReplaceAll(r.ctrl, "/", "::")+"_controller", nil)
 	if !ok {
 		v.guardUnseen = true
-		return rt, v
+		return rt, v, false
 	}
 	ev := ix.evidence(cls, r.action)
 	if rt.Authn == "" {
@@ -1130,5 +1181,6 @@ func (ix *rbIndex) finish(r rbRoute) (Route, routeView) {
 	if ev.complete && !ev.defined && r.method != "GET" && r.method != "ALL" {
 		v.guardUnseen = true // a route to an action nothing defines answers 404, not the data
 	}
-	return rt, v
+	static := ev.defined && ev.complete && !ev.paramsRead && rbEmptyDef(ev.body)
+	return rt, v, static
 }
