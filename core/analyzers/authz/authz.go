@@ -664,6 +664,7 @@ func (ix *index) routeInventory(routes []route, uses map[string][]use, inherited
 		views = append(views, routeView{
 			route: rt, handler: handler, known: known, chain: chainText(chain),
 			guardUnseen: globalAuth && !mounted && !appDeclRe.MatchString(r.file.code),
+			spaShell:    jsShellHandler(rt.Method, handler, known),
 		})
 	}
 	sortRoutes(out)
