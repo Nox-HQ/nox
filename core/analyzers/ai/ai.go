@@ -236,6 +236,24 @@ func (a *Analyzer) ScanFile(path string, content []byte) ([]findings.Finding, er
 	return a.refineToolDescriptions(path, content, fs), nil
 }
 
+// toolMetadataRules are the rules whose claim is "MCP tool metadata contains
+// ...". A payload in tool metadata is a docstring or description literal, which
+// is long by nature and so looks like a data blob to suppressNonCode.
+var toolMetadataRules = map[string]bool{"MCP-009": true, "MCP-010": true, "MCP-011": true}
+
+// isToolMetadataMatch reports whether the finding is one of toolMetadataRules
+// and lies inside the description of a tool in an MCP server file: the one
+// long string these rules exist to read. A long string in any other role, and
+// a comment, remain noise. Structure comes from mcpToolDescriptionAt, shared
+// with MCP-027.
+func isToolMetadataMatch(path string, content []byte, f *findings.Finding) bool {
+	if !toolMetadataRules[f.RuleID] {
+		return false
+	}
+	_, ok := mcpToolDescriptionAt(path, content, f)
+	return ok
+}
+
 // suppressNonCode reports whether an AI/MCP pattern finding sits in a comment
 // or a data-blob string in lexable source — noise, since such a match is not
 // executing code. Returns false for unknown languages (never over-suppress).
@@ -358,7 +376,7 @@ func (a *Analyzer) scanArtifact(artifact discovery.Artifact) (*fileScan, error) 
 			out.findings = append(out.findings, results[i])
 			continue
 		}
-		if suppressNonCode(lang, content, &results[i]) {
+		if suppressNonCode(lang, content, &results[i]) && !isToolMetadataMatch(artifact.Path, content, &results[i]) {
 			a.refute(candidate, evidence.KindStatic,
 				"the match lies outside code — in a comment, a string literal or an embedded blob")
 			continue

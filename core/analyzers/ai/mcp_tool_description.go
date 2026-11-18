@@ -20,7 +20,11 @@ import (
 // MCP-009/010/011 name the same phrases and could not see this one. Their
 // matches are dropped as data when they sit in a string over 96 bytes, and a
 // docstring or a `description:` literal that carries a payload is always over
-// 96 bytes. So this rule is built the other way round: the pattern finds the
+// 96 bytes. They now keep such a match when it lies in a tool description
+// (toolMetadataRules in ai.go asks mcpToolDescriptionAt), and stay silent on
+// every other long string. MCP-027 stays because its vocabulary is broader
+// (it reads a config-file read as a directive) and its one-finding-per-
+// description reporting is its own. This rule is built the other way round: the pattern finds the
 // directive anywhere in a file that mentions MCP, and this refinement keeps it
 // only when it lies inside the text of a tool's description, in a file that
 // is an MCP server. Everything else the pattern matched is a string in some
@@ -33,7 +37,8 @@ import (
 //     (`description="..."`, `"description": "..."`, `description: '...'`),
 //     which covers a `tools: [{name, description}]` list, `registerTool(name,
 //     {description})`, and `Tool(name=..., description=...)`;
-//   - the argument of `.describe(...)`, the schema-field form of the same text;
+//   - the argument of `.describe(...)`, the schema-field form of the same text,
+//     and of the mcp-go builder `mcp.WithDescription(...)`;
 //   - the second argument of `.tool(name, "...")`;
 //   - the docstring of a Python function decorated with `@<x>.tool`.
 //
@@ -43,13 +48,14 @@ import (
 // none of them defines no MCP tool, whatever its docstrings say.
 var mcpServerMarker = regexp.MustCompile(
 	`(?m)^[ \t]*(?:from[ \t]+(?:mcp|fastmcp)\b|import[ \t]+(?:mcp|fastmcp)\b)` +
-		`|["'](?:@modelcontextprotocol/|@mastra/mcp|@vercel/mcp-adapter|(?:fastmcp|mcp-framework|mcp-handler)\b)`)
+		`|["'](?:@modelcontextprotocol/|@mastra/mcp|@vercel/mcp-adapter|(?:fastmcp|mcp-framework|mcp-handler)\b)` +
+		`|"github\.com/(?:mark3labs/mcp-go|modelcontextprotocol/go-sdk)\b`)
 
 var (
 	// descriptionKeyTail is the end of the code before a description value.
 	// `==` is not an assignment: after the first `=` the tail must end.
 	descriptionKeyTail = regexp.MustCompile("(?i)[\"'`]?description[\"'`]?\\s*[:=]\\s*(?:[rbfu]{1,2})?$")
-	describeCallTail   = regexp.MustCompile(`\.describe\(\s*(?:[rbfu]{1,2})?$`)
+	describeCallTail   = regexp.MustCompile(`(?:\.describe|\bWith\w*Description)\(\s*(?:[rbfu]{1,2})?$`)
 	toolCallTail       = regexp.MustCompile("(?:\\.|\\b)(?:tool|registerTool|addTool)\\(\\s*(?:[\"'`][^\"'`\\n]*[\"'`]|[\\w.]+)\\s*,\\s*$")
 	pyDefHeader        = regexp.MustCompile(`(?m)^[ \t]*(?:async[ \t]+)?def[ \t]+\w+`)
 	pyToolDecorator    = regexp.MustCompile(`(?m)^[ \t]*@(?:[A-Za-z_]\w*\.)*tool\b`)

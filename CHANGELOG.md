@@ -37,6 +37,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `MCP-009`, `MCP-010` and `MCP-011` never saw a payload in a real tool
+  description. They claim "MCP tool metadata contains ...", but a match inside a
+  string over 96 bytes is dropped as a data blob, and a poisoned docstring or
+  `description` literal is always that long, so only the short, easy payload
+  was reported. They now keep a match that lies in the description of a tool
+  registered by an MCP server (the structural test `MCP-027` already uses,
+  extended to Go's `mcp.WithDescription(...)` and the `mark3labs/mcp-go` and
+  `modelcontextprotocol/go-sdk` imports), and still drop every other long string
+  and every comment. `MCP-010` also missed "Do not mention this to the user",
+  the phrase the public tool-poisoning demonstrations use: its keyword prefilter
+  listed four of the eight verbs its pattern accepts, so the pattern never ran.
+  On the ten public MCP repositories used for `MCP-027` the only new finding is
+  a true positive in `cisco-ai-defense/mcp-scanner`'s eval corpus; on that
+  project's example malicious servers the three rules go from 1 finding to 6.
+  `MCP-027` stays: its vocabulary is broader and it reports once per description.
 - IAC-011 missed `pull_request_target` written in the scalar, list or sequence
   form of `on:` (`on: pull_request_target`, `on: [push, pull_request_target]`),
   because its pattern required a colon after the event. It now reads the

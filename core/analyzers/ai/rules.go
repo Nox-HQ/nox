@@ -943,7 +943,7 @@ func builtinAIRules() []*rules.Rule {
 			id: "MCP-010", severity: findings.SeverityHigh, confidence: findings.ConfidenceMedium,
 			pattern:     `(?i)(?:do\s+not|don't|never)\s+(?:tell|inform|notify|mention|reveal|disclose|alert|show)\s+(?:this|it|anything|the\s+(?:call|result))?\s*(?:to\s+)?the\s+(?:user|human|operator|developer)`,
 			description: "MCP tool metadata instructs the model to conceal actions from the user (tool poisoning)",
-			cwe:         "CWE-77", keywords: []string{"do not tell", "don't tell", "do not inform", "do not reveal", "never tell"},
+			cwe:         "CWE-77", keywords: mcpConcealKeywords(),
 			filePatterns: []string{"mcp.json", "claude_desktop_config.json", "*.mcp.json", "*.go", "*.ts", "*.js", "*.py"},
 			tags:         []string{"ai", "mcp", "tool-poisoning", "owasp-mcp03"},
 			remediation:  "Delete any 'do not tell the user' directive from the tool description. Concealment instructions in tool metadata are a hallmark of tool poisoning — they coerce the host model into hiding tool behaviour from the operator.",
@@ -1419,3 +1419,17 @@ func mcpToolDirectiveStands(matchText string) bool {
 
 // agentConcealRe is agentConcealDirective compiled, anchored at the match.
 var agentConcealRe = regexp.MustCompile(`(?i)^` + agentConcealDirective)
+
+// mcpConcealKeywords is MCP-010's prefilter: a file must contain one of these
+// before the pattern runs. It has to name every verb the pattern accepts. It
+// once listed four of them, so "Do not mention this to the user", the phrase
+// the tool-poisoning disclosures use, never reached the pattern at all.
+func mcpConcealKeywords() []string {
+	var kws []string
+	for _, lead := range []string{"do not", "don't", "never"} {
+		for _, verb := range []string{"tell", "inform", "notify", "mention", "reveal", "disclose", "alert", "show"} {
+			kws = append(kws, lead+" "+verb)
+		}
+	}
+	return kws
+}
