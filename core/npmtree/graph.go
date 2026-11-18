@@ -66,10 +66,27 @@ func npmGraph(pkgs map[string]lockEntry) *graph {
 			g.root = deps
 			continue
 		}
-		g.nodes[path] = node{name: path[strings.LastIndex(path, "node_modules/")+len("node_modules/"):], version: e.Version, deps: deps}
+		g.nodes[path] = node{name: lockPackageName(path, e), version: e.Version, deps: deps}
 	}
 	g.resolve = func(from, name, _ string) string { return resolveCopy(pkgs, from, name) }
 	return g
+}
+
+// lockPackageName is the package a package-lock.json entry installs. An
+// installed copy is keyed by its node_modules path and named by what follows
+// the last "node_modules/". A workspace member is keyed by its directory
+// ("ui", "packages/lib") with no node_modules segment at all, and carries its
+// name in the entry; failing that, the directory's last element is the best
+// the lockfile offers.
+func lockPackageName(path string, e lockEntry) string {
+	const marker = "node_modules/"
+	if i := strings.LastIndex(path, marker); i >= 0 {
+		return path[i+len(marker):]
+	}
+	if e.Name != "" {
+		return e.Name
+	}
+	return path[strings.LastIndex(path, "/")+1:]
 }
 
 // yarnV1Graph is a yarn v1 lockfile: flat entries keyed by every "name@range"
