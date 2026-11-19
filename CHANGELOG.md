@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- IAC-507 reports a release workflow that restores a cache another workflow can
+  write: the cross-workflow cache poisoning of the May 2026 TanStack compromise,
+  which IAC-506 cannot see because the two halves are in different files. The
+  writer runs on `pull_request_target`, `workflow_run` or `issue_comment`, checks
+  out the pull request's commit (IAC-505's test) and saves a cache
+  (`actions/cache`, `actions/cache/save`, or a setup action's `cache:` input).
+  The restorer is a step of a job that can publish (`id-token: write`,
+  `npm`/`pnpm`/`yarn publish`, `twine upload`, `goreleaser`, a publishing secret
+  such as `NPM_TOKEN`), or of a job one that does needs, and its key or
+  `restore-keys` can meet the writer's; `${{ }}` expressions are treated as
+  wildcards and the message says what matched. The finding is on the restore step
+  and names the writer's file and line. Plain `pull_request` is not a writer: its
+  caches belong to the merge ref. GitHub now gives `pull_request_target`,
+  `workflow_run` and `issue_comment` runs read-only cache access unless the
+  workflow or job sets `cache-mode: write` or `write-only`: a writer that does is
+  high confidence, one that does not is low confidence and the message says so,
+  and `cache-mode: read` or `none` is not a writer. It needs every workflow of
+  the scan, so `nox scan` reports it and a single-file call (MCP, LSP) does not.
+  A job that runs only for the repository's own pull requests, a dependency bot
+  or merged ones is not a writer, `id-token: write` alone is not a publish, and
+  `setup-go` before v4 has no cache. Measured on 320 repositories, 14 report it.
 - A PyPI dependency finding climbs on the functions NOX Intelligence's analysis of the fix lists as changed, as npm findings have since 1.65.0. Project source that references one (`from PIL import Image` then `Image.open(...)`, `import yaml` then `yaml.load(...)`, `from a.b import f` then `f(...)`, attribute chains, and `Class.method` called through its class) raises the finding to a call path with the site as its witness, labelled `affected_symbol_evidence: source_reference`. Tests, `conftest.py`, comments, strings, relative and star imports are not read as uses. A miss lowers nothing.
 - A PyPI distribution imported under another name is recognised when the analysis of its own files names the module: Pillow as `PIL`, PyJWT as `jwt`. The finding records them in `import_names`, the import climbs to `symbol_used`, and the source call graph's climb to `call_reachable` asks for calls into those modules too. In the npm/PyPI re-measure, 394 undecided `pillow` findings were in repositories whose own source imports `PIL`, which nox matched against the name `pillow` and missed (the other 295 were in repositories that do not import it). This needs NOX Intelligence to place PyPI symbols in modules (nox-intelligence #187); until it does, nothing changes.
 
