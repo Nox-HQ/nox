@@ -1068,7 +1068,10 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 					case pkg.Origin == OriginImage:
 						meta["package_origin"] = OriginImage
 					default:
-						verdict = raiseOnJSListedSymbol(verdict, meta, srcImports, &ov, pkg)
+						verdict = raiseOnSourceListedSymbol(verdict, meta, srcImports, &ov, pkg)
+						if names := pyImportNames(&ov, pkg.Name); len(names) > 0 {
+							meta["import_names"] = strings.Join(names, ",")
+						}
 					}
 					meta["applicability"] = string(verdict.Outcome)
 					meta["applicability_reached"] = string(verdict.Reached)
@@ -1186,7 +1189,7 @@ func applicabilityFor(pkg Package, ov *osvVuln, linked map[string]struct{}, link
 		// Everything else is answered by this project's own imports, which can
 		// only ever CLIMB — see importApplicability for why absence there
 		// refutes nothing.
-		if v, ok := importApplicability(pkg, reached, src); ok {
+		if v, ok := importApplicability(pkg, reached, src, ov); ok {
 			return v
 		}
 		// Not unreachable: unexamined, or examined and not directly imported,

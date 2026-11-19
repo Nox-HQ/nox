@@ -17,7 +17,13 @@
 // as `bs4` — and a package this project never imports directly may still be
 // used by a package it does import. Reading either miss as "not impacting"
 // would turn an unknown into an all-clear, which is the one error a
-// vulnerability scanner must not make. Every failure mode here therefore
+// vulnerability scanner must not make.
+//
+// The PyPI half of that is narrowed where the package's own metadata is
+// available: NOX Intelligence's analysis of a fix places each changed function
+// in the module that defines it (`PIL.Image`), and the deps analyzer reads the
+// distribution's import names from there (pyImportNames). That is the
+// package's metadata, not a guess from its name, and it too only climbs. Every failure mode here therefore
 // degrades to exactly today's behaviour: no climb.
 //
 // # Which ecosystems, and why not the rest
@@ -55,6 +61,9 @@ type Index struct {
 	// jsUses are the exports of npm modules that project source references:
 	// specifier, then export name. See jsuse.go.
 	jsUses map[string]map[string]JSUse
+	// pyUses are the functions and classes of Python modules that project
+	// source references: dotted module, then name. See pyuse.go.
+	pyUses map[string]map[string]JSUse
 }
 
 // New returns an empty Index. A zero tree answers Known(false) for everything,
@@ -87,8 +96,11 @@ func (ix *Index) Add(filePath string, content []byte) {
 	// Seeing the file is what makes a later absence meaningful, so record it
 	// before extraction and regardless of whether anything was found.
 	ix.seen[eco] = true
-	if eco == "npm" {
+	switch eco {
+	case "npm":
 		ix.addJSUses(filePath, content)
+	case "pypi":
+		ix.addPyUses(filePath, content)
 	}
 	set := ix.imports[eco]
 	if set == nil {

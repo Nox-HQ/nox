@@ -50,7 +50,7 @@ func raiseDependencyReachability(fs *findings.FindingSet, g *callgraph.Graph) {
 			// Already at call_reachable or above, on a call path.
 			continue
 		}
-		path, kind, ok := dependencyCallPath(g, m["ecosystem"], m["package"])
+		path, kind, ok := dependencyCallPath(g, m["ecosystem"], dependencyNames(m)...)
 		if !ok {
 			continue
 		}
@@ -83,10 +83,14 @@ func raiseDependencyReachability(fs *findings.FindingSet, g *callgraph.Graph) {
 // that calls into the package: one from a route handler first, then the
 // shortest from any concrete entry. Test entries do not count; they show the
 // suite runs the code, not the program.
-func dependencyCallPath(g *callgraph.Graph, ecosystem, name string) ([]string, callgraph.EntryKind, bool) {
+func dependencyCallPath(g *callgraph.Graph, ecosystem string, names ...string) ([]string, callgraph.EntryKind, bool) {
+	var callers []string
+	for _, name := range names {
+		callers = append(callers, g.CallersOfDependency(ecosystem, name)...)
+	}
 	var best []string
 	bestKind := callgraph.NotAnEntry
-	for _, caller := range g.CallersOfDependency(ecosystem, name) {
+	for _, caller := range callers {
 		p, kind := g.PathToFunc(caller)
 		if kind < callgraph.EntryConcrete || len(p) == 0 {
 			continue
@@ -96,6 +100,20 @@ func dependencyCallPath(g *callgraph.Graph, ecosystem, name string) ([]string, c
 		}
 	}
 	return best, bestKind, best != nil
+}
+
+// dependencyNames are the names source imports a dependency by: the
+// distribution, and for PyPI the top-level modules the analysis of its own
+// files found (import_names, set by the deps analyzer): Pillow is imported as
+// PIL.
+func dependencyNames(m map[string]string) []string {
+	names := []string{m["package"]}
+	for _, n := range strings.Split(m["import_names"], ",") {
+		if n = strings.TrimSpace(n); n != "" {
+			names = append(names, n)
+		}
+	}
+	return names
 }
 
 // replaceApplicabilitySentence swaps the applicability sentence the deps
