@@ -27,7 +27,7 @@ func TestJSListedSymbolReferencedRaisesRelevance(t *testing.T) {
 	src := tree(t, map[string]string{"app.js": "const { parseAddresses } = require('nodemailer/lib/addressparser');\nparseAddresses(x);"})
 	ov := jsSymbols("ok", exported("nodemailer/lib/addressparser", "parseAddresses"))
 	meta := map[string]string{}
-	got := raiseOnJSListedSymbol(stuck(), meta, src, ov, Package{Name: jsModule, Ecosystem: "npm"})
+	got := raiseOnSourceListedSymbol(stuck(), meta, src, ov, Package{Name: jsModule, Ecosystem: "npm"})
 	if got.Reached != applicability.CallReachable || got.Outcome != applicability.Impacting {
 		t.Fatalf("verdict = %+v, want an established call_reachable", got)
 	}
@@ -72,7 +72,7 @@ func TestJSListedSymbolNeverLowersOrInventsAnything(t *testing.T) {
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			meta := map[string]string{}
-			got := raiseOnJSListedSymbol(stuck(), meta, tree(t, c.src), c.ov, c.pkg)
+			got := raiseOnSourceListedSymbol(stuck(), meta, tree(t, c.src), c.ov, c.pkg)
 			if got.Reached != stuck().Reached || got.Outcome != stuck().Outcome || len(meta) != 0 {
 				t.Errorf("verdict %+v meta %v: nothing may change", got, meta)
 			}
@@ -81,11 +81,11 @@ func TestJSListedSymbolNeverLowersOrInventsAnything(t *testing.T) {
 	// It must also never override a refutation.
 	refuted := applicability.Refuted(applicability.AffectedVersion, applicability.SymbolUsed, "negative", []string{"x"})
 	src := tree(t, map[string]string{"a.js": imports})
-	if got := raiseOnJSListedSymbol(refuted, map[string]string{}, src, jsSymbols("ok", exported("nodemailer", "createTransport")), pkg); got.Outcome != applicability.NotImpacting {
+	if got := raiseOnSourceListedSymbol(refuted, map[string]string{}, src, jsSymbols("ok", exported("nodemailer", "createTransport")), pkg); got.Outcome != applicability.NotImpacting {
 		t.Errorf("a refutation was overridden: %+v", got)
 	}
 	// Nor a nil source index.
-	if got := raiseOnJSListedSymbol(stuck(), map[string]string{}, nil, jsSymbols("ok", exported("nodemailer", "createTransport")), pkg); got.Outcome == applicability.Impacting {
+	if got := raiseOnSourceListedSymbol(stuck(), map[string]string{}, nil, jsSymbols("ok", exported("nodemailer", "createTransport")), pkg); got.Outcome == applicability.Impacting {
 		t.Error("nil source must not raise")
 	}
 }

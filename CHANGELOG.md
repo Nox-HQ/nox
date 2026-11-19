@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A PyPI dependency finding climbs on the functions NOX Intelligence's analysis of the fix lists as changed, as npm findings have since 1.65.0. Project source that references one (`from PIL import Image` then `Image.open(...)`, `import yaml` then `yaml.load(...)`, `from a.b import f` then `f(...)`, attribute chains, and `Class.method` called through its class) raises the finding to a call path with the site as its witness, labelled `affected_symbol_evidence: source_reference`. Tests, `conftest.py`, comments, strings, relative and star imports are not read as uses. A miss lowers nothing.
+- A PyPI distribution imported under another name is recognised when the analysis of its own files names the module: Pillow as `PIL`, PyJWT as `jwt`. The finding records them in `import_names`, the import climbs to `symbol_used`, and the source call graph's climb to `call_reachable` asks for calls into those modules too. In the npm/PyPI re-measure, 394 undecided `pillow` findings were in repositories whose own source imports `PIL`, which nox matched against the name `pillow` and missed (the other 295 were in repositories that do not import it). This needs NOX Intelligence to place PyPI symbols in modules (nox-intelligence #187); until it does, nothing changes.
+
 - `MCP-027` reports a hidden instruction in the description of a tool an MCP
   server registers (tool poisoning, OWASP MCP03): an order to keep something
   from the user ("do not mention this to the user"), to read another tool's

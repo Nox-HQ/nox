@@ -399,7 +399,7 @@ func addImportedMetadata(meta map[string]string, src *sourceImports, module stri
 // reasoning is why this never returns a refutation: a direct import is positive
 // evidence that the package is used, and its absence is not evidence of
 // anything. Every miss degrades to the undetermined verdict callers already got.
-func importApplicability(pkg Package, reached applicability.Rung, src *sourceImports) (applicability.Verdict, bool) {
+func importApplicability(pkg Package, reached applicability.Rung, src *sourceImports, ov *osvVuln) (applicability.Verdict, bool) {
 	if !depimports.Supported(pkg.Ecosystem) {
 		return applicability.Verdict{}, false
 	}
@@ -408,7 +408,7 @@ func importApplicability(pkg Package, reached applicability.Rung, src *sourceImp
 		// No source of that language was read, so the question was never put.
 		return applicability.Verdict{}, false
 	}
-	if !ix.Imports(pkg.Ecosystem, pkg.Name) {
+	if !ix.Imports(pkg.Ecosystem, pkg.Name) && !importsAnyOf(ix, pkg.Ecosystem, pyImportNames(ov, pkg.Name)) {
 		return applicability.Verdict{}, false
 	}
 	// The project imports the package by name. That establishes SymbolUsed;
@@ -627,17 +627,28 @@ func jsListedSymbolHit(src *sourceImports, ov *osvVuln, module string) (spec, sy
 	return "", "", depimports.JSUse{}, false
 }
 
-// raiseOnJSListedSymbol is raiseOnListedSymbol for npm. The evidence is weaker
+// raiseOnSourceListedSymbol is raiseOnListedSymbol for npm and PyPI. The
+// evidence is weaker
 // than Go's and is labelled so: a reference in non-test project source, not a
 // call path from an entry point. affected_symbol_evidence says which, and the
 // printed sentence repeats it. The scan replaces it with a call path when the
 // source call graph finds one (core.raiseDependencyReachability), which runs
 // after this analyzer because the graph is built from the flow analyzers' walk.
-func raiseOnJSListedSymbol(v applicability.Verdict, meta map[string]string, src *sourceImports, ov *osvVuln, pkg Package) applicability.Verdict {
-	if !strings.EqualFold(pkg.Ecosystem, "npm") || v.Outcome == applicability.NotImpacting {
+func raiseOnSourceListedSymbol(v applicability.Verdict, meta map[string]string, src *sourceImports, ov *osvVuln, pkg Package) applicability.Verdict {
+	if v.Outcome == applicability.NotImpacting {
 		return v
 	}
-	spec, name, use, ok := jsListedSymbolHit(src, ov, pkg.Name)
+	var (
+		spec, name string
+		use        depimports.JSUse
+		ok         bool
+	)
+	switch strings.ToLower(pkg.Ecosystem) {
+	case "npm":
+		spec, name, use, ok = jsListedSymbolHit(src, ov, pkg.Name)
+	case "pypi":
+		spec, name, use, ok = pyListedSymbolHit(src, ov, pkg.Name)
+	}
 	if !ok {
 		return v
 	}
@@ -650,6 +661,94 @@ func raiseOnJSListedSymbol(v applicability.Verdict, meta map[string]string, src 
 		return v
 	}
 	return applicability.Established(applicability.CallReachable, []string{where + " references " + spec + "." + name})
+}
+
+// pyListedSymbolHit looks for a project source file that references a function
+// or class NOX Intelligence's analysis of the fix lists as changed. A symbol's
+// Package is the dotted module that defines it (`PIL.Image`); one without a
+// module cannot be matched and is never searched for. A method, listed as
+// `Class.method`, is matched when it is called through its class. Raise-only,
+// as for npm: a function can be re-exported from a package's __init__ or
+// reached through an instance, so a miss shows nothing.
+func pyListedSymbolHit(src *sourceImports, ov *osvVuln, dist string) (module, symbol string, use depimports.JSUse, ok bool) {
+	if src == nil || ov == nil {
+		return "", "", depimports.JSUse{}, false
+	}
+	type cand struct{ module, name string }
+	var cands []cand
+	want := depimports.NormalizeName("pypi", dist)
+	for _, as := range ov.Symbols {
+		if depimports.NormalizeName("pypi", as.Package) != want || as.Status != vulnsource.SymbolStatusOK {
+			continue
+		}
+		for _, cs := range as.Symbols {
+			if cs.Name == "" || cs.Package == "" {
+				continue
+			}
+			cands = append(cands, cand{cs.Package, cs.Name})
+		}
+	}
+	if len(cands) == 0 {
+		return "", "", depimports.JSUse{}, false
+	}
+	sort.Slice(cands, func(i, j int) bool {
+		if cands[i].module != cands[j].module {
+			return cands[i].module < cands[j].module
+		}
+		return cands[i].name < cands[j].name
+	})
+	ix := src.get()
+	if !ix.Known("pypi") {
+		return "", "", depimports.JSUse{}, false
+	}
+	for _, c := range cands {
+		mod, name := c.module, c.name
+		if cls, meth, isMethod := strings.Cut(name, "."); isMethod {
+			mod, name = mod+"."+cls, meth
+		}
+		if u, found := ix.PySymbolUse(mod, name); found {
+			return c.module, c.name, u, true
+		}
+	}
+	return "", "", depimports.JSUse{}, false
+}
+
+// pyImportNames returns the top-level modules a PyPI distribution ships, as
+// NOX Intelligence's analysis of its own files recorded them: Pillow's symbols
+// live under PIL, PyJWT's under jwt. It is the package's metadata rather than a
+// guess from its name, and it is empty when no analysis placed a symbol.
+func pyImportNames(ov *osvVuln, dist string) []string {
+	if ov == nil {
+		return nil
+	}
+	want := depimports.NormalizeName("pypi", dist)
+	seen := map[string]bool{}
+	var out []string
+	for _, as := range ov.Symbols {
+		if !strings.EqualFold(as.Ecosystem, "pypi") || depimports.NormalizeName("pypi", as.Package) != want ||
+			as.Status != vulnsource.SymbolStatusOK {
+			continue
+		}
+		for _, cs := range as.Symbols {
+			top, _, _ := strings.Cut(cs.Package, ".")
+			if top != "" && !seen[top] {
+				seen[top] = true
+				out = append(out, top)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// importsAnyOf reports whether project source imports any of names.
+func importsAnyOf(ix *depimports.Index, ecosystem string, names []string) bool {
+	for _, n := range names {
+		if ix.Imports(ecosystem, n) {
+			return true
+		}
+	}
+	return false
 }
 
 // sourceReferenceSentence states a JavaScript symbol hit without borrowing the
