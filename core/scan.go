@@ -126,6 +126,12 @@ type ScanResult struct {
 	// is, because it still left the machine. Nil when no request was made.
 	FeedsRequested []string
 
+	// Contributed is what this scan sent to NOX Intelligence because the
+	// installation opted in: observations and the outcome report. A request
+	// the service refused is counted, because it still left the machine. Zero
+	// when nothing was sent.
+	Contributed Contribution
+
 	// Capabilities is what this installation can establish at all, and
 	// Coverage is what each capability actually concluded about each subject.
 	//
@@ -1178,8 +1184,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// Stage 5: Contribute observations, if this installation opted in. Runs
 	// last, over the refined findings, so what is shared is what the scan
 	// actually concluded rather than an intermediate state.
-	contributeObservations(ctx, cfg, opts, allFindings.Findings(), degradations)
-	contributeOutcomes(ctx, cfg, opts, target, allFindings.Findings(), degradations)
+	contributed := Contribution{Endpoint: cfg.Scan.Intelligence.ResolvedEndpoint()}
+	contributed.Observations = contributeObservations(ctx, cfg, opts, allFindings.Findings(), degradations)
+	contributed.OutcomeReport, contributed.OutcomeFindings = contributeOutcomes(ctx, cfg, opts, target, allFindings.Findings(), degradations)
 
 	var leads []Lead
 	var leadChecks []string
@@ -1222,6 +1229,9 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	}
 	res.AdvisoryLookupSkipped = !vulnLookupEnabled
 	res.FeedsRequested = feedsRequested.list()
+	if contributed.Observations > 0 || contributed.OutcomeReport {
+		res.Contributed = contributed
+	}
 	return res, nil
 }
 
@@ -1346,11 +1356,11 @@ const degradeTaintExtraction = degrade.Kind("taint_extraction")
 // Failure is recorded, never propagated. A scan that failed because an upload
 // did would make opting in actively hostile, and would give operators a reason
 // to switch off the thing that makes corroboration possible at all.
-func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptions, fs []findings.Finding, deg *degrade.Degradations) {
+func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptions, fs []findings.Finding, deg *degrade.Degradations) int {
 	ic := cfg.Scan.Intelligence
 	endpoint := ic.ResolvedEndpoint()
 	if !opts.ContributeObservations || !ic.Contribute || endpoint == "" {
-		return
+		return 0
 	}
 
 	// Consent is per installation and explicit. scan.intelligence.contribute is
@@ -1367,13 +1377,13 @@ func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptio
 				rec.TermsVersion, intel.TermsVersion),
 			"nothing was contributed; read the new terms with `nox intel consent show` "+
 				"and accept them with `nox intel consent accept`. The scan's own findings are unaffected")
-		return
+		return 0
 	default:
 		deg.Add(degrade.IntelContribution,
 			"scan.intelligence.contribute is set but this machine has not accepted the contribution terms",
 			"nothing was contributed; read the terms with `nox intel consent show` and "+
 				"accept them with `nox intel consent accept`. The scan's own findings are unaffected")
-		return
+		return 0
 	}
 
 	reporterID, err := intel.ReporterID(ic.ReporterSaltPath)
@@ -1385,7 +1395,7 @@ func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptio
 			fmt.Sprintf("reporter identity unavailable: %v", err),
 			"no observations were contributed; this scan added nothing to the "+
 				"intelligence network, and nothing left this environment")
-		return
+		return 0
 	}
 
 	delKey, err := intel.DeletionKey(ic.ReporterSaltPath)
@@ -1393,7 +1403,7 @@ func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptio
 		deg.Add(degrade.IntelContribution,
 			fmt.Sprintf("deletion key unavailable: %v", err),
 			"no observations were contributed; they could not have been erased later")
-		return
+		return 0
 	}
 
 	obs := intel.Derive(fs, intel.DeriveOptions{
@@ -1404,7 +1414,7 @@ func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptio
 		DeletionVerifier: intel.DeletionVerifier(delKey),
 	})
 	if len(obs) == 0 {
-		return
+		return 0
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
@@ -1418,7 +1428,7 @@ func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptio
 				"scan.intelligence.attested is set but NOX_INTEL_TOKEN is not",
 				"nothing was contributed: an attested contribution needs the organisation token, and an "+
 					"anonymous one could not count as an independent source. The scan's own findings are unaffected")
-			return
+			return 0
 		}
 		client = client.WithToken(token)
 	}
@@ -1430,6 +1440,8 @@ func contributeObservations(ctx context.Context, cfg *ScanConfig, opts ScanOptio
 			"this scan contributed less than it intended; the scan's own findings "+
 				"are unaffected")
 	}
+	// A rejected observation still left the machine.
+	return res.Submitted
 }
 
 // intelHTTPClient returns the client used for vulnerability lookups. The

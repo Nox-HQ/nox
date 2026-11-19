@@ -885,6 +885,9 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		if note := feedNetworkNotice(result.FeedsRequested); note != "" {
 			fmt.Println(note)
 		}
+		if note := contributionNetworkNotice(result.Contributed); note != "" {
+			fmt.Println(note)
+		}
 	}
 
 	// Report incomplete checks even under --quiet, and on stderr. A scan that

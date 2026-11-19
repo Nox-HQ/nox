@@ -57,22 +57,22 @@ func OutcomeReport(target, saltPath, toolVersion string, fs []findings.Finding, 
 // never propagated. The report is always anonymous, even when contributions
 // are attested: a project pseudonym joined to an organisation would name
 // whose project it is.
-func contributeOutcomes(ctx context.Context, cfg *ScanConfig, opts ScanOptions, target string, fs []findings.Finding, deg *degrade.Degradations) {
+func contributeOutcomes(ctx context.Context, cfg *ScanConfig, opts ScanOptions, target string, fs []findings.Finding, deg *degrade.Degradations) (sent bool, carried int) {
 	ic := cfg.Scan.Intelligence
 	endpoint := ic.ResolvedEndpoint()
 	if !opts.ContributeObservations || !ic.Outcomes || endpoint == "" {
-		return
+		return false, 0
 	}
 	if !ic.Contribute {
 		deg.Add(degrade.IntelContribution,
 			"scan.intelligence.outcomes is set but scan.intelligence.contribute is not",
 			"no outcome report was sent: outcome reports ride on contribution and its terms. "+
 				"The scan's own findings are unaffected")
-		return
+		return false, 0
 	}
 	if status, _ := intel.LoadConsent(ic.ReporterSaltPath); status != intel.ConsentGranted {
 		// contributeObservations has already said why; one message is enough.
-		return
+		return false, 0
 	}
 	switch status, rec := intel.LoadOutcomeConsent(ic.ReporterSaltPath); status {
 	case intel.ConsentGranted:
@@ -82,13 +82,13 @@ func contributeOutcomes(ctx context.Context, cfg *ScanConfig, opts ScanOptions, 
 				rec.TermsVersion, intel.OutcomeTermsVersion),
 			"no outcome report was sent; read the new terms with `nox intel consent outcomes show` "+
 				"and accept them with `nox intel consent outcomes accept`")
-		return
+		return false, 0
 	default:
 		deg.Add(degrade.IntelContribution,
 			"scan.intelligence.outcomes is set but this machine has not accepted the outcome terms",
 			"no outcome report was sent; read the terms with `nox intel consent outcomes show` and "+
 				"accept them with `nox intel consent outcomes accept`")
-		return
+		return false, 0
 	}
 
 	report, skipped, err := OutcomeReport(target, ic.ReporterSaltPath, opts.ToolVersion, fs, time.Now())
@@ -101,7 +101,7 @@ func contributeOutcomes(ctx context.Context, cfg *ScanConfig, opts ScanOptions, 
 		deg.Add(degrade.IntelContribution,
 			fmt.Sprintf("no outcome report was sent: %v", err),
 			why+". Nothing left this environment for it. The scan's own findings are unaffected")
-		return
+		return false, 0
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -110,7 +110,8 @@ func contributeOutcomes(ctx context.Context, cfg *ScanConfig, opts ScanOptions, 
 		deg.Add(degrade.IntelContribution,
 			fmt.Sprintf("the outcome report was not accepted: %v", err),
 			"this scan's outcome was not recorded; the scan's own findings are unaffected")
-		return
+		// A refused report still left the machine.
+		return true, len(report.Findings)
 	}
 	if skipped > 0 {
 		deg.Add(degrade.IntelContribution,
@@ -118,4 +119,15 @@ func contributeOutcomes(ctx context.Context, cfg *ScanConfig, opts ScanOptions, 
 			"their values were outside what the service accepts, or the report was over its size bound; "+
 				"`nox intel preview --outcomes` shows what was sent")
 	}
+	return true, len(report.Findings)
+}
+
+// Contribution is what a scan sent to NOX Intelligence because the
+// installation opted in. The CLI names it on a [network] line: contributing is
+// opt-in, and what an opted-in scan sends must still be said each time.
+type Contribution struct {
+	Endpoint        string
+	Observations    int  // observations sent, accepted or not
+	OutcomeReport   bool // an outcome report was sent, accepted or not
+	OutcomeFindings int  // the dependency findings that report carried
 }
