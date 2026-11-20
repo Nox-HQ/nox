@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.70.0] - 2026-11-20
+
 ### Added
 
 - IAC-507 reports a release workflow that restores a cache another workflow can
