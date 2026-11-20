@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- An opted-in scan now says what it contributed. With `scan.intelligence.contribute` on, every scan sent its observations (and, with `scan.intelligence.outcomes`, its outcome report) to NOX Intelligence without a `[network]` line, while the dependency-lookup line beside it said "findings were not sent". A `[network] contribution:` line now counts the observations and the outcome report's findings, names the endpoint and how to opt out, and the lookup line speaks only for the lookup. Verified end to end against a local NOX Intelligence: the counts printed match what the service received.
+
 - An online scan of an npm workspace whose `package-lock.json` lists a member
   under a short directory (argotorg/sourcify's `ui`) panicked while building
   dependency remediation advice (`slice bounds out of range [12:2]` in

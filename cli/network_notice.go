@@ -27,14 +27,14 @@ func networkNotice(cfg *nox.ScanConfig, offline, noOSV, depsScanned bool, depCou
 	if endpoint := cfg.Scan.Intelligence.ResolvedEndpoint(); endpoint != "" {
 		return fmt.Sprintf("[network] dependency lookup: the ecosystem, name and version of %d dependencies "+
 			"were sent to %s and checked against %s (answers already cached on this machine are not "+
-			"asked again). Source code, file paths and findings were not sent. "+
+			"asked again). The lookup carried no source code, file paths or findings. "+
 			"Opt out: scan.intelligence.disabled: true in .nox.yaml asks %s directly instead; "+
 			"--offline or scan.osv.disabled: true makes no network request. See docs/intelligence.md.",
 			depCount, endpoint, osv, osv)
 	}
 	return fmt.Sprintf("[network] dependency lookup: the ecosystem, name and version of %d dependencies "+
 		"were sent to %s (answers already cached on this machine are not asked again). "+
-		"Source code, file paths and findings were not sent. "+
+		"The lookup carried no source code, file paths or findings. "+
 		"Opt out: --offline or scan.osv.disabled: true makes no network request.", depCount, osv)
 }
 
@@ -122,4 +122,28 @@ func npmRegistryNotice(reg *npmtree.HTTPRegistry) string {
 	return fmt.Sprintf("[network] npm release history: the names of %d package(s) (%s) were sent to %s "+
 		"to find the release of a listed package that lets a held upgrade move. Nothing else was sent. "+
 		"Opt out: --offline.", len(asked), strings.Join(asked, ", "), reg.Host())
+}
+
+// contributionNetworkNotice says what an opted-in scan contributed. Contributing
+// is off until both the project config and this machine's consent say so, but
+// once on, every scan sends: its observations, and its outcome report when
+// outcomes are on too. The lookup notice speaks only for the lookup, so this is
+// the line that says the scan's conclusions left the machine. It returns ""
+// when nothing was sent.
+func contributionNetworkNotice(c nox.Contribution) string {
+	if c.Observations == 0 && !c.OutcomeReport {
+		return ""
+	}
+	var sent []string
+	if c.Observations > 0 {
+		sent = append(sent, fmt.Sprintf("%d observation(s)", c.Observations))
+	}
+	if c.OutcomeReport {
+		sent = append(sent, fmt.Sprintf("an outcome report of %d dependency finding(s)", c.OutcomeFindings))
+	}
+	return fmt.Sprintf("[network] contribution: %s sent to %s, because this project sets "+
+		"scan.intelligence.contribute and this machine accepted the terms. Only the fields "+
+		"`nox intel allowlist` lists, under a pseudonymous reporter id; `nox intel preview` shows them. "+
+		"Opt out: remove scan.intelligence.contribute, or run `nox intel consent withdraw`.",
+		strings.Join(sent, " and "), c.Endpoint)
 }
