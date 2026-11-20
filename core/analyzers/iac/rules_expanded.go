@@ -2682,7 +2682,7 @@ func builtinExpandedIaCRules() []rules.Rule {
 			// keeps it only when the workflow runs on pull_request_target or
 			// workflow_run, since under pull_request the same checkout is the
 			// default and unprivileged.
-			pattern:      `(?im)^[ \t]*(?:-[ \t]+)?ref:[ \t]*['"]?[^#\n]*(?:\$\{\{[^}\n]*\b(?:github\.event\.pull_request\.head\.(?:sha|ref)|github\.head_ref|github\.event\.workflow_run\.head_(?:sha|branch))\b[^}\n]*\}\}|refs/pull/)`,
+			pattern:      pwnRefPattern,
 			description:  "Privileged workflow checks out the pull request's code (pwn request)",
 			cwe:          "CWE-829",
 			keywords:     []string{"ref:"},

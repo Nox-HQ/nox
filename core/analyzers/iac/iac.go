@@ -81,6 +81,7 @@ func NewAnalyzer() *Analyzer {
 		cat.Add(r)
 	}
 	cat.Add(noLogRule())
+	cat.Add(crossWorkflowCacheRule())
 
 	a := &Analyzer{engine: rules.NewEngine(rs), catalog: cat}
 	// A second engine holding only the absence rules, for manifests embedded
@@ -453,6 +454,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		resources []structural.Resource
 		infra     fileInfra
 		content   []byte // nil unless refuteCompanionsFoundInOtherFiles needs it
+		cache     *workflowCacheFacts
 		results   []findings.Finding
 	}
 	perFile, err := parallel.Map(ctx, len(artifacts), func(i int) (scanned, error) {
@@ -466,7 +468,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			return scanned{}, fmt.Errorf("scanning artifact %s: %w", artifact.Path, err)
 		}
 		parsed := structural.ParseResources(content)
-		out := scanned{resources: parsed, results: results, infra: extractFileInfra(artifact.Path, content, parsed)}
+		out := scanned{resources: parsed, results: results, infra: extractFileInfra(artifact.Path, content, parsed),
+			cache: extractCacheFacts(artifact.Path, content)}
 		if a.hasCompanionFinding(results) {
 			out.content = content
 		}
@@ -493,6 +496,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	}
 
 	collected = a.refuteCompanionsFoundInOtherFiles(index, contents, collected)
+
+	// IAC-507 pairs a workflow that saves a cache with a release workflow that
+	// restores it, which only a scan of both can see.
+	cacheFacts := make([]*workflowCacheFacts, len(artifacts))
+	for i := range artifacts {
+		cacheFacts[i] = perFile[i].cache
+	}
+	collected = append(collected, crossWorkflowCachePoisoning(cacheFacts)...)
 
 	// GitHub Actions context downgrades are applied by the scan pipeline across
 	// EVERY analyzer's output (core/scan.go), not just IaC's. Applying them a
