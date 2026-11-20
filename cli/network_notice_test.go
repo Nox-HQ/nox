@@ -17,7 +17,7 @@ func TestNetworkNotice(t *testing.T) {
 	t.Run("default scan says what was sent and how to stop it", func(t *testing.T) {
 		got := networkNotice(def(), false, false, true, 7)
 		for _, want := range []string{"[network]", "7 dependencies", "https://intel.klarlabs.de", "https://api.osv.dev",
-			"not sent", "scan.intelligence.disabled", "--offline"} {
+			"carried no source code", "scan.intelligence.disabled", "--offline"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("notice lacks %q:\n%s", want, got)
 			}
@@ -130,5 +130,39 @@ func TestFeedNetworkNotice(t *testing.T) {
 	two := feedNetworkNotice([]string{"https://intel.klarlabs.de/v1/feeds/mcp", "https://intel.klarlabs.de/v1/feeds/slopsquat"})
 	if !strings.Contains(two, "/v1/feeds/mcp") || !strings.Contains(two, "/v1/feeds/slopsquat") {
 		t.Errorf("notice must name both feeds:\n%s", two)
+	}
+}
+
+// An opted-in scan sends its observations and its outcome report. Both leave
+// the machine, so both are named, with what they carried and how to stop it;
+// a scan that sent neither prints nothing.
+func TestContributionNetworkNotice(t *testing.T) {
+	if got := contributionNetworkNotice(nox.Contribution{}); got != "" {
+		t.Errorf("nothing sent, got %q", got)
+	}
+	got := contributionNetworkNotice(nox.Contribution{Endpoint: "https://intel.example", Observations: 7, OutcomeReport: true, OutcomeFindings: 5})
+	for _, want := range []string{"[network]", "contribution", "7 observation", "outcome report", "5 dependency finding",
+		"https://intel.example", "nox intel preview", "scan.intelligence.contribute", "nox intel consent withdraw"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("notice lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Count(got, "\n") != 0 {
+		t.Errorf("must be one line, got:\n%s", got)
+	}
+	obsOnly := contributionNetworkNotice(nox.Contribution{Endpoint: "https://intel.example", Observations: 2})
+	if strings.Contains(obsOnly, "outcome") {
+		t.Errorf("no outcome report was sent, but the notice names one:\n%s", obsOnly)
+	}
+}
+
+// The lookup line speaks for the lookup request only. It used to say findings
+// were not sent, printed next to a scan that had just sent its outcome report.
+func TestNetworkNoticeSpeaksForTheLookupOnly(t *testing.T) {
+	t.Setenv(nox.IntelligenceEndpointEnv, "")
+	t.Setenv(nox.OSVBaseURLEnv, "")
+	got := networkNotice(&nox.ScanConfig{}, false, false, true, 3)
+	if strings.Contains(got, "findings were not sent") || !strings.Contains(got, "The lookup carried no source code") {
+		t.Errorf("lookup notice must speak for its own request:\n%s", got)
 	}
 }

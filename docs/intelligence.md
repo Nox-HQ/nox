@@ -10,7 +10,7 @@ the scan. If a sentence here is not true of the binary, that is a bug.
 | when | what | to whom |
 |---|---|---|
 | every online scan with a lockfile | `(ecosystem, package, version)` per dependency, as one `/v1/querybatch` request — byte-for-byte the request OSV.dev has always received | the intelligence service, then the reference database (verification) |
-| `scan.intelligence.contribute: true` **only** | redacted observations: per finding, the fields in `nox intel allowlist` — fingerprint, rule id, ecosystem/package/version range, verdict — never a path, a line, a snippet, a secret, or a prompt | the intelligence service |
+| `scan.intelligence.contribute: true` **only** | redacted observations: per finding, the fields in `nox intel allowlist` — fingerprint, rule id, ecosystem/package/version range, verdict — never a path, a line, a snippet, a secret, or a prompt. With `scan.intelligence.outcomes: true` and the outcome terms accepted, also one outcome report per scan (`nox intel allowlist --outcomes`). A separate `[network]` line counts what was sent | the intelligence service |
 | every online scan of a Maven project whose parent POM or imported BOM is not in the repository | `(groupId, artifactId, version)` of each such parent and BOM, as `/v1/maven/poms` requests; the service returns the published `pom.xml` from Maven Central and nox resolves the versions itself. A separate `[network]` line counts them | the intelligence service, which fetches from Maven Central |
 | every online scan, when a signed feed is not cached or has expired (24h) | two plain `GET`s of public files: `/v1/feeds/slopsquat` and, when the scan found registry-launched MCP servers, `/v1/feeds/mcp`. Nothing about the project is sent. A separate `[network]` line names each feed URL requested | the intelligence service |
 | every online scan of a Dockerfile whose `FROM` names an image by digest, when the image is not already in `~/.nox/cache/oci` | an anonymous pull of that image: its name and digest, to fetch the manifest and the layers. Nothing about the project is sent. A separate `[network]` line names every host asked | not the intelligence service: the image's registry, the token service the registry names and the storage host it redirects to (for Docker Hub, `registry-1.docker.io`, `auth.docker.io` and Docker's CDN) |
@@ -21,7 +21,7 @@ the scan. If a sentence here is not true of the binary, that is a bug.
 A scan that made the lookup says so once, in a `[network]` line after the
 results: how many dependencies, where they went, and how to opt out. A scan that
 made no lookup (`--offline`, `--no-osv`, no dependencies) prints no such line.
-Signed-feed requests, image pulls and Go module fetches each get a `[network]`
+Signed-feed requests, image pulls, Go module fetches and contributions each get a `[network]`
 line of their own, and only on a scan that made them: one whose feed cache,
 image cache or module cache already held what was needed asked nobody and says
 nothing. The feed line names each feed URL requested, so a project with no
