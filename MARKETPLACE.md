@@ -98,7 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: nox-hq/nox@e97e342716c61a3c01fbee0220fa1cddee8d5a95 # v1.69.0
+      - uses: nox-hq/nox@2161a915a082b65d3bb65a0d26b37c638f6a71f6 # v1.70.0
         with:
           path: '.'
           format: sarif

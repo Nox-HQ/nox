@@ -42,6 +42,6 @@ jobs:
       # The Action pins in README.md, MARKETPLACE.md, docs/ and examples/ move
       # in the same change, to that release's commit: cli/docs_pins_test.go
       # fails until they name this version.
-      nox-version: '1.69.0'
-      nox-sha256: '6e65b6c9e23df9d0e815158d197528a86f65e83a194c6b72da0b1533cc214f7a'
+      nox-version: '1.70.0'
+      nox-sha256: '5ab377a72bbdf0da4ee4eeb068e3b516357e3e363db2491534e14aea72c8135e'
       outdated-fixes: true
