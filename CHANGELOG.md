@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The taint rules recognize a value chosen from a literal allowlist as clean:
+  `ALLOWED.has(x) ? x : "createdAt"`, `x if x in ALLOWED else "title"`,
+  Kotlin's `if (x in ALLOWED) x else "id"`, and a lookup in a literal map,
+  `SORT.getOrDefault(k, "created_at")`, `SORT.get(k, "created_at")`,
+  `SORT[k] ?? "created_at"`. That is how an ORDER BY column is defended,
+  since a column cannot be bound, and the safe versions of a query were
+  reported exactly like the vulnerable one beside them. The collection must
+  be written inline or bound once in the file to literals only, and never
+  rebound or added to except with literals; one this cannot see into, such as
+  a parameter or a set loaded at runtime, leaves the finding as it was.
 - TAINT-001 knows the SQL APIs the RealVuln benchmark labels and the catalog
   did not name: Prisma `$queryRawUnsafe` and `$executeRawUnsafe`, Drizzle
   `sql.raw`, TypeORM `DataSource`/`EntityManager`/`QueryRunner.query`,
