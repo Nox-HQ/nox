@@ -156,6 +156,10 @@ type Unit struct {
 	// when it is anything else (see engine/host_allowlist.go). From Line on,
 	// the value Var holds can reach only those hosts, so SSRF is cleared on it.
 	HostAllowlists []HostAllowlist
+	// AllowlistSelects maps a line to the variable an allowlist select there
+	// assigns: a value drawn only from the code's own literals (see
+	// engine/allowlist_select.go). That assignment leaves the variable clean.
+	AllowlistSelects map[int]string
 }
 
 // HostAllowlist is one host-pinning guard: after Line, Var's host is one the

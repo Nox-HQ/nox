@@ -127,10 +127,15 @@ causes, both reproduced on the built binary:
   `sql.raw` (6), TypeORM `DataSource.query` (6), pg-promise `db.one`/`db.many`
   (5), JPA `createNativeQuery` (9), R2DBC `DatabaseClient.sql` (3). Added,
   with Spring `JdbcTemplate.query` and Kotlin's Spring query methods: TAINT-001
-  +17 matched, +12 unmatched (JS/TS F3 8.9 -> 9.3, Java 4.3 -> 4.5). The
-  unmatched are mostly the generated apps' safe twins, which check the column
-  against an allowlist (`ALLOWED.has(x) ? x : "createdAt"`) and bind the
-  value: allowlist membership is not yet recognized as a sanitizer.
+  +17 matched, +12 unmatched (JS/TS F3 8.9 -> 9.3, Java 4.3 -> 4.5). Of the
+  12 unmatched, read one by one: 6 are the generated apps' safe twins, which
+  pick the column from a literal allowlist (`ALLOWED.has(x) ? x : "createdAt"`,
+  `SORT.getOrDefault(k, "created_at")`) and bind the value; 4 are real SQL
+  injection the ground truth does not label as SQL injection (the request
+  value is interpolated into the query: api.ts:1680, borrowers.ts:291,
+  matter-ledger.ts:10, products.ts:357); 1 is a real flow reported at the
+  call site of the helper the label names (leases.ts:185); 1 interpolates a
+  `List<Integer>` (openmrs). The allowlist select is now recognized.
 
 | | TP | FP | F3 all | Python | JS/TS | Java |
 |---|---:|---:|---:|---:|---:|---:|
