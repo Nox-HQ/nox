@@ -135,6 +135,21 @@
         {
           "call": "yaml.load",
           "kind": "deserialized"
+        },
+        {
+          "call": "RequestBoundQuery",
+          "kind": "http_query",
+          "note": "sentinel: a handler parameter the framework binds from the request -- a parameter of a function decorated as a route (FastAPI @app.get/@router.post, Flask @app.route), except one filled by Depends/Security or typed as a framework object; seeded at function entry by core/taint/engine/framework_params.go"
+        },
+        {
+          "call": "RequestBoundHeader",
+          "kind": "http_header",
+          "note": "sentinel: a handler parameter the framework binds from the request -- a parameter of a function decorated as a route (FastAPI @app.get/@router.post, Flask @app.route), except one filled by Depends/Security or typed as a framework object; seeded at function entry by core/taint/engine/framework_params.go"
+        },
+        {
+          "call": "RequestBoundBody",
+          "kind": "http_body",
+          "note": "sentinel: a handler parameter the framework binds from the request -- a parameter of a function decorated as a route (FastAPI @app.get/@router.post, Flask @app.route), except one filled by Depends/Security or typed as a framework object; seeded at function entry by core/taint/engine/framework_params.go"
         }
       ],
       "sinks": [
@@ -977,6 +992,21 @@
         {
           "call": "nextUrl.searchParams",
           "kind": "http_query"
+        },
+        {
+          "call": "RequestBoundQuery",
+          "kind": "http_query",
+          "note": "sentinel: a handler parameter the framework binds from the request -- NestJS @Body/@Query/@Param/@Headers/@Ip/@HostParam/@UploadedFile(s); seeded at function entry by core/taint/engine/framework_params.go"
+        },
+        {
+          "call": "RequestBoundHeader",
+          "kind": "http_header",
+          "note": "sentinel: a handler parameter the framework binds from the request -- NestJS @Body/@Query/@Param/@Headers/@Ip/@HostParam/@UploadedFile(s); seeded at function entry by core/taint/engine/framework_params.go"
+        },
+        {
+          "call": "RequestBoundBody",
+          "kind": "http_body",
+          "note": "sentinel: a handler parameter the framework binds from the request -- NestJS @Body/@Query/@Param/@Headers/@Ip/@HostParam/@UploadedFile(s); seeded at function entry by core/taint/engine/framework_params.go"
         }
       ],
       "sinks": [

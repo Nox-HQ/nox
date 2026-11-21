@@ -43,12 +43,27 @@ func extractJavaScript(lines []logicalLine) []unitDraft {
 	}
 	stack := []frame{{unit: module, openDepth: 0}}
 	depth := 0
+	// A "use server" directive makes functions server actions, which the client
+	// calls over the network with arguments it chooses: at the top of the file
+	// it covers every exported function, as a function's first statement it
+	// covers that function (see serverActionParams).
+	serverFile := false
+	sawCode := false
 
 	for _, ll := range lines {
 		trimmed := strings.TrimSpace(ll.code)
+		if useServerDirective(ll.raw) {
+			if !sawCode {
+				serverFile = true
+			} else if u := stack[len(stack)-1].unit; u != module && len(u.stmts) == 0 {
+				serverActionParams(u)
+			}
+			continue
+		}
 		if trimmed == "" {
 			continue
 		}
+		sawCode = true
 
 		params, name, isHeader := jsFunctionHeader(trimmed)
 
@@ -89,7 +104,11 @@ func extractJavaScript(lines []logicalLine) []unitDraft {
 		// depth advances, so the body's statements (which arrive while depth exceeds
 		// openDepth) land in the new unit.
 		if isHeader {
-			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line,
+				requestBound: nestRequestBound(ll.code)}
+			if serverFile && len(stack) == 1 && strings.HasPrefix(trimmed, "export ") {
+				serverActionParams(u)
+			}
 			// Next.js App Router: a route handler or page receives the
 			// route's dynamic segments and query as a destructured
 			// `{ params }` / `{ searchParams }` argument -- request data.
@@ -114,6 +133,7 @@ func extractJavaScript(lines []logicalLine) []unitDraft {
 
 	out := make([]unitDraft, 0, len(units))
 	for _, u := range units {
+		seedRequestBoundParams(u)
 		out = append(out, *u)
 	}
 	return out

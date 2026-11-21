@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The taint rules read handler parameters that JavaScript and Python
+  frameworks bind from the request: NestJS `@Body`, `@Query`, `@Param`,
+  `@Headers`, `@Ip` and `@UploadedFile(s)`; every parameter of a function
+  decorated as a route (FastAPI `@app.get`, `@router.post`, Flask
+  `@app.route`), except one filled by `Depends`/`Security` or typed as a
+  framework object; and the parameters of Next.js server actions (`"use
+  server"`). Their names are arbitrary, so none was a source, and a NestJS or
+  FastAPI handler passing its input to a sink was not reported. RealVuln:
+  +73 matched, +96 unmatched; development split F3 9.3 -> 10.2 (Python 14.7
+  -> 17.1). The unmatched were read: most are values that passed through a
+  call into another file (a service method looked up by the request's id),
+  or a file extension taken with splitext, which these sources now reach.
+
 - TAINT-006 knows the rest of the HTTP client methods the URL slot already
   named: `requests.put/patch/delete/head/options/request`,
   `httpx.post/put/patch/delete/head/request`, `axios(config)`,
