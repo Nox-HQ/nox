@@ -194,6 +194,9 @@ Java 4.7). An earlier version of this line gave 10.3 overall, which is the
 JS/TS figure. After #1132, #1134 and the SSRF URL argument: 9.3 overall
 (Python 14.7, JS/TS 10.9, Java 4.9). With framework request sources (NestJS
 decorators, Python route parameters, Next.js server actions): 10.2 (Python
-17.1, JS/TS 11.7, Java 4.9). Recall by class: injection 24.4%, crypto/secrets/config 12.3%,
+17.1, JS/TS 11.7, Java 4.9). With the sinks the development split's
+misses named (needle, Fastify and Next.js redirects, FastAPI responses, Java
+Files and java.io writers, promisified exec, ProcessBuilder.command): 10.6
+(Python 18.1, JS/TS 12.4, Java 4.9). Recall by class: injection 24.4%, crypto/secrets/config 12.3%,
 information exposure 0.5%, authentication/session, authorization, business
 logic and mass assignment 0.

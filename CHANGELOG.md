@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Sinks the RealVuln development split's missed labels named that the
+  catalog did not: needle's verbs (SSRF), Fastify's `reply.redirect` and
+  `NextResponse.redirect` (open redirect), Angular's
+  `bypassSecurityTrustHtml`/`Script` (XSS), FastAPI/Starlette
+  `RedirectResponse` and `HTMLResponse`, `self.wfile.write` in an
+  `http.server` handler (XSS), and Java's `Files` writers and readers,
+  `FileOutputStream`, `FileWriter` and `FileReader` (path traversal). A
+  promisified function is the function (`const execAsync =
+  util.promisify(exec)`), and `command(...)` on a local declared
+  `ProcessBuilder` sets the program. RealVuln: +50 matched, +57 unmatched net;
+  development split F3 10.2 -> 10.6.
+
 - The taint rules read handler parameters that JavaScript and Python
   frameworks bind from the request: NestJS `@Body`, `@Query`, `@Param`,
   `@Headers`, `@Ip` and `@UploadedFile(s)`; every parameter of a function
@@ -59,6 +71,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is no database are not reported.
 
 ### Fixed
+
+- `Files.write(Paths.get(p), data)` was reported as XSS, through the generic
+  response-writer `write` sink. It is a path write, reported as path
+  traversal on its path argument; writing request data to a fixed path is no
+  finding.
 
 - TAINT-006 judges an HTTP call on its URL when the URL is passed by name.
   With every argument a keyword there was no positional URL, and the call

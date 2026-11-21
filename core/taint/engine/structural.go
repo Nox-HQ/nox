@@ -1905,6 +1905,9 @@ var sinkValueSlot = map[string]int{
 	"file_put_contents": 0, "file_get_contents": 0, "fopen": 0, "readfile": 0,
 	"File.WriteAllText": 0, "File.ReadAllText": 0, "File.ReadAllBytes": 0, "File.Open": 0,
 	"os.WriteFile": 0, "ioutil.WriteFile": 0, "os.OpenFile": 0, "os.Create": 0,
+	// Java NIO and java.io: the path is the first argument, the data after it.
+	"Files.write": 0, "Files.writeString": 0, "Files.newOutputStream": 0, "Files.newBufferedWriter": 0,
+	"FileOutputStream": 0, "FileWriter": 0,
 	// Swift: createFile(atPath:contents:) -- the data written is not the path.
 	"createFile.atPath": 0,
 	// Not a bare `open`: Python's takes the path first, Perl's third.
@@ -1915,6 +1918,7 @@ var sinkValueSlot = map[string]int{
 	"requests.request": 1, "urllib.request.urlopen": 0, "urlopen": 0,
 	"httpx.get": 0, "httpx.post": 0, "httpx.put": 0, "httpx.delete": 0, "httpx.request": 1,
 	// JavaScript
+	"needle.get": 0, "needle.post": 0, "needle.put": 0, "needle.patch": 0, "needle.delete": 0, "needle.head": 0,
 	"fetch": 0, "axios.get": 0, "axios.post": 0, "axios.put": 0, "axios.patch": 0, "axios.delete": 0, "axios.head": 0,
 	"http.get": 0, "https.get": 0,
 	// Go
