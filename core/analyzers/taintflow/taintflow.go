@@ -275,7 +275,19 @@ func (a *Analyzer) toFinding(flow *taint.Flow) findings.Finding {
 		origin = fmt.Sprintf("%s from %q used directly", flow.Source.Kind, flow.Source.Call)
 	}
 	var msg string
-	if len(flow.Via) > 0 {
+	confidence := findings.ConfidenceMedium
+	switch {
+	case flow.Source.Kind == engine.SourceParameter:
+		// No source in the file says the value is untrusted: what is shown is
+		// a query assembled from the function's argument by string formatting.
+		// Whether a caller passes request data in is not established here.
+		msg = fmt.Sprintf(
+			"SQL query built by string formatting from parameter %q of %s reaches sink %q — %s. "+
+				"Untrusted input is not traced in this file: a caller that passes request data makes it injectable; bind it as a query parameter instead.",
+			flow.SourceVar, flow.FuncName, sink.Call, sink.CWE,
+		)
+		confidence = findings.ConfidenceLow
+	case len(flow.Via) > 0:
 		// Cross-function flow: name the intermediate helper(s) so triage can follow
 		// the path from the caller's source through the summarized helper(s) to the
 		// sink.
@@ -283,7 +295,7 @@ func (a *Analyzer) toFinding(flow *taint.Flow) findings.Finding {
 			"Untrusted input (%s) reaches %s sink %q through %s without sanitization — %s.",
 			origin, sink.VulnClass, sink.Call, viaPath(flow.Via), sink.CWE,
 		)
-	} else {
+	default:
 		msg = fmt.Sprintf(
 			"Untrusted input (%s) reaches %s sink %q without sanitization — %s.",
 			origin, sink.VulnClass, sink.Call, sink.CWE,
@@ -313,7 +325,7 @@ func (a *Analyzer) toFinding(flow *taint.Flow) findings.Finding {
 	return findings.Finding{
 		RuleID:     sink.RuleID,
 		Severity:   severityForClass(sink.VulnClass),
-		Confidence: findings.ConfidenceMedium,
+		Confidence: confidence,
 		Location: findings.Location{
 			FilePath:  flow.FilePath,
 			StartLine: flow.SinkLine,

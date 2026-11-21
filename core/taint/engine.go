@@ -57,6 +57,12 @@ type Statement struct {
 	// clears its classes on the assignee. Empty means "unknown", which keeps
 	// the conservative behaviour (the assignee is tainted with nothing cleared).
 	Expr string
+	// SQLVars are the variables the statement combines with a string literal
+	// that reads as SQL text -- concatenated, interpolated, formatted:
+	// `q = "SELECT * FROM t WHERE id = " + id` lists id (and q). A variable
+	// that only sits beside the SQL, as another argument of the call taking it
+	// or as that call's receiver, is not listed.
+	SQLVars []string
 }
 
 // SinkArgInfo is the argument-shape evidence a substrate extracts at a specific
@@ -78,6 +84,10 @@ type SinkArgInfo struct {
 	// positional argument. For cursor.execute the SQL string is arg 0; a tainted
 	// value only in arg 1 (the params tuple) is the SAFE parameterized form.
 	FirstArgTainted bool
+	// FirstArgSQLVars are the variables the first positional argument
+	// combines with SQL literal text: the query is assembled at the call,
+	// `st.executeQuery("SELECT ... WHERE id = " + id)` lists id.
+	FirstArgSQLVars []string
 	// ShellProgram records that the program being executed is itself a shell:
 	// `subprocess.run(["sh", "-c", cmd])`, `spawn("bash", ["-c", cmd])`.
 	//
@@ -189,6 +199,11 @@ type Flow struct {
 	// reaches a Flow, so SinkRole on an emitted prompt-injection flow is "system",
 	// "developer", "unknown", or another non-user role that was kept conservatively.
 	SinkRole string
+	// SQLBuilt records that the value was combined with a string literal that
+	// reads as SQL on its way to the sink or at it. It is what a flow from a
+	// function parameter, which no source in the file establishes as
+	// untrusted, is required to show before it is reported.
+	SQLBuilt bool
 }
 
 // Suppression is a flow the engine REFUSED to report, and why.

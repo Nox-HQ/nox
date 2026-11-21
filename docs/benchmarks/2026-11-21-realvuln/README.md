@@ -106,6 +106,43 @@ On the injection classes nox has taint rules for, recall is 22%:
 These are the next measurements to take apart, one class at a time: each
 missed label names a file and line, so each is a reproducible counterexample.
 
+### SQL injection, taken apart
+
+Of the 119 missed CWE-89 labels, 112 had no nox finding within 15 lines. Two
+causes, both reproduced on the built binary:
+
+- **No source in the file.** Taint needs one, and the commonest shape here is
+  a DAO method that concatenates its own argument into the query while the
+  request is parsed in another file. The summaries already knew which
+  parameters reach a SQL sink; that was used only when a caller in the same
+  file passed a source in. TAINT-001 now reports it at low confidence, when the
+  parameter is combined with literal SQL text (not a pass-through, a
+  placeholder, a receiver, a sibling argument, or a tagged template's bound
+  value). An unguarded prototype added 116 unmatched findings, 113 of them
+  JVM calls named `execute` or `createQuery` that are no query built from text.
+- **A helper that binds its argument first had no summary.** The summary
+  matched a flow by the variable read at the sink, so `q = "..." % name;
+  cursor.execute(q)` was invisible to a caller's source. Every class.
+- **Sinks not in the catalog:** Prisma `$queryRawUnsafe` (9 labels), Drizzle
+  `sql.raw` (6), TypeORM `DataSource.query` (6), pg-promise `db.one`/`db.many`
+  (5), JPA `createNativeQuery` (9), R2DBC `DatabaseClient.sql` (3). Not yet
+  added.
+
+| | TP | FP | F3 all | Python | JS/TS | Java |
+|---|---:|---:|---:|---:|---:|---:|
+| with #1127 | 560 | 9,242 | 7.6 | 12.4 | 8.7 | 4.0 |
+| plus parameter flows and the summary fix | 585 | 9,307 | 7.9 | 13.0 | 8.9 | 4.3 |
+
+TAINT-001 gained 25 matched and 39 unmatched findings. Read one by one, the
+unmatched are string-built queries the benchmark does not label: AltoroJ's
+`DBUtil` (its own comment says "BAD"), Fineract and Mifos `jdbcTemplate` calls
+already carrying `// NOSONAR`, JPQL assembled by concatenation. The summary fix
+added 26 unmatched findings in other classes; the ones read are real flows
+reported at the call into the helper, where RealVuln labels the sink inside it
+(WebGoat's ProfileZipSlip: finding at line 61, labels at 72 and 79). Where an
+interprocedural finding is located is a separate decision: moving it changes
+every such fingerprint.
+
 ## Reproduce
 
 ```bash

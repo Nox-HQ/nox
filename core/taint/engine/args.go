@@ -30,6 +30,14 @@ func argInfo(lang langKind, c callChain) sinkArgDraft {
 		info.shellProgram = namesShellProgram(p)
 		break
 	}
+	// The SQL text of the first positional argument, read from the literal
+	// characters the code view blanked. The split above trims each part and
+	// breaks the raw text at commas inside literals too, so it is cut here
+	// instead: at the first top-level comma of the code view, the same offset
+	// in both views.
+	if code, raw, ok := firstArgViews(c.codeArgs, c.rawArgs); ok && !isKeywordArg(code) {
+		info.firstArgSQLVars = sqlBuiltVars(code, raw)
+	}
 
 	seen := map[string]struct{}{}
 	for idx, p := range codeParts {
@@ -83,6 +91,29 @@ func argInfo(lang langKind, c callChain) sinkArgDraft {
 	// languages keep the role-blind behavior (documented in detectPromptRoles).
 	info.promptRoles, info.promptStaticSystem = detectPromptRoles(lang, c.rawArgs, c.codeArgs)
 	return info
+}
+
+// firstArgViews returns the first top-level argument of a call in both its
+// code view and its raw text, cut at the same offset. It needs the two views
+// aligned, as extractCalls produces them; ok is false when they are not.
+func firstArgViews(code, raw string) (firstCode, firstRaw string, ok bool) {
+	if len(code) != len(raw) {
+		return "", "", false
+	}
+	depth := 0
+	for i := 0; i < len(code); i++ {
+		switch code[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case ',':
+			if depth == 0 {
+				return code[:i], raw[:i], true
+			}
+		}
+	}
+	return code, raw, true
 }
 
 // splitTopLevelArgs splits raw argument text on commas that are not nested

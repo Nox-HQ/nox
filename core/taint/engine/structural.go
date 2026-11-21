@@ -94,6 +94,7 @@ func toStatement(d *stmtDraft) taint.Statement {
 		Returns:     append([]string(nil), d.returns...),
 		IsReturn:    d.isReturn,
 		Expr:        d.expr,
+		SQLVars:     append([]string(nil), d.sqlVars...),
 	}
 	if len(d.sinkArgs) > 0 {
 		st.SinkArgs = make(map[string]taint.SinkArgInfo, len(d.sinkArgs))
@@ -103,6 +104,7 @@ func toStatement(d *stmtDraft) taint.Statement {
 				ArgCount:              a.argCount,
 				ShellTrue:             a.shellTrue,
 				FirstArgTainted:       a.firstArgTainted,
+				FirstArgSQLVars:       append([]string(nil), a.firstArgSQLVars...),
 				ShellProgram:          a.shellProgram,
 				PositionalVars:        copyPositional(a.positionalVars),
 				PositionalArgs:        append([]string(nil), a.positionalArgs...),
@@ -196,6 +198,9 @@ type taintInfo struct {
 	// summaries carried this taint (empty for a directly-assigned source). It
 	// feeds Flow.Via so a cross-function finding can name the path.
 	via []string
+	// sqlBuilt: the value was combined with SQL text by an assignment it
+	// passed through (taint.Statement.SQLVars). See taint.Flow.SQLBuilt.
+	sqlBuilt bool
 }
 
 // passResult is the output of a forward pass: the flows found, the final taint
@@ -470,6 +475,7 @@ func (e *StructuralEngine) forwardPass(
 					Language:   unit.Language,
 					Via:        append([]string(nil), ti.via...),
 					SinkRole:   sinkRole,
+					SQLBuilt:   ti.sqlBuilt || slices.Contains(info.FirstArgSQLVars, v),
 				})
 				break // one flow per sink call is enough
 			}
@@ -573,6 +579,7 @@ func (e *StructuralEngine) forwardPass(
 		for _, v := range sortedReads(st.Reads) {
 			if ti, ok := tainted[v]; ok {
 				c := cloneTaintInfo(ti)
+				c.sqlBuilt = c.sqlBuilt || slices.Contains(st.SQLVars, v)
 				carried = &c
 				break
 			}
@@ -594,7 +601,8 @@ func (e *StructuralEngine) forwardPass(
 			}
 		}
 		checked.admit(cleared, st.Assigns, st.Line, e.partialClasses(lang, st.Calls))
-		setTaint(taintInfo{src: carried.src, srcLine: carried.srcLine, cleared: cleared, via: carried.via})
+		setTaint(taintInfo{src: carried.src, srcLine: carried.srcLine, cleared: cleared, via: carried.via,
+			sqlBuilt: carried.sqlBuilt})
 	}
 
 	return passResult{flows: flows, suppressed: suppressed, state: tainted, returned: returned}
@@ -801,7 +809,7 @@ func cloneTaintInfo(ti taintInfo) taintInfo {
 	for k, v := range ti.cleared {
 		cleared[k] = v
 	}
-	return taintInfo{src: ti.src, srcLine: ti.srcLine, cleared: cleared, via: append([]string(nil), ti.via...)}
+	return taintInfo{src: ti.src, srcLine: ti.srcLine, cleared: cleared, via: append([]string(nil), ti.via...), sqlBuilt: ti.sqlBuilt}
 }
 
 // sortedReads returns a deterministically ordered copy of a read/call slice so
@@ -1784,6 +1792,9 @@ func weakMerge(old, updated taintInfo) taintInfo {
 		}
 	}
 	merged.cleared = cleared
+	// Either value may be the one that reaches the sink; the one built into
+	// SQL text is.
+	merged.sqlBuilt = old.sqlBuilt || updated.sqlBuilt
 	return merged
 }
 
