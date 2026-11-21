@@ -11,6 +11,8 @@ package catalog
 import (
 	"sort"
 
+	"github.com/nox-hq/nox/core/analyzers/appconfig"
+
 	"github.com/nox-hq/nox/core/analyzers/agentflow"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/authz"
@@ -72,6 +74,7 @@ func allRuleSets() []*rules.RuleSet {
 		agentflow.NewAnalyzer().Rules(),
 		authz.NewAnalyzer().Rules(),
 		taintflow.NewAnalyzer().Rules(),
+		appconfig.NewAnalyzer().Rules(),
 		weakcrypto.NewAnalyzer().Rules(),
 		hardening.NewAnalyzer().Rules(),
 		memsafe.NewAnalyzer().Rules(),

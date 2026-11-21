@@ -55,6 +55,7 @@ var familyRules = []familyRule{
 	{"REACH-", RuleFamily{"reachability", "Reachability"}},
 	{"TAINT-", RuleFamily{"taint-flow", "Taint Flow"}},
 	{"HARDEN-", RuleFamily{"transport-security", "Transport Security"}},
+	{"APPCFG-", RuleFamily{"app-config", "Application Configuration"}},
 	{"CRYPTO-", RuleFamily{"weak-crypto", "Weak Crypto"}},
 	{"PERM-", RuleFamily{"file-permissions", "File Permissions"}},
 	{"MEMSAFE-", RuleFamily{"memory-safety", "Memory Safety"}},

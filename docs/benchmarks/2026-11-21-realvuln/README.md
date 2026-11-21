@@ -197,7 +197,9 @@ decorators, Python route parameters, Next.js server actions): 10.2 (Python
 17.1, JS/TS 11.7, Java 4.9). With the sinks the development split's
 misses named (needle, Fastify and Next.js redirects, FastAPI responses, Java
 Files and java.io writers, promisified exec, ProcessBuilder.command): 10.6
-(Python 18.1, JS/TS 12.4, Java 4.9). Recall by class: injection 24.4%, crypto/secrets/config 12.3%,
+(Python 18.1, JS/TS 12.4, Java 4.9). With the application-configuration rules
+(debug mode, CORS from any origin, unverified JWT): 11.7 (Python 19.2, JS/TS
+13.1, Java 6.2). Recall by class: injection 24.4%, crypto/secrets/config 12.3%,
 information exposure 0.5%, authentication/session, authorization, business
 logic and mass assignment 0.
 
