@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   such a value stays tainted, and handing that to callers reported a database
   row written as JSON as request text, and an argv list as a shell command.
 
+- The entropy rules' Subresource Integrity check no longer copies the line up
+  to each candidate, which made a scan quadratic in line length: a scan of one
+  12.7 MB single-line JSON file (RealVuln's jeecgboot mock data) had not
+  finished after 15 minutes, and now takes 1.7 seconds. Results are unchanged.
+
 - SEC-161 no longer reports text in a script written without spaces as a
   possible secret. Random CJK mock data and Japanese or Chinese translation
   files scored far above the entropy threshold, because entropy counts
