@@ -139,9 +139,74 @@ func (e *StructuralEngine) AnalyzeFileWithSuppressions(units []taint.Unit) ([]ta
 			flows = append(flows, *f)
 		}
 	}
+	flows = append(flows, e.paramSQLFlows(lang, units, summaries, flows)...)
 	sortFlows(flows)
 	sortSuppressions(suppressed)
 	return flows, suppressed
+}
+
+// SourceParameter is the source kind of a flow from a function's own
+// parameter, which no source in the file establishes as untrusted.
+const SourceParameter = taint.SourceKind("parameter")
+
+// paramSQLFlows reports a SQL query built from a function's parameter by string
+// formatting, inside the function, when the file shows no source for it.
+//
+// Taint needs a source, and in the commonest SQL injection shape the source is
+// not in the file: a handler parses the request and calls a DAO method in
+// another file, and the DAO concatenates its argument into the query. The
+// summaries already compute, for every function, which parameters reach which
+// sinks -- and that was used only when a caller in the same file passed a
+// source in. This reports the SQL injection class of it, at the sink, held to
+// the premise in sqltext.go: the parameter must have been combined with
+// literal SQL text (Flow.SQLBuilt). A parameter passed through whole
+// (`run(sql)` calling `cursor.execute(sql)`) is a wrapper's contract, not a
+// query built from data, and is not reported.
+//
+// Not reported either: a sink a reported flow already names at the same line
+// (a source in the same function), and a function a reported cross-function
+// flow already goes through for the same rule (a source in a caller in this
+// file), so one query is one finding.
+func (e *StructuralEngine) paramSQLFlows(lang string, units []taint.Unit, summaries map[string]*funcSummary, reported []taint.Flow) []taint.Flow {
+	type sinkAt struct {
+		line int
+		rule string
+	}
+	atSink := map[sinkAt]bool{}
+	throughFn := map[string]bool{}
+	for i := range reported {
+		f := &reported[i]
+		atSink[sinkAt{f.SinkLine, f.Sink.RuleID}] = true
+		for _, fn := range f.Via {
+			throughFn[fn+"\x00"+f.Sink.RuleID] = true
+		}
+	}
+	var out []taint.Flow
+	for i := range units {
+		u := &units[i]
+		if u.FuncName == "" || len(u.Params) == 0 {
+			continue
+		}
+		for _, param := range u.Params {
+			seed := map[string]taintInfo{param: {
+				src:     taint.Source{Call: u.FuncName + ":" + param, Kind: SourceParameter},
+				cleared: map[taint.VulnClass]bool{},
+			}}
+			res := e.forwardPass(lang, u, seed, summaries)
+			for j := range res.flows {
+				f := res.flows[j]
+				k := sinkAt{f.SinkLine, f.Sink.RuleID}
+				if f.Sink.VulnClass != taint.VulnSQLInjection || f.Source.Kind != SourceParameter ||
+					f.Source.Call != u.FuncName+":"+param || len(f.Via) > 0 || !f.SQLBuilt ||
+					atSink[k] || throughFn[u.FuncName+"\x00"+f.Sink.RuleID] {
+					continue
+				}
+				atSink[k] = true
+				out = append(out, f)
+			}
+		}
+	}
+	return out
 }
 
 // flowKey de-duplicates flows that the intraprocedural and interprocedural
@@ -203,7 +268,7 @@ func (e *StructuralEngine) summarize(lang string, u *taint.Unit, summaries map[s
 		// Seed: parameter `param` is tainted by a synthetic "parameter" source.
 		seed := map[string]taintInfo{
 			param: {
-				src:     taint.Source{Call: u.FuncName + ":" + param, Kind: taint.SourceKind("parameter")},
+				src:     taint.Source{Call: u.FuncName + ":" + param, Kind: SourceParameter},
 				srcLine: 0,
 				cleared: map[taint.VulnClass]bool{},
 				via:     nil,
@@ -213,7 +278,25 @@ func (e *StructuralEngine) summarize(lang string, u *taint.Unit, summaries map[s
 
 		for fi := range res.flows {
 			f := &res.flows[fi]
-			if f.SourceVar != param {
+			// The flow is this parameter's when the seed is its source. Its
+			// SourceVar is the variable read AT the sink, which is the
+			// parameter only when it is passed in unchanged: matching on it
+			// left every helper that binds its argument first -- `q = "..." %
+			// name; c.execute(q)`, `full = "ls " + cmd; os.system(full)` --
+			// without a summary, and the caller's source reached nothing.
+			//
+			// A binding through a call that does not hand its argument on
+			// (`rows = repo.list(filter)`, `parts = cmd.split()`) is not
+			// summarized: the forward pass keeps such a value tainted, which
+			// is conservative inside one function, and handing that to every
+			// caller reported a database row written as JSON as the request
+			// text it was filtered by (chronos), and an argv list as a shell
+			// string (certbot). Only the parameter itself, or a value built
+			// from it by copying and string operations, is the parameter.
+			if f.Source.Kind != SourceParameter || f.Source.Call != u.FuncName+":"+param {
+				continue
+			}
+			if f.SourceVar != param && f.ThroughCall {
 				continue
 			}
 			sum.sinksArg[idx] = append(sum.sinksArg[idx], argSink{sink: f.Sink, via: f.Via})
@@ -311,7 +394,7 @@ func (e *StructuralEngine) passGetterSource(lang string, u *taint.Unit, summarie
 			found = &taintInfo{src: src, srcLine: st.Line, cleared: map[taint.VulnClass]bool{}}
 		} else {
 			for _, rv := range sortedReads(st.Returns) {
-				if ti, ok := res.state[rv]; ok && ti.src.Kind != taint.SourceKind("parameter") {
+				if ti, ok := res.state[rv]; ok && ti.src.Kind != SourceParameter {
 					c := cloneTaintInfo(ti)
 					found = &c
 					break

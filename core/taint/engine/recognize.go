@@ -132,6 +132,12 @@ func recognizeStatementWith(lang langKind, ll logicalLine, rewrite func(lhs stri
 	}
 	if st.assigns != "" {
 		st.expr = exprCode
+		// Read from the whole line, not the aligned RHS: the RHS is the TRIMMED
+		// code view, and a literal is blank there, so a leading or trailing
+		// literal -- the "SELECT ..." of `q = "SELECT ..." + id` -- is trimmed
+		// off before the raw text is cut to it. A simple assignment's target
+		// holds no literal, so the line's literals are the expression's.
+		st.sqlVars = sqlBuiltVars(code, ll.raw)
 	}
 	return st, true
 }

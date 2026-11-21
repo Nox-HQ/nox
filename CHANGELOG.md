@@ -7,7 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- TAINT-001 reports a SQL query built from a function's own parameter by
+  string formatting -- `"... WHERE name = '" + name + "'"`, `.format(name)`,
+  an f-string or template literal -- when no source in the file reaches it.
+  It is the commonest shape of SQL injection the RealVuln benchmark labels: a
+  DAO method assembles its argument into the query, and the request is parsed
+  in another file. Reported at low confidence, with a message that says no
+  untrusted input was traced. The parameter must be combined with literal SQL
+  text: a wrapper passing its argument through whole, a parameterized query, a
+  receiver or a separate argument of the call taking the SQL, a value bound by
+  a tagged template (Drizzle's `` sql`... ${id}` ``), and a JVM `execute` that
+  is no database are not reported.
+
 ### Fixed
+
+- A same-file helper that binds its argument to a local before the sink is
+  now summarized, so a caller's source reaches it: `q = "..." % name;
+  cursor.execute(q)` and `full = "ls " + cmd; os.system(full)` were reported
+  only when the argument was passed to the sink unchanged. Every taint class
+  was affected. A binding through a call that does not hand its argument on
+  -- a query, a serializer, `split()` -- is not summarized: inside a function
+  such a value stays tainted, and handing that to callers reported a database
+  row written as JSON as request text, and an argv list as a shell command.
 
 - SEC-161 no longer reports text in a script written without spaces as a
   possible secret. Random CJK mock data and Japanese or Chinese translation
