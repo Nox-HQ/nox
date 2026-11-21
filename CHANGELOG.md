@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- TAINT-006 knows the rest of the HTTP client methods the URL slot already
+  named: `requests.put/patch/delete/head/options/request`,
+  `httpx.post/put/patch/delete/head/request`, `axios(config)`,
+  `axios.request`, `axios.post/put/patch/delete/head` and `https.get`.
+
 - The taint rules recognize a value chosen from a literal allowlist as clean:
   `ALLOWED.has(x) ? x : "createdAt"`, `x if x in ALLOWED else "title"`,
   Kotlin's `if (x in ALLOWED) x else "id"`, and a lookup in a literal map,
@@ -41,6 +46,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is no database are not reported.
 
 ### Fixed
+
+- TAINT-006 judges an HTTP call on its URL when the URL is passed by name.
+  With every argument a keyword there was no positional URL, and the call
+  counted any tainted argument: `requests.post(url=config_uri, data=form)`
+  was SSRF because of the form data in the body (bank-of-anthos, five
+  times). Python's `url=` and an axios config object's `url` and `baseURL`
+  property are now the URL, and a value in the body, data, headers or params
+  of such a call is not. A config object built elsewhere and passed by name
+  is still judged on all of it.
 
 - A same-file helper that binds its argument to a local before the sink is
   now summarized, so a caller's source reaches it: `q = "..." % name;

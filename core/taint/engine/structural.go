@@ -82,6 +82,28 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) (units []ta
 	return units
 }
 
+func copyKeywordVars(m map[string][]string) map[string][]string {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string][]string, len(m))
+	for k, v := range m {
+		out[k] = append([]string(nil), v...)
+	}
+	return out
+}
+
+func copyKeywordArgs(m map[string]string) map[string]string {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
 // toStatement converts an internal stmtDraft into the foundation's
 // taint.Statement, copying the argument-shape evidence into taint.SinkArgInfo.
 func toStatement(d *stmtDraft) taint.Statement {
@@ -109,6 +131,8 @@ func toStatement(d *stmtDraft) taint.Statement {
 				ShellProgram:          a.shellProgram,
 				PositionalVars:        copyPositional(a.positionalVars),
 				PositionalArgs:        append([]string(nil), a.positionalArgs...),
+				KeywordVars:           copyKeywordVars(a.keywordVars),
+				KeywordArgs:           copyKeywordArgs(a.keywordArgs),
 				PromptRoles:           copyRoles(a.promptRoles),
 				PromptHasStaticSystem: a.promptStaticSystem,
 			}
@@ -385,6 +409,17 @@ func (e *StructuralEngine) forwardPass(
 			// more often once summaries carried a getter's source to its
 			// callers. Decided on the taint state, like firstArgTaintFromState.
 			valueSlot, slotted := sinkValueSlot[sink.Call]
+			// The value slot passed by name (`requests.post(url=…)`) is judged
+			// on that argument alone. With every argument a keyword there is no
+			// positional slot, and the call fell back to "any argument", so a
+			// fixed url= beside a tainted json= body was SSRF.
+			kwVars, byKeyword := keywordValue(&sink, info, hasInfo)
+			if byKeyword {
+				slotted = false
+				if kwVars == nil {
+					continue // the named URL is a literal or holds no tainted value
+				}
+			}
 			slotted = slotted && hasInfo && len(info.PositionalVars) > 0
 			if slotted && !slotTaintedInState(info, valueSlot, tainted, inline) {
 				continue
@@ -422,6 +457,9 @@ func (e *StructuralEngine) forwardPass(
 				// whatever else the call was passed: the URL, not an API key
 				// in its headers.
 				argVars = slotVars(info, valueSlot, inline)
+			}
+			if byKeyword {
+				argVars = kwVars
 			}
 			for _, v := range argVars {
 				ti, isTainted := tainted[v]
@@ -1877,12 +1915,51 @@ var sinkValueSlot = map[string]int{
 	"requests.request": 1, "urllib.request.urlopen": 0, "urlopen": 0,
 	"httpx.get": 0, "httpx.post": 0, "httpx.put": 0, "httpx.delete": 0, "httpx.request": 1,
 	// JavaScript
-	"fetch": 0, "axios.get": 0, "axios.post": 0, "http.get": 0, "https.get": 0,
+	"fetch": 0, "axios.get": 0, "axios.post": 0, "axios.put": 0, "axios.patch": 0, "axios.delete": 0, "axios.head": 0,
+	"http.get": 0, "https.get": 0,
 	// Go
 	"http.Get": 0, "http.Post": 0, "http.Head": 0, "http.NewRequest": 1,
 	// C# / Ruby
 	"HttpClient.GetAsync": 0, "GetAsync": 0, "WebClient.DownloadString": 0, "DownloadString": 0,
 	"HTTParty.get": 0, "Faraday.get": 0, "URI.open": 0,
+}
+
+// sinkValueKeyword is the name by which a sink's value slot may be passed
+// instead of by position: Python's HTTP clients all accept `url=`.
+// Python's HTTP clients all accept `url=`; axios's config object carries the
+// URL as its `url` property, against an optional `baseURL`.
+var sinkValueKeyword = map[string][]string{
+	"requests.get": {"url"}, "requests.post": {"url"}, "requests.put": {"url"}, "requests.patch": {"url"},
+	"requests.delete": {"url"}, "requests.head": {"url"}, "requests.options": {"url"}, "requests.request": {"url"},
+	"httpx.get": {"url"}, "httpx.post": {"url"}, "httpx.put": {"url"}, "httpx.patch": {"url"},
+	"httpx.delete": {"url"}, "httpx.head": {"url"}, "httpx.request": {"url"},
+	"urllib.request.urlopen": {"url"}, "urlopen": {"url"}, "aiohttp.ClientSession.get": {"url"},
+	"axios": {"url", "baseURL"}, "axios.request": {"url", "baseURL"},
+}
+
+// keywordValue reports whether the call passes the sink's value slot by name,
+// and the variables in that argument: the caller reports only those, so a
+// fixed url= beside a tainted body is no finding. A literal url= has no
+// variables and gives (nil, true): nothing in it can carry a request value.
+// A value with no variable but a call in it (an inline source) gives
+// ok false, leaving the call to its existing treatment.
+func keywordValue(sink *taint.Sink, info taint.SinkArgInfo, hasInfo bool) (vars []string, ok bool) {
+	names, known := sinkValueKeyword[sink.Call]
+	if !known || !hasInfo {
+		return nil, false
+	}
+	for _, kw := range names {
+		val, given := info.KeywordArgs[kw]
+		if !given {
+			continue
+		}
+		ok = true
+		if len(info.KeywordVars[kw]) == 0 && strings.Contains(val, "(") {
+			return nil, false
+		}
+		vars = append(vars, info.KeywordVars[kw]...)
+	}
+	return vars, ok
 }
 
 // handingOnCalls are the calls whose result carries their argument's text on:

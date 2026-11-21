@@ -189,7 +189,9 @@ find defects; held-out labels are scored only at milestone gates.
     score_nox.py rvb <results> repos.tsv out.json nox <repos> --split scripts/split.tsv --side dev --by-class
     score_nox.py rvb - repos.tsv out.json published:semgrep    # any tool RealVuln publishes
 
-Development baseline (nox at #1128): F3 10.3 overall (Python 14.7, JS/TS 10.3,
-Java 4.7). Recall by class: injection 24.4%, crypto/secrets/config 12.3%,
+Development baseline (nox at #1128): F3 9.0 overall (Python 14.7, JS/TS 10.3,
+Java 4.7). An earlier version of this line gave 10.3 overall, which is the
+JS/TS figure. After #1132, #1134 and the SSRF URL argument: 9.3 overall
+(Python 14.7, JS/TS 10.9, Java 4.9). Recall by class: injection 24.4%, crypto/secrets/config 12.3%,
 information exposure 0.5%, authentication/session, authorization, business
 logic and mass assignment 0.
