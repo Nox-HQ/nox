@@ -78,6 +78,7 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) (units []ta
 		})
 	}
 	attachHostAllowlists(units, hostAllowlistsFor(lang, content))
+	attachAllowlistSelects(units, allowlistSelects(content))
 	return units
 }
 
@@ -517,6 +518,13 @@ func (e *StructuralEngine) forwardPass(
 			if !weak {
 				delete(tainted, st.Assigns)
 			}
+		}
+
+		// An allowlist select assigns one of the code's own literals, whatever
+		// it read to choose it (see allowlist_select.go).
+		if v, ok := unit.AllowlistSelects[st.Line]; ok && v == st.Assigns {
+			clearTaint()
+			continue
 		}
 
 		// A source assignment taints the LHS afresh (a re-source overwrites prior
