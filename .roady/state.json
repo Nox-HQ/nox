@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 265,
+  "version": 267,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1239,8 +1239,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-sinks-by-class-from-the-dev-split-misses": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "#1142 (a266c41): +50 matched, dev F3 10.2 -\u003e 10.6"
+      ],
+      "started_at": "2026-11-21T20:26:23.777369+01:00",
+      "completed_at": "2026-11-21T20:26:23.802785+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-sql-sinks-the-catalog-did-not-name-prisma-raw": {
@@ -1276,5 +1282,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-11-21T17:58:06.882305+01:00"
+  "updated_at": "2026-11-21T20:26:23.802786+01:00"
 }
