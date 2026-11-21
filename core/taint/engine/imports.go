@@ -208,8 +208,25 @@ func javascriptAliases(content []byte) map[string]string {
 			addJSBinding(out, strings.TrimSpace(m[1]), m[2])
 		}
 	}
+	// A promisified function is the function: `const execAsync =
+	// util.promisify(exec)` runs exec, so it is exec's sink with exec's
+	// argument shape. Read after the imports so `exec` already resolves.
+	for _, m := range jsPromisify.FindAllStringSubmatch(string(content), -1) {
+		target := m[2]
+		if q, ok := out[target]; ok {
+			target = q
+		} else if head, rest, dotted := strings.Cut(target, "."); dotted {
+			if q, ok := out[head]; ok {
+				target = q + "." + rest
+			}
+		}
+		out[m[1]] = target
+	}
 	return out
 }
+
+// jsPromisify finds `NAME = util.promisify(FN)` and `NAME = promisify(FN)`.
+var jsPromisify = regexp.MustCompile(`(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:[A-Za-z_$][\w$]*\.)?promisify\(\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\)`)
 
 // addJSBinding records one import clause against its module.
 //

@@ -89,6 +89,10 @@ func pythonReceiverBindings(content []byte) map[string]string {
 var (
 	javaXPathDecl = regexp.MustCompile(`(?:^|[^\w.])(?:javax\s*\.\s*xml\s*\.\s*xpath\s*\.\s*)?XPath\s+([A-Za-z_]\w*)\s*=`)
 	javaLDAPDecl  = regexp.MustCompile(`(?:^|[^\w.])(?:javax\s*\.\s*naming\s*\.\s*(?:directory|ldap)\s*\.\s*)?(?:Initial)?(?:Dir|Ldap)Context\s+([A-Za-z_]\w*)\s*=`)
+	// A ProcessBuilder's program is set by its constructor or by command(...),
+	// and `command` alone names far too many methods to be a sink.
+	javaProcessBuilderDecl = regexp.MustCompile(`(?:^|[^\w.])(?:java\s*\.\s*lang\s*\.\s*)?ProcessBuilder\s+([A-Za-z_]\w*)\s*=`)
+	javaProcessBuilderVar  = regexp.MustCompile(`(?:^|[^\w.])(?:var|final\s+var)\s+([A-Za-z_]\w*)\s*=\s*new\s+(?:java\s*\.\s*lang\s*\.\s*)?ProcessBuilder\s*\(`)
 )
 
 // javaReceiverBindings maps each local declared as an XPath or an LDAP
@@ -100,6 +104,11 @@ func javaReceiverBindings(content []byte) map[string]string {
 	}
 	for _, m := range javaLDAPDecl.FindAllSubmatch(content, -1) {
 		out[string(m[1])] = "ldap_dircontext"
+	}
+	for _, re := range []*regexp.Regexp{javaProcessBuilderDecl, javaProcessBuilderVar} {
+		for _, m := range re.FindAllSubmatch(content, -1) {
+			out[string(m[1])] = "process_builder"
+		}
 	}
 	return out
 }

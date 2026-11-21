@@ -594,6 +594,37 @@
           "rule_id": "TAINT-011",
           "note": "synthetic chain: an untrusted key or value stored into the server-side session (session[k] = v, flask.session, request.session); see engine/trust_boundary_python.go. Opt-in: storing request data in a session is common and often deliberate.",
           "opt_in": true
+        },
+        {
+          "call": "fastapi.responses.RedirectResponse",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007"
+        },
+        {
+          "call": "starlette.responses.RedirectResponse",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007"
+        },
+        {
+          "call": "fastapi.responses.HTMLResponse",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
+        },
+        {
+          "call": "starlette.responses.HTMLResponse",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
+        },
+        {
+          "call": "wfile.write",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "http.server BaseHTTPRequestHandler: self.wfile.write(body) is the response body"
         }
       ],
       "sanitizers": [
@@ -1602,6 +1633,66 @@
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
           "note": "Express's chained form: res.status(code).send(body)"
+        },
+        {
+          "call": "needle.get",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "needle.post",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "needle.put",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "needle.patch",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "needle.delete",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "needle.head",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006"
+        },
+        {
+          "call": "NextResponse.redirect",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007"
+        },
+        {
+          "call": "reply.redirect",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007"
+        },
+        {
+          "call": "bypassSecurityTrustHtml",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
+        },
+        {
+          "call": "bypassSecurityTrustScript",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003"
         }
       ],
       "sanitizers": [
@@ -3834,6 +3925,85 @@
           "cwe": "CWE-601",
           "rule_id": "TAINT-007",
           "note": "HttpServletResponse.sendRedirect to a request-derived value"
+        },
+        {
+          "call": "Files.write",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Files.writeString",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Files.newOutputStream",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Files.newBufferedWriter",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Files.newBufferedReader",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Files.readAllLines",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Files.lines",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Files.copy",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "Files.delete",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "FileOutputStream",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "FileWriter",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "FileReader",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004"
+        },
+        {
+          "call": "process_builder.command",
+          "vuln_class": "command_injection",
+          "cwe": "CWE-78",
+          "rule_id": "TAINT-002",
+          "note": "ProcessBuilder.command(...) sets the program and arguments of a builder declared ProcessBuilder (see receivers.go); started by .start()"
         }
       ],
       "sanitizers": [
