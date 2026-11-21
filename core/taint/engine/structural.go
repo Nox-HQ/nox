@@ -1505,7 +1505,17 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		"db.Query", "db.QueryContext", "db.QueryRow", "db.QueryRowContext",
 		"db.Exec", "db.ExecContext",
 		"tx.Query", "tx.QueryContext", "tx.QueryRow", "tx.QueryRowContext",
-		"tx.Exec", "tx.ExecContext":
+		"tx.Exec", "tx.ExecContext",
+		// JavaScript drivers and ORMs that bind values after the SQL string:
+		// Prisma's unsafe raw queries (`$queryRawUnsafe(sql, ...values)`),
+		// TypeORM's `query(sql, parameters)` and pg-promise. (node-postgres is
+		// recognized by its constructor; a bare client.query is also Apollo's
+		// GraphQL client.)
+		"$queryRawUnsafe", "$executeRawUnsafe",
+		"dataSource.query", "AppDataSource.query", "manager.query",
+		"entityManager.query", "queryRunner.query",
+		"db.one", "db.many", "db.any", "db.none", "db.oneOrNone",
+		"db.manyOrNone", "db.result":
 		// A call with no arguments cannot receive SQL: `pstmt.executeQuery()`
 		// runs what was prepared, and a tainted statement object was judged
 		// where it was built (prepareStatement). Reading the receiver's taint
@@ -1524,7 +1534,11 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		}
 		return true
 	case "prepareStatement", "prepareCall", "addBatch", "executeUpdate",
-		"queryForObject", "queryForList", "queryForMap", "queryForRowSet", "batchUpdate":
+		"queryForObject", "queryForList", "queryForMap", "queryForRowSet", "batchUpdate",
+		// JPA's createNativeQuery(sql, resultClass) and JdbcTemplate.query(sql,
+		// mapper, args...): the SQL is the first argument and nothing after it
+		// is interpolated.
+		"createNativeQuery", "jdbcTemplate.query", "jdbc.query":
 		// JDBC and Spring JdbcTemplate: the SQL string is the first argument;
 		// everything after it is bind parameters or a row mapper, which is
 		// the safe parameterized form. A zero-argument executeUpdate() runs a

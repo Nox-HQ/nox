@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- TAINT-001 knows the SQL APIs the RealVuln benchmark labels and the catalog
+  did not name: Prisma `$queryRawUnsafe` and `$executeRawUnsafe`, Drizzle
+  `sql.raw`, TypeORM `DataSource`/`EntityManager`/`QueryRunner.query`,
+  pg-promise (`db.one`, `db.many`, `db.any`, `db.none`, ...), JPA
+  `createNativeQuery` (Java and Kotlin), R2DBC `DatabaseClient.sql`, Spring
+  `JdbcTemplate.query`, and Kotlin's Spring `queryForList`/`queryForObject`/
+  `queryForMap`. A value bound after the SQL string is the parameterized form
+  and is not reported.
+
 - TAINT-001 reports a SQL query built from a function's own parameter by
   string formatting -- `"... WHERE name = '" + name + "'"`, `.format(name)`,
   an f-string or template literal -- when no source in the file reaches it.

@@ -1236,6 +1236,103 @@
           "rule_id": "TAINT-001"
         },
         {
+          "call": "$queryRawUnsafe",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Prisma: the SQL string is arg 0; later arguments are bound"
+        },
+        {
+          "call": "$executeRawUnsafe",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Prisma: as $queryRawUnsafe"
+        },
+        {
+          "call": "sql.raw",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Drizzle: inserts its argument into the query unescaped"
+        },
+        {
+          "call": "dataSource.query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "TypeORM DataSource.query(sql, parameters)"
+        },
+        {
+          "call": "AppDataSource.query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "TypeORM: the conventional name of the application DataSource"
+        },
+        {
+          "call": "manager.query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "TypeORM EntityManager.query(sql, parameters)"
+        },
+        {
+          "call": "entityManager.query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "queryRunner.query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "db.one",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "pg-promise: the SQL string is arg 0; values are bound"
+        },
+        {
+          "call": "db.many",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "db.any",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "db.none",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "db.oneOrNone",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "db.manyOrNone",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "db.result",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
           "call": "res.write",
           "vuln_class": "xss",
           "cwe": "CWE-79",
@@ -3460,6 +3557,34 @@
           "note": "JPA/Hibernate Session.createQuery(hql) with a tainted string is HQL injection"
         },
         {
+          "call": "createNativeQuery",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "JPA EntityManager.createNativeQuery(sql[, resultClass]): the SQL string is arg 0"
+        },
+        {
+          "call": "databaseClient.sql",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "R2DBC DatabaseClient.sql(sql)"
+        },
+        {
+          "call": "jdbcTemplate.query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Spring JdbcTemplate.query(sql, ...): the SQL string is arg 0"
+        },
+        {
+          "call": "jdbc.query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Spring JdbcTemplate under its common field name"
+        },
+        {
           "call": "File",
           "vuln_class": "path_traversal",
           "cwe": "CWE-22",
@@ -5077,6 +5202,38 @@
           "cwe": "CWE-89",
           "rule_id": "TAINT-001",
           "note": "JPA/Hibernate/Exposed createQuery(hql) with a tainted string is HQL injection"
+        },
+        {
+          "call": "createNativeQuery",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "JPA EntityManager.createNativeQuery(sql[, resultClass]): the SQL string is arg 0"
+        },
+        {
+          "call": "queryForList",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001",
+          "note": "Spring JdbcTemplate: the SQL string is arg 0"
+        },
+        {
+          "call": "queryForObject",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "queryForMap",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
+        },
+        {
+          "call": "jdbcTemplate.query",
+          "vuln_class": "sql_injection",
+          "cwe": "CWE-89",
+          "rule_id": "TAINT-001"
         },
         {
           "call": "File",
