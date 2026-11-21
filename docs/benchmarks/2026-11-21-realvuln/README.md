@@ -167,3 +167,20 @@ python3 -I scripts/score_nox.py $B/rvb $B/rvb/scan-results $B/repos.tsv $B/semgr
 
 A full scan of the 203 repos takes several hours on one machine; `scan.sh`
 runs one repo at a time and waits while the 1-minute load is 25 or more.
+
+## Development and held-out split
+
+`scripts/split.tsv` is frozen (seed 20261121, `scripts/split.py`) and is never
+regenerated. It holds out 63 of 203 repositories (2,618 of 7,578 vulnerable
+labels, 34.5%), stratified by language group and authorship, and split by
+family: the same generated application written by several models, or a fork
+with its upstream, always lands on one side. Development labels may be read to
+find defects; held-out labels are scored only at milestone gates.
+
+    score_nox.py rvb <results> repos.tsv out.json nox <repos> --split scripts/split.tsv --side dev --by-class
+    score_nox.py rvb - repos.tsv out.json published:semgrep    # any tool RealVuln publishes
+
+Development baseline (nox at #1128): F3 10.3 overall (Python 14.7, JS/TS 10.3,
+Java 4.7). Recall by class: injection 24.4%, crypto/secrets/config 12.3%,
+information exposure 0.5%, authentication/session, authorization, business
+logic and mass assignment 0.
