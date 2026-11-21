@@ -131,17 +131,26 @@ causes, both reproduced on the built binary:
 | | TP | FP | F3 all | Python | JS/TS | Java |
 |---|---:|---:|---:|---:|---:|---:|
 | with #1127 | 560 | 9,242 | 7.6 | 12.4 | 8.7 | 4.0 |
-| plus parameter flows and the summary fix | 585 | 9,307 | 7.9 | 13.0 | 8.9 | 4.3 |
+| plus parameter flows and the summary fix | 585 | 9,290 | 7.9 | 13.0 | 8.9 | 4.3 |
 
 TAINT-001 gained 25 matched and 39 unmatched findings. Read one by one, the
 unmatched are string-built queries the benchmark does not label: AltoroJ's
 `DBUtil` (its own comment says "BAD"), Fineract and Mifos `jdbcTemplate` calls
-already carrying `// NOSONAR`, JPQL assembled by concatenation. The summary fix
-added 26 unmatched findings in other classes; the ones read are real flows
-reported at the call into the helper, where RealVuln labels the sink inside it
-(WebGoat's ProfileZipSlip: finding at line 61, labels at 72 and 79). Where an
-interprocedural finding is located is a separate decision: moving it changes
-every such fingerprint.
+already carrying `// NOSONAR`, JPQL assembled by concatenation.
+
+The summary fix first added 26 unmatched findings in other classes and 9 on the
+rule-diff corpus, none a clear true positive: the forward pass keeps a value
+bound through any call tainted, and summarized, that reported a database row
+written as JSON as the request text it was filtered by (chronos) and an argv
+list as a shell command (certbot). A summary now hands on only the parameter
+or a value built from it by copying and string operations; that cost no
+matched finding and left 9 in other classes. Of those, WebGoat's SQL injection
+lessons are real flows reported at the call into the helper, where RealVuln
+labels the sink inside it; where an interprocedural finding is located is a
+separate decision, as moving it changes every such fingerprint. Five are one
+SSRF defect that predates this: with `requests.post(url=url, data=body)` the
+URL is a keyword argument, the slot check falls back to every argument, and a
+value in the body reads as the URL.
 
 ## Reproduce
 

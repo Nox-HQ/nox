@@ -201,6 +201,8 @@ type taintInfo struct {
 	// sqlBuilt: the value was combined with SQL text by an assignment it
 	// passed through (taint.Statement.SQLVars). See taint.Flow.SQLBuilt.
 	sqlBuilt bool
+	// throughCall: see taint.Flow.ThroughCall.
+	throughCall bool
 }
 
 // passResult is the output of a forward pass: the flows found, the final taint
@@ -464,18 +466,19 @@ func (e *StructuralEngine) forwardPass(
 				}
 				emitted[fk] = struct{}{}
 				flows = append(flows, taint.Flow{
-					Source:     ti.src,
-					SourceLine: ti.srcLine,
-					SourceVar:  sourceVar,
-					Sink:       sink,
-					SinkLine:   st.Line,
-					SinkCall:   sink.Call,
-					FilePath:   unit.FilePath,
-					FuncName:   unit.FuncName,
-					Language:   unit.Language,
-					Via:        append([]string(nil), ti.via...),
-					SinkRole:   sinkRole,
-					SQLBuilt:   ti.sqlBuilt || slices.Contains(info.FirstArgSQLVars, v),
+					Source:      ti.src,
+					SourceLine:  ti.srcLine,
+					SourceVar:   sourceVar,
+					Sink:        sink,
+					SinkLine:    st.Line,
+					SinkCall:    sink.Call,
+					FilePath:    unit.FilePath,
+					FuncName:    unit.FuncName,
+					Language:    unit.Language,
+					Via:         append([]string(nil), ti.via...),
+					SinkRole:    sinkRole,
+					SQLBuilt:    ti.sqlBuilt || slices.Contains(info.FirstArgSQLVars, v),
+					ThroughCall: ti.throughCall,
 				})
 				break // one flow per sink call is enough
 			}
@@ -602,7 +605,7 @@ func (e *StructuralEngine) forwardPass(
 		}
 		checked.admit(cleared, st.Assigns, st.Line, e.partialClasses(lang, st.Calls))
 		setTaint(taintInfo{src: carried.src, srcLine: carried.srcLine, cleared: cleared, via: carried.via,
-			sqlBuilt: carried.sqlBuilt})
+			sqlBuilt: carried.sqlBuilt, throughCall: carried.throughCall || !handsOn(st.Calls)})
 	}
 
 	return passResult{flows: flows, suppressed: suppressed, state: tainted, returned: returned}
@@ -653,6 +656,10 @@ func (e *StructuralEngine) interprocSinkFlows(lang string, unit *taint.Unit, st 
 						FuncName:   unit.FuncName,
 						Language:   unit.Language,
 						Via:        via,
+						// The helper's summary holds only what it hands on;
+						// what the caller bound through a call is still the
+						// caller's to report.
+						ThroughCall: op.ti.throughCall,
 					})
 					break // one flow per (arg, helper) is enough
 				}
@@ -809,7 +816,7 @@ func cloneTaintInfo(ti taintInfo) taintInfo {
 	for k, v := range ti.cleared {
 		cleared[k] = v
 	}
-	return taintInfo{src: ti.src, srcLine: ti.srcLine, cleared: cleared, via: append([]string(nil), ti.via...), sqlBuilt: ti.sqlBuilt}
+	return taintInfo{src: ti.src, srcLine: ti.srcLine, cleared: cleared, via: append([]string(nil), ti.via...), sqlBuilt: ti.sqlBuilt, throughCall: ti.throughCall}
 }
 
 // sortedReads returns a deterministically ordered copy of a read/call slice so
@@ -1795,6 +1802,7 @@ func weakMerge(old, updated taintInfo) taintInfo {
 	// Either value may be the one that reaches the sink; the one built into
 	// SQL text is.
 	merged.sqlBuilt = old.sqlBuilt || updated.sqlBuilt
+	merged.throughCall = old.throughCall || updated.throughCall
 	return merged
 }
 
@@ -1853,4 +1861,34 @@ var sinkValueSlot = map[string]int{
 	// C# / Ruby
 	"HttpClient.GetAsync": 0, "GetAsync": 0, "WebClient.DownloadString": 0, "DownloadString": 0,
 	"HTTParty.get": 0, "Faraday.get": 0, "URI.open": 0,
+}
+
+// handingOnCalls are the calls whose result carries their argument's text on:
+// string formatting, joining and trimming, case changes, conversions to a
+// string, a builder's append. A value bound through anything else -- a query,
+// a serializer, a lookup, split() -- is a different value that may still
+// depend on the argument, which the forward pass keeps tainted and a summary
+// does not hand to a caller.
+var handingOnCalls = map[string]bool{
+	"format": true, "Format": true, "sprintf": true, "Sprintf": true, "formatted": true,
+	"join": true, "Join": true, "concat": true, "replace": true, "replaceAll": true,
+	"strip": true, "lstrip": true, "rstrip": true, "trim": true, "trimStart": true, "trimEnd": true,
+	"TrimSpace": true, "lower": true, "upper": true, "toLowerCase": true, "toUpperCase": true,
+	"ToLower": true, "ToUpper": true, "toString": true, "ToString": true, "valueOf": true,
+	"str": true, "String": true, "append": true, "encode": true, "decode": true,
+}
+
+// handsOn reports a statement whose every call hands its argument on (see
+// handingOnCalls); a statement with no call does.
+func handsOn(calls []string) bool {
+	for _, c := range calls {
+		name := c
+		if i := strings.LastIndexByte(c, '.'); i >= 0 {
+			name = c[i+1:]
+		}
+		if !handingOnCalls[name] {
+			return false
+		}
+	}
+	return true
 }

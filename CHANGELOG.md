@@ -27,7 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now summarized, so a caller's source reaches it: `q = "..." % name;
   cursor.execute(q)` and `full = "ls " + cmd; os.system(full)` were reported
   only when the argument was passed to the sink unchanged. Every taint class
-  was affected.
+  was affected. A binding through a call that does not hand its argument on
+  -- a query, a serializer, `split()` -- is not summarized: inside a function
+  such a value stays tainted, and handing that to callers reported a database
+  row written as JSON as request text, and an argv list as a shell command.
 
 - SEC-161 no longer reports text in a script written without spaces as a
   possible secret. Random CJK mock data and Japanese or Chinese translation

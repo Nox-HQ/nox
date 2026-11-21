@@ -284,7 +284,19 @@ func (e *StructuralEngine) summarize(lang string, u *taint.Unit, summaries map[s
 			// left every helper that binds its argument first -- `q = "..." %
 			// name; c.execute(q)`, `full = "ls " + cmd; os.system(full)` --
 			// without a summary, and the caller's source reached nothing.
+			//
+			// A binding through a call that does not hand its argument on
+			// (`rows = repo.list(filter)`, `parts = cmd.split()`) is not
+			// summarized: the forward pass keeps such a value tainted, which
+			// is conservative inside one function, and handing that to every
+			// caller reported a database row written as JSON as the request
+			// text it was filtered by (chronos), and an argv list as a shell
+			// string (certbot). Only the parameter itself, or a value built
+			// from it by copying and string operations, is the parameter.
 			if f.Source.Kind != SourceParameter || f.Source.Call != u.FuncName+":"+param {
+				continue
+			}
+			if f.SourceVar != param && f.ThroughCall {
 				continue
 			}
 			sum.sinksArg[idx] = append(sum.sinksArg[idx], argSink{sink: f.Sink, via: f.Via})

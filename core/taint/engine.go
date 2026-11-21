@@ -204,6 +204,12 @@ type Flow struct {
 	// function parameter, which no source in the file establishes as
 	// untrusted, is required to show before it is reported.
 	SQLBuilt bool
+	// ThroughCall records that the value reached the sink through the result
+	// of a call the engine does not model as handing its argument on -- a
+	// query (`rows = repo.list(filter)`), a serializer, `split()` -- and
+	// still carries the taint of what went in. Conservative within a function;
+	// a summary does not carry it to a caller (see summarize).
+	ThroughCall bool
 }
 
 // Suppression is a flow the engine REFUSED to report, and why.
