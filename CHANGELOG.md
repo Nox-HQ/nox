@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- SEC-161 no longer reports text in a script written without spaces as a
+  possible secret. Random CJK mock data and Japanese or Chinese translation
+  files scored far above the entropy threshold, because entropy counts
+  characters and those alphabets have thousands; on the RealVuln benchmark
+  that was 7,241 of SEC-161's 8,893 reports, none of them a labelled
+  vulnerability. A candidate carrying a non-ASCII character is no longer one;
+  an ASCII key beside a non-ASCII comment is still reported.
+
 ## [1.70.0] - 2026-11-20
 
 ### Added

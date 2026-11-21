@@ -607,6 +607,17 @@ func isLikelyNotSecret(s string) bool {
 		return true
 	}
 
+	// Text in a script written without spaces is prose the whitespace test
+	// above cannot see. Random CJK mock data scores far above any threshold,
+	// because entropy counts runes and those alphabets have thousands; it was
+	// 7,512 of SEC-161's 8,893 reports on the RealVuln benchmark. A generated
+	// credential is printable ASCII in every encoding a token comes in, so a
+	// candidate carrying any other character is not one. The candidate is the
+	// test, not the line: an ASCII key beside a Japanese comment still counts.
+	if !isASCII(s) {
+		return true
+	}
+
 	// URLs starting with http:// or https://.
 	lower := strings.ToLower(s)
 	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") {
