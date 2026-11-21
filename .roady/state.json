@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 261,
+  "version": 263,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1249,8 +1249,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-ssrf": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "#1138 (d93e4ac): url= and axios config url are the URL; TAINT-006 -5 unmatched, all read"
+      ],
+      "started_at": "2026-11-21T17:03:11.802069+01:00",
+      "completed_at": "2026-11-21T17:03:11.850986+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-tree-sitter-webassembly-build": {
@@ -1264,5 +1270,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-11-21T15:57:14.734419+01:00"
+  "updated_at": "2026-11-21T17:03:11.850987+01:00"
 }
