@@ -200,3 +200,28 @@ Files and java.io writers, promisified exec, ProcessBuilder.command): 10.6
 (Python 18.1, JS/TS 12.4, Java 4.9). Recall by class: injection 24.4%, crypto/secrets/config 12.3%,
 information exposure 0.5%, authentication/session, authorization, business
 logic and mass assignment 0.
+
+## Measured and rejected: dropping through-call flows
+
+Most of the unmatched findings the framework sources added (#1140) are a
+value that reached the sink only through a call that does not hand its
+argument on: `html = this.reports.renderTicketSummary(user, id)`. A throwaway
+variant that dropped every such flow (Flow.ThroughCall), scanned over all 203
+repositories against #1140:
+
+| rule | unmatched removed | matched lost |
+|---|---:|---:|
+| TAINT-004 path | 161 | 11 |
+| TAINT-003 XSS | 136 | 4 |
+| TAINT-007 redirect | 117 | 5 |
+| TAINT-001 SQL | 43 | 9 |
+| TAINT-005 | 3 | 28 |
+| TAINT-002 command | 4 | 10 |
+| all | 484 | 72 |
+
+Development split F3 fell from 10.2 to 9.0. Kept only for XSS, path,
+redirect and SSRF it is still estimated lower (about 9.9). F3 weights recall
+9x: at the current precision (0.085) and recall (0.10), one matched finding is
+worth about nineteen unmatched ones. A precision change pays here only when it
+loses essentially no matched finding, so through-call noise needs a narrower
+signal than the flag.
