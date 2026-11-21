@@ -750,6 +750,10 @@ func isCharacterSetDefinition(s string) bool {
 // Subresource Integrity hash, e.g. sha384-<base64>.
 var sriPrefixes = []string{"sha256-", "sha384-", "sha512-"}
 
+// sriWindow is how far before a candidate isSRIIntegrityHash needs to look: the
+// longest prefix and the one character that must not continue a word.
+const sriWindow = len("sha512-") + 1
+
 // isSRIIntegrityHash reports whether the candidate string beginning at the
 // given 1-based column in line is the base64 body of a Subresource Integrity
 // (SRI) hash — i.e. immediately preceded by an SRI algorithm prefix such as
@@ -763,14 +767,22 @@ func isSRIIntegrityHash(line string, col int) bool {
 	if start < 0 || start > len(line) {
 		return false
 	}
-	prefixRegion := strings.ToLower(line[:start])
+	// Only the bytes a prefix and the character before it can occupy decide
+	// the answer. Lower-casing the whole line up to the candidate did the same
+	// work for every candidate on the line: quadratic, and a scan of one
+	// 12.7 MB line of mock data (RealVuln's jeecgboot) had not finished after
+	// 15 minutes.
+	from := max(start-sriWindow, 0)
+	prefixRegion := strings.ToLower(line[from:start])
 	for _, p := range sriPrefixes {
 		if !strings.HasSuffix(prefixRegion, p) {
 			continue
 		}
 		before := len(prefixRegion) - len(p)
 		if before == 0 {
-			return true
+			// The prefix starts the window; it is a whole token only if it
+			// also starts the line.
+			return from == 0 || !isAlphaNum(line[from-1])
 		}
 		if b := prefixRegion[before-1]; !isAlphaNum(b) {
 			return true
