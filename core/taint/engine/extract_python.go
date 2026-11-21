@@ -18,12 +18,19 @@ func extractPython(lines []logicalLine) []unitDraft {
 	single := pySingleAssigned(lines)
 	env := pyConstEnv{}
 	chains := map[int]*pyChain{}
+	// The decorators directly above the next def: a route decorator makes the
+	// function's parameters request values (see framework_params.go).
+	var decorators []string
 
 	for _, ll := range lines {
 		code := ll.code
 		trimmed := strings.TrimSpace(code)
 		if trimmed == "" {
 			continue
+		}
+		isDecorator := strings.HasPrefix(trimmed, "@")
+		if isDecorator {
+			decorators = append(decorators, strings.TrimSpace(ll.raw))
 		}
 		indent := pyIndent(ll.raw)
 		cur := scopes.dedent(indent)
@@ -33,11 +40,17 @@ func extractPython(lines []logicalLine) []unitDraft {
 		}
 		dead := blocks.dead()
 		if name, params, ok := pyDefHeader(trimmed); ok {
-			u := &unitDraft{funcName: name, params: params, headerLine: ll.line}
+			u := &unitDraft{funcName: name, params: params, headerLine: ll.line,
+				requestBound: pyRequestBound(trimmed, decorators)}
+			decorators = nil
+			seedRequestBoundParams(u)
 			units = append(units, u)
 			scopes.pushIndent(u, indent)
 			blocks.open(indent, false)
 			continue
+		}
+		if !isDecorator {
+			decorators = nil
 		}
 		if dead {
 			// Inside a branch that cannot run: nothing here is a statement,
