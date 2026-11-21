@@ -213,7 +213,13 @@ func (e *StructuralEngine) summarize(lang string, u *taint.Unit, summaries map[s
 
 		for fi := range res.flows {
 			f := &res.flows[fi]
-			if f.SourceVar != param {
+			// The flow is this parameter's when the seed is its source. Its
+			// SourceVar is the variable read AT the sink, which is the
+			// parameter only when it is passed in unchanged: matching on it
+			// left every helper that binds its argument first -- `q = "..." %
+			// name; c.execute(q)`, `full = "ls " + cmd; os.system(full)` --
+			// without a summary, and the caller's source reached nothing.
+			if f.Source.Kind != taint.SourceKind("parameter") || f.Source.Call != u.FuncName+":"+param {
 				continue
 			}
 			sum.sinksArg[idx] = append(sum.sinksArg[idx], argSink{sink: f.Sink, via: f.Via})

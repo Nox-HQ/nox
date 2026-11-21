@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A same-file helper that binds its argument to a local before the sink is
+  now summarized, so a caller's source reaches it: `q = "..." % name;
+  cursor.execute(q)` and `full = "ls " + cmd; os.system(full)` were reported
+  only when the argument was passed to the sink unchanged. Every taint class
+  was affected.
+
 - SEC-161 no longer reports text in a script written without spaces as a
   possible secret. Random CJK mock data and Japanese or Chinese translation
   files scored far above the entropy threshold, because entropy counts
