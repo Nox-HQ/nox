@@ -1,6 +1,6 @@
 # ADR 0001: Structural matching for SAST false-positive suppression
 
-- Status: Accepted
+- Status: Accepted; its rejection of Option C (WebAssembly grammars) superseded by [ADR 0006](0006-tree-sitter-grammars-via-wasm.md)
 - Date: 2026-07-05
 - Deciders: nox maintainers
 - Supersedes: —
