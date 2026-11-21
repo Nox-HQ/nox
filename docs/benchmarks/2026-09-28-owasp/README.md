@@ -98,6 +98,24 @@ servlet files:
 
 What remains: **trustbound** is opt-in in nox by design (see the Python section), and **xss** trails Semgrep, which reports most of the benchmark's writes at a 52% false-positive rate. On the injection categories nox scores higher with a lower detection rate than Semgrep, which reports 50–88% of the safe cases.
 
+## Re-measured 2026-11-21
+
+nox at `8cec485` (after #1134), same scorers, same scan roots. BenchmarkJava
+moved from `20cbf3d` to `10dfcc5`. The commits between them change no test
+case or expected result, and both suites have the same number of cases.
+
+| | v1.46.0 | 2026-11-21 |
+|---|---:|---:|
+| Python | 56.1 | **56.1** |
+| Java | 48.2 | **47.9** |
+
+Every category matches v1.46.0 except Java sqli, which moved from 68% / 26%
+(42) to 74% / 34% (40). The SQL work since then (parameter flows #1128, sinks
+#1132) found more of the vulnerable cases and flagged more of the safe ones.
+Per the deterministic-lead plan, this benchmark only reports and is not read
+case by case; the precision on real code is gated by RealVuln's development
+split.
+
 ## Limits
 
 - The benchmarks are synthetic. A score here is evidence about a rule's
