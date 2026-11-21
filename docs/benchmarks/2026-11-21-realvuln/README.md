@@ -125,8 +125,12 @@ causes, both reproduced on the built binary:
   cursor.execute(q)` was invisible to a caller's source. Every class.
 - **Sinks not in the catalog:** Prisma `$queryRawUnsafe` (9 labels), Drizzle
   `sql.raw` (6), TypeORM `DataSource.query` (6), pg-promise `db.one`/`db.many`
-  (5), JPA `createNativeQuery` (9), R2DBC `DatabaseClient.sql` (3). Not yet
-  added.
+  (5), JPA `createNativeQuery` (9), R2DBC `DatabaseClient.sql` (3). Added,
+  with Spring `JdbcTemplate.query` and Kotlin's Spring query methods: TAINT-001
+  +17 matched, +12 unmatched (JS/TS F3 8.9 -> 9.3, Java 4.3 -> 4.5). The
+  unmatched are mostly the generated apps' safe twins, which check the column
+  against an allowlist (`ALLOWED.has(x) ? x : "createdAt"`) and bind the
+  value: allowlist membership is not yet recognized as a sanitizer.
 
 | | TP | FP | F3 all | Python | JS/TS | Java |
 |---|---:|---:|---:|---:|---:|---:|
