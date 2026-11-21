@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 251,
+  "version": 261,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1094,8 +1094,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-add-owasp-benchmark-java-and-benchmarkpython": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "docs/benchmarks/2026-09-28-owasp (existing harness) re-measured in #1136: Java 47.9, Python 56.1"
+      ],
+      "started_at": "2026-11-21T15:57:14.613809+01:00",
+      "completed_at": "2026-11-21T15:57:14.635978+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-authentication-and-session-settings": {
@@ -1109,8 +1115,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-commit-the-realvuln-harness": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "#1133 (1a4961e): score_nox.py with --split/--side/--by-class and published:TOOL; reproduces published scores"
+      ],
+      "started_at": "2026-11-21T15:57:14.527381+01:00",
+      "completed_at": "2026-11-21T15:57:14.547078+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-cross-file-summaries": {
@@ -1129,8 +1141,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-freeze-the-70-30-split-seeded-stratified-commit": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "#1133 (1a4961e): split.tsv frozen, seed 20261121, by family, 63/203 held out"
+      ],
+      "started_at": "2026-11-21T15:57:14.570609+01:00",
+      "completed_at": "2026-11-21T15:57:14.58962+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-information-exposure": {
@@ -1144,8 +1162,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-java-deterministic-baseline": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "Decision: published scorecards (maintainer, 2026-11-21). Shipped v1.2 scorecards (FindSecBugs 39.10, SonarQube 33.34) plus the existing Semgrep p/default run (34.9); see #1136"
+      ],
+      "started_at": "2026-11-21T15:57:14.662904+01:00",
+      "completed_at": "2026-11-21T15:57:14.686474+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-java-front-end-same-gate-kotlin-follows": {
@@ -1214,8 +1238,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-sql-sinks-the-catalog-did-not-name-prisma-raw": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "#1132 (b93b9fd): TAINT-001 +17 matched, F3 7.9 -\u003e 8.1"
+      ],
+      "started_at": "2026-11-21T15:57:14.711891+01:00",
+      "completed_at": "2026-11-21T15:57:14.734418+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-ssrf": {
@@ -1234,5 +1264,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-10-03T11:19:47.665385+02:00"
+  "updated_at": "2026-11-21T15:57:14.734419+01:00"
 }
