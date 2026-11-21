@@ -62,11 +62,31 @@ func argInfo(lang langKind, c callChain) sinkArgDraft {
 		// must capture (subprocess.run(["ls", cmd]) is safe; subprocess.run(cmd)
 		// is not).
 		firstIsVector := idx == 0 && strings.HasPrefix(trimmed, "[")
+		// A JavaScript options object (`axios({ url, data })`) names its
+		// arguments: its top-level properties are recorded like keywords.
+		if idx == 0 && strings.HasPrefix(trimmed, "{") && lang == langJavaScript && idx < len(rawParts) {
+			for name, value := range objectProperties(rawParts[idx], p) {
+				if info.keywordArgs == nil {
+					info.keywordArgs = map[string]string{}
+					info.keywordVars = map[string][]string{}
+				}
+				info.keywordArgs[name] = value
+				info.keywordVars[name] = freeIdentifiers(lang, value)
+			}
+		}
 		slotVars := freeIdentifiers(lang, p)
 		// Record the positional slot's variables so the interprocedural pass can
 		// map argument position → callee parameter. Keyword args occupy no fixed
 		// position and are excluded, so positionalVars[i] is the i-th POSITIONAL
 		// argument's variables.
+		if name, value, ok := keywordParts(p); ok {
+			if info.keywordArgs == nil {
+				info.keywordArgs = map[string]string{}
+				info.keywordVars = map[string][]string{}
+			}
+			info.keywordArgs[name] = value
+			info.keywordVars[name] = freeIdentifiers(lang, value)
+		}
 		if !isKeywordArg(p) {
 			info.positionalVars = append(info.positionalVars, append([]string(nil), slotVars...))
 			// Record the slot's code text (literals already blanked) so the engine
@@ -166,6 +186,102 @@ func countPositional(rawParts, codeParts []string) int {
 		n++
 	}
 	return n
+}
+
+// objectProperties returns the top-level properties of an object literal as
+// name -> code-view value text. Names are read from the raw text (a quoted key
+// is blank in the code view), values from the code view at the same offsets.
+// A shorthand property (`{ url }`) is its own value. Nil when the two views do
+// not align.
+func objectProperties(raw, code string) map[string]string {
+	raw, code = strings.TrimSpace(raw), strings.TrimSpace(code)
+	if len(raw) != len(code) || len(raw) < 2 || raw[0] != '{' || raw[len(raw)-1] != '}' {
+		return nil
+	}
+	out := map[string]string{}
+	depth, start := 0, 1
+	flush := func(end int) {
+		r, c := raw[start:end], code[start:end]
+		if colon := objectKeyColon(c); colon >= 0 {
+			name := strings.Trim(strings.TrimSpace(r[:colon]), `"'`)
+			if isIdentifier(name) {
+				out[name] = c[colon+1:]
+			}
+		} else if name := strings.TrimSpace(c); isIdentifier(name) {
+			out[name] = name
+		}
+	}
+	for i := 1; i < len(code)-1; i++ {
+		switch code[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case ',':
+			if depth == 0 {
+				flush(i)
+				start = i + 1
+			}
+		}
+	}
+	flush(len(code) - 1)
+	return out
+}
+
+// objectKeyColon is the index of the first colon outside brackets, or -1: the
+// end of an object property's key. Unlike Rust's topLevelColon, < and > are
+// not brackets here, since a JavaScript value may compare.
+func objectKeyColon(s string) int {
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case ':':
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// keywordParts splits a keyword argument `name=value` into its name and value,
+// ok false for a positional argument or a name that is not an identifier.
+func keywordParts(p string) (name, value string, ok bool) {
+	if !isKeywordArg(p) {
+		return "", "", false
+	}
+	depth := 0
+	for i := 0; i < len(p); i++ {
+		switch p[i] {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		case '=':
+			if depth != 0 {
+				continue
+			}
+			name = strings.TrimSpace(p[:i])
+			if name == "" || !isIdentifier(name) {
+				return "", "", false
+			}
+			return name, p[i+1:], true
+		}
+	}
+	return "", "", false
+}
+
+func isIdentifier(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if !isIdentByte(s[i]) || (i == 0 && s[i] >= '0' && s[i] <= '9') {
+			return false
+		}
+	}
+	return true
 }
 
 // isKeywordArg reports whether an argument is a keyword/named argument

@@ -99,6 +99,11 @@ type sinkArgDraft struct {
 	// SOURCE used directly as a sink argument (sink(source())), which binds no
 	// variable and is otherwise invisible to variable propagation.
 	positionalArgs []string
+	// keywordArgs maps a keyword argument's name to the code-view text of its
+	// value (`url="…"` -> blanks), and keywordVars to the variables in it. See
+	// taint.SinkArgInfo.KeywordVars.
+	keywordArgs map[string]string
+	keywordVars map[string][]string
 	// promptRoles maps a variable appearing inside a chat/LLM prompt argument to the
 	// chat role of the message it lands in (see taint.SinkArgInfo.PromptRoles). Only
 	// populated for Python chat-message-shaped calls; nil otherwise.

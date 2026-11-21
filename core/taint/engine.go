@@ -110,6 +110,13 @@ type SinkArgInfo struct {
 	// variable and so is invisible to variable-based propagation. Keyword arguments
 	// are excluded. Best-effort; empty when unobserved.
 	PositionalArgs []string
+	// KeywordVars maps each keyword argument's name to the variables in its
+	// value, and KeywordArgs to the value's code-view text (literals blank):
+	// `requests.post(url=target, json=body)` gives url -> [target]. It lets a
+	// sink whose value slot can be passed by name (`url=`) be judged on that
+	// argument alone. Nil when the call has no keyword arguments.
+	KeywordVars map[string][]string
+	KeywordArgs map[string]string
 	// PromptRoles maps a variable that appears inside a chat/LLM prompt argument to
 	// the chat role of the message it lands in ("system", "developer", "user", …).
 	// It is populated only for chat-message-shaped LLM calls (an OpenAI/Anthropic
