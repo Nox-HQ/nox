@@ -64,6 +64,8 @@ type stmtDraft struct {
 	// it for a sanitizer WRAPPING the source, so `n = int(source())` binds n
 	// with command/sql injection cleared instead of tainting it afresh.
 	expr string
+	// sqlVars: see taint.Statement.SQLVars.
+	sqlVars []string
 	// returns are the variable names returned by a `return x` / `return a, b`
 	// statement. Empty for non-return statements. The interprocedural summary
 	// pass uses it to decide whether a parameter reaches the function's return.
@@ -80,6 +82,8 @@ type sinkArgDraft struct {
 	argCount        int
 	shellTrue       bool
 	firstArgTainted bool
+	// firstArgSQLVars: see taint.SinkArgInfo.FirstArgSQLVars.
+	firstArgSQLVars []string
 	// shellProgram records that the PROGRAM being executed is itself a shell —
 	// `subprocess.run(["sh", "-c", cmd])`, `spawn("bash", ["-c", cmd])`. The
 	// arg-vector exemption rests on the premise that no shell interprets the
