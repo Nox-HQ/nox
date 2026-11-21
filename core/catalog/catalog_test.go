@@ -138,8 +138,9 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// pull request workflow can write), decided across workflows.
 	// 1510 -> 1513 adds APPCFG-001..003 (debug mode, CORS from any origin, a
 	// JWT read without its signature verified).
-	if got := len(cat); got != 1513 {
-		t.Errorf("Catalog() returned %d rules, want 1513", got)
+	// 1513 -> 1515 adds APPCFG-004/005 (cookie HttpOnly and Secure).
+	if got := len(cat); got != 1515 {
+		t.Errorf("Catalog() returned %d rules, want 1515", got)
 	}
 }
 

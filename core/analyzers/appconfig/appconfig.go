@@ -46,14 +46,31 @@ type pattern struct {
 	// fileOK, when set, restricts the pattern to files it accepts (Django's
 	// DEBUG = True means something only in a settings module).
 	fileOK func(path string) bool
+	// near, when set, is a literal that must occur within nearWindow bytes
+	// of the match (`secure: false` is a cookie's only beside "cookie").
+	near string
 }
+
+const nearWindow = 300
 
 type rule struct {
 	id, cwe, message, description, remediation string
 	severity                                   findings.Severity
 	tags                                       []string
 	patterns                                   []pattern
+	// confidence defaults to high: the setting is written as a literal.
+	confidence findings.Confidence
 }
+
+func (r rule) conf() findings.Confidence {
+	if r.confidence == "" {
+		return findings.ConfidenceHigh
+	}
+	return r.confidence
+}
+
+// allRules is every rule the analyzer reports: settings, then cookie flags.
+var allRules = append(append([]rule{}, builtin...), cookieRules...)
 
 var (
 	py   = []lexctx.Lang{lexctx.LangPython}
@@ -142,14 +159,13 @@ func NewAnalyzer() *Analyzer { return &Analyzer{} }
 // Rules returns the analyzer's rules for the catalog.
 func (a *Analyzer) Rules() *rules.RuleSet {
 	rs := rules.NewRuleSet()
-	for _, r := range builtin {
+	for _, r := range allRules {
 		rs.Add(&rules.Rule{
 			ID:          r.id,
 			Version:     "1.0",
 			Description: r.description,
 			Severity:    r.severity,
-			// High: the setting is written as a literal on the line reported.
-			Confidence:  findings.ConfidenceHigh,
+			Confidence:  r.conf(),
 			Tags:        r.tags,
 			Remediation: r.remediation,
 			References:  []string{"https://cwe.mitre.org/data/definitions/" + strings.TrimPrefix(r.cwe, "CWE-") + ".html"},
@@ -166,8 +182,12 @@ var langByExt = map[string]lexctx.Lang{
 	".ts": lexctx.LangJavaScript, ".tsx": lexctx.LangJavaScript, ".mts": lexctx.LangJavaScript, ".cts": lexctx.LangJavaScript,
 }
 
+// configExt are the configuration files read for cookie flags: Spring
+// properties and YAML, Tomcat's context.xml.
+var configExt = map[string]bool{".properties": true, ".yml": true, ".yaml": true, ".xml": true}
+
 // triggers is a cheap prefilter: a file that names none of these cannot match.
-var triggers = [][]byte{[]byte("debug"), []byte("DEBUG"), []byte("rigin"), []byte("CORS"), []byte("cors"), []byte("decode"), []byte("parse"), []byte("Unverified"), []byte("none")}
+var triggers = [][]byte{[]byte("debug"), []byte("DEBUG"), []byte("rigin"), []byte("CORS"), []byte("cors"), []byte("decode"), []byte("parse"), []byte("Unverified"), []byte("none"), []byte("ookie"), []byte("ession("), []byte("httpOnly"), []byte("httponly"), []byte("HttpOnly"), []byte("SESSION_COOKIE")}
 
 // ScanArtifacts reports the settings across the discovered source files.
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
@@ -176,15 +196,23 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if err := ctx.Err(); err != nil {
 			return fs, err
 		}
-		lang, ok := langByExt[strings.ToLower(filepath.Ext(art.Path))]
-		if !ok || source.IsTestPath(art.Path) {
+		if source.IsTestPath(art.Path) {
+			continue
+		}
+		ext := strings.ToLower(filepath.Ext(art.Path))
+		lang, ok := langByExt[ext]
+		if !ok && !configExt[ext] {
 			continue
 		}
 		content, err := os.ReadFile(art.AbsPath)
 		if err != nil {
 			continue
 		}
-		for _, f := range ScanFile(art.Path, lang, content) {
+		found := scanCookieConfig(art.Path, content)
+		if ok {
+			found = ScanFile(art.Path, lang, content)
+		}
+		for _, f := range found {
 			fs.Add(f)
 		}
 	}
@@ -201,7 +229,7 @@ func ScanFile(path string, lang lexctx.Lang, content []byte) []findings.Finding 
 	var masked []byte
 	var out []findings.Finding
 	seen := map[string]bool{}
-	for _, r := range builtin {
+	for _, r := range allRules {
 		for _, p := range r.patterns {
 			if !slices.Contains(p.langs, lang) || (p.fileOK != nil && !p.fileOK(path)) || !bytes.Contains(content, []byte(p.need)) {
 				continue
@@ -214,6 +242,9 @@ func ScanFile(path string, lang lexctx.Lang, content []byte) []findings.Finding 
 				if start < 0 || masked[start] != content[start] {
 					continue // in a comment or a string
 				}
+				if p.near != "" && !bytes.Contains(content[max(0, start-nearWindow):min(len(content), start+nearWindow)], []byte(p.near)) {
+					continue
+				}
 				line := lexctx.LineForOffset(content, start)
 				key := r.id + ":" + strconv.Itoa(line)
 				if seen[key] {
@@ -223,12 +254,22 @@ func ScanFile(path string, lang lexctx.Lang, content []byte) []findings.Finding 
 				out = append(out, findings.Finding{
 					RuleID:     r.id,
 					Severity:   r.severity,
-					Confidence: findings.ConfidenceHigh,
+					Confidence: r.conf(),
 					Message:    r.message,
 					Location:   findings.Location{FilePath: path, StartLine: line, EndLine: line},
 					Metadata:   map[string]string{"cwe": r.cwe, "language": lang.String()},
 				})
 			}
+		}
+	}
+	if masked == nil {
+		masked = lexctx.MaskNonCode(lang, content)
+	}
+	for _, f := range scanCookies(path, lang, content, masked) {
+		key := f.RuleID + ":" + strconv.Itoa(f.Location.StartLine)
+		if !seen[key] {
+			seen[key] = true
+			out = append(out, f)
 		}
 	}
 	return out

@@ -22,6 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   development use are skipped. RealVuln: +68 matched, +37 unmatched (most of
   them the same setting unlabelled at that line); development split F3
   10.6 -> 11.7, Java 4.9 -> 6.2.
+- Cookie flags (APPCFG-004 HttpOnly, CWE-1004; APPCFG-005 Secure, CWE-614).
+  A flag switched off in writing is reported on any cookie: `httpOnly:
+  false`, `httponly=False`, `setHttpOnly(false)`, `SESSION_COOKIE_SECURE =
+  False`, an express-session `cookie: { secure: false }`, Spring's
+  `server.servlet.session.cookie.secure: false`, Tomcat's `useHttpOnly="false"`.
+  A flag left out is reported only on a cookie that carries a session or a
+  credential, by its name or value (session, token, auth, JWT, sid, login,
+  remember-me, access, refresh), and on an express-session or cookie-session
+  middleware with no `cookie.secure`. A flag given as an expression
+  (`secure: isProd`), options passed by name, and a cookie being deleted (an
+  empty or null value) are not reported. RealVuln: +100 matched; development
+  split F3 11.7 -> 13.1 (JS/TS 13.1 -> 16.2), held-out 8.8 -> 9.9.
 
 - Sinks the RealVuln development split's missed labels named that the
   catalog did not: needle's verbs (SSRF), Fastify's `reply.redirect` and
