@@ -38,18 +38,88 @@ import (
 // litTok matches one string or numeric literal in raw source.
 var litTok = regexp.MustCompile(`'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|` + "`[^`$\\\\\\n]*`" + `|\b\d+(?:\.\d+)?\b`)
 
-// collectionHead finds `NAME = <opener>` where opener starts a collection
-// literal or a call that builds one from its arguments.
-var collectionHead = regexp.MustCompile(`(?m)(?:^|[\s;(,])([A-Za-z_$][\w$]*)\s*(?::\s*[^=\n;]+?)?\s*=\s*` +
-	`(new\s+(?:Set|Map)\s*(?:<[^>\n]*>)?\s*\(\s*|frozenset\s*\(\s*|set\s*\(\s*|tuple\s*\(\s*|Object\.freeze\s*\(\s*|` +
+// collectionOpener is what may follow `NAME =` to start a collection literal or
+// a call that builds one from its arguments, up to and including its bracket.
+const collectionOpener = `(new\s+(?:Set|Map)\s*(?:<[^>\n]*>)?\s*\(\s*|frozenset\s*\(\s*|set\s*\(\s*|tuple\s*\(\s*|Object\.freeze\s*\(\s*|` +
 	`(?:Set|List|Map|EnumSet)\.of\s*|Arrays\.asList\s*|Collections\.unmodifiable\w+\s*\(\s*(?:Set|List|Map)\.of\s*|` +
 	`(?:mutable|hash|linkedHash|sorted)?(?:[sS]etOf|[lL]istOf|[mM]apOf)\s*|ImmutableSet\.of\s*|ImmutableList\.of\s*|ImmutableMap\.of\s*)?` +
-	`([\[{(])`)
+	`([\[{(])`
 
-// emptyMapDecl finds `NAME = new HashMap<>()` and kin: a map that is literal
-// when every store into it is.
-var emptyMapDecl = regexp.MustCompile(`(?m)(?:^|[\s;(,])([A-Za-z_$][\w$]*)\s*(?::\s*[^=\n;]+?)?\s*=\s*` +
-	`(?:new\s+(?:Hash|LinkedHash|Tree|Concurrent|Enum)?(?:Map|Set)\s*(?:<[^>\n]*>)?\s*\(\s*\)|mutableMapOf\s*\(\s*\)|mutableSetOf\s*\(\s*\)|new\s+Map\s*\(\s*\)|new\s+Set\s*\(\s*\)|\{\s*\}|dict\s*\(\s*\)|set\s*\(\s*\))`)
+// emptyCollection is what may follow `NAME =` to bind an empty map or set: a
+// collection that is literal when every store into it is.
+const emptyCollection = `(?:new\s+(?:Hash|LinkedHash|Tree|Concurrent|Enum)?(?:Map|Set)\s*(?:<[^>\n]*>)?\s*\(\s*\)|mutableMapOf\s*\(\s*\)|mutableSetOf\s*\(\s*\)|new\s+Map\s*\(\s*\)|new\s+Set\s*\(\s*\)|\{\s*\}|dict\s*\(\s*\)|set\s*\(\s*\))`
+
+// After an occurrence of a collection's name: its binding to a collection
+// literal, its binding to an empty collection, any assignment to it, a store
+// call into it, and a subscript store. Anchored at the occurrence, so each is
+// matched against a few hundred bytes, not the file.
+var (
+	afterAssign  = `^\s*(?::\s*[^=\n;]+?)?\s*=\s*`
+	afterBind    = regexp.MustCompile(afterAssign + collectionOpener)
+	afterEmpty   = regexp.MustCompile(afterAssign + emptyCollection)
+	afterRebind  = regexp.MustCompile(`^\s*(?::\s*[^=\n;]+?)?\s*=[^=>]`)
+	afterStore   = regexp.MustCompile(`^\s*\.\s*(?:put|putIfAbsent|add|addAll|push|unshift|set|append|insert|update|extend|setdefault|computeIfAbsent|merge)\s*\(`)
+	afterSubSet  = regexp.MustCompile(`^\s*\[[^\]\n]*\]\s*=[^=]([^\n;]*)`)
+	occurrenceIn = 400
+)
+
+// occurrences returns the offsets just past each whole-identifier occurrence
+// of name that is not a member of something else (`x.name`).
+func occurrences(content, name string) []int {
+	var out []int
+	for from := 0; ; {
+		i := strings.Index(content[from:], name)
+		if i < 0 {
+			return out
+		}
+		i += from
+		end := i + len(name)
+		from = end
+		if i > 0 && (isIdentByte(content[i-1]) || content[i-1] == '$' || content[i-1] == '.') {
+			continue
+		}
+		if end < len(content) && (isIdentByte(content[end]) || content[end] == '$') {
+			continue
+		}
+		out = append(out, end)
+	}
+}
+
+// isLiteralCollection reports whether name is bound in content exactly once,
+// to a collection of literals only (or an empty one), and never rebound or
+// stored into with anything but literals.
+func isLiteralCollection(content, name string) bool {
+	bindings, assigns := 0, 0
+	literal := false
+	for _, at := range occurrences(content, name) {
+		window := content[at:min(len(content), at+occurrenceIn)]
+		switch {
+		case afterBind.MatchString(window):
+			bindings++
+			m := afterBind.FindStringSubmatchIndex(window)
+			open := at + m[4]
+			end := closeAt(content, open)
+			literal = end > 0 && literalBody(content[open+1:end-1])
+		case afterEmpty.MatchString(window):
+			bindings++
+			literal = true
+		case afterRebind.MatchString(window):
+			assigns++
+		case afterStore.MatchString(window):
+			m := afterStore.FindStringIndex(window)
+			open := at + m[1] - 1
+			end := closeAt(content, open)
+			if end < 0 || !literalBody(content[open+1:end-1]) {
+				return false
+			}
+		default:
+			if m := afterSubSet.FindStringSubmatch(window); len(m) > 1 && !literalBody(m[1]) {
+				return false
+			}
+		}
+	}
+	return bindings == 1 && assigns == 0 && literal
+}
 
 // literalBody reports whether the text between a collection's brackets holds
 // literals only: elements, map entries (`"a": "b"`, `"a" to "b"`, `"a", "b"`
@@ -105,59 +175,6 @@ func closeAt(s string, open int) int {
 	return -1
 }
 
-// literalCollections returns the names bound in content to a collection of
-// literals only, and never rebound or added to with anything but literals.
-func literalCollections(content string) map[string]bool {
-	bound := map[string]int{}
-	ok := map[string]bool{}
-	for _, m := range collectionHead.FindAllStringSubmatchIndex(content, -1) {
-		name := content[m[2]:m[3]]
-		open := m[6]
-		end := closeAt(content, open)
-		bound[name]++
-		ok[name] = end > 0 && literalBody(content[open+1:end-1])
-	}
-	for _, m := range emptyMapDecl.FindAllStringSubmatch(content, -1) {
-		bound[m[1]]++
-		ok[m[1]] = true
-	}
-	out := map[string]bool{}
-	for name, good := range ok {
-		if !good || bound[name] != 1 || rebound(content, name) || !literalStores(content, name) {
-			continue
-		}
-		out[name] = true
-	}
-	return out
-}
-
-// rebound reports a second assignment to name: `name = …` beyond its binding.
-func rebound(content, name string) bool {
-	re := regexp.MustCompile(`(?:^|[^\w$.])` + regexp.QuoteMeta(name) + `\s*=[^=>]`)
-	return len(re.FindAllStringIndex(content, -1)) > 1
-}
-
-// literalStores reports that every store into name (put/add/push/set/append/
-// insert/update/extend, or name[k] = v) stores literals only.
-func literalStores(content, name string) bool {
-	q := regexp.QuoteMeta(name)
-	call := regexp.MustCompile(`(?:^|[^\w$.])` + q + `\s*\.\s*(?:put|putIfAbsent|add|addAll|push|unshift|set|append|insert|update|extend|setdefault|computeIfAbsent|merge)\s*\(`)
-	for _, m := range call.FindAllStringIndex(content, -1) {
-		open := m[1] - 1
-		end := closeAt(content, open)
-		if end < 0 || !literalBody(content[open+1:end-1]) {
-			return false
-		}
-	}
-	sub := regexp.MustCompile(`(?:^|[^\w$.])` + q + `\s*\[[^\]\n]*\]\s*=[^=]([^\n;]*)`)
-	for _, m := range sub.FindAllStringSubmatch(content, -1) {
-		if !literalBody(m[1]) {
-			return false
-		}
-	}
-	return true
-}
-
 var (
 	selVal  = `([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)`
 	selColl = `([A-Za-z_$][\w$]*|(?:new\s+Set\s*\(\s*)?\[[^\]\n]*\]\s*\)?|(?:Set|List)\.of\s*\([^)\n]*\)|(?:set|list)Of\s*\([^)\n]*\)|[({][^)}\n]*[)}])`
@@ -181,29 +198,57 @@ var (
 )
 
 // allowlistSelects returns, per 1-based line, the variable an allowlist select
-// on that line assigns.
+// on that line assigns. It runs on every file, so it does work only where a
+// select can be: a line that might hold one (mayHoldSelect), and a collection
+// a select actually names.
 func allowlistSelects(content []byte) map[int]string {
 	text := string(content)
-	colls := literalCollections(text)
+	checked := map[string]bool{}
 	known := func(c string) bool {
 		c = strings.TrimSpace(c)
-		if colls[c] {
-			return true
-		}
 		if i := strings.IndexAny(c, "[{("); i >= 0 {
-			if end := closeAt(c, i); end > 0 {
-				return literalBody(c[i+1 : end-1])
-			}
+			end := closeAt(c, i)
+			return end > 0 && literalBody(c[i+1:end-1])
 		}
-		return false
+		ok, seen := checked[c]
+		if !seen {
+			ok = isLiteralCollection(text, c)
+			checked[c] = ok
+		}
+		return ok
 	}
-	out := map[int]string{}
+	var out map[int]string
 	for i, line := range strings.Split(text, "\n") {
+		if !mayHoldSelect(line) {
+			continue
+		}
 		if v, ok := selectOnLine(line, known); ok {
+			if out == nil {
+				out = map[int]string{}
+			}
 			out[i+1] = v
 		}
 	}
 	return out
+}
+
+// mayHoldSelect is a cheap filter for lines that could match a select shape:
+// an assignment with a ternary, a Python or Kotlin conditional expression, a
+// map get, or a trailing subscript.
+func mayHoldSelect(line string) bool {
+	if !strings.Contains(line, "=") {
+		return false
+	}
+	switch {
+	case strings.Contains(line, "?") && (strings.Contains(line, ":") || strings.Contains(line, "??")):
+		return true
+	case strings.Contains(line, " else ") && (strings.Contains(line, " if ") || strings.Contains(line, "if (")):
+		return true
+	case strings.Contains(line, ".get(") || strings.Contains(line, "getOrDefault(") || strings.Contains(line, "getOrElse("):
+		return true
+	}
+	t := strings.TrimRight(strings.TrimSpace(line), "; ")
+	return strings.HasSuffix(t, "]") && !strings.HasSuffix(t, "[]")
 }
 
 // selectShape is one select form: the capture holding the collection, and the
