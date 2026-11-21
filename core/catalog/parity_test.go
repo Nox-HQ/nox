@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nox-hq/nox/core/analyzers/appconfig"
+
 	"github.com/nox-hq/nox/core/analyzers/agentflow"
 	"github.com/nox-hq/nox/core/analyzers/ai"
 	"github.com/nox-hq/nox/core/analyzers/authz"
@@ -59,6 +61,7 @@ func analyzerRuleSets(t *testing.T) map[string]*rules.RuleSet {
 		"variants":   variants.NewAnalyzer().Rules(),
 		"provenance": provenance.NewAnalyzer().Rules(),
 		"authz":      authz.NewAnalyzer().Rules(),
+		"appconfig":  appconfig.NewAnalyzer().Rules(),
 		// Publish rules, but are absent from Catalog() — see
 		// TestEveryShippedRuleReachesTheCatalog.
 		"agentflow":  agentflow.NewAnalyzer().Rules(),

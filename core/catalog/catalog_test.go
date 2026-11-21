@@ -136,8 +136,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// restores).
 	// 1509 -> 1510 adds IAC-507 (a release workflow restores a cache that a
 	// pull request workflow can write), decided across workflows.
-	if got := len(cat); got != 1510 {
-		t.Errorf("Catalog() returned %d rules, want 1510", got)
+	// 1510 -> 1513 adds APPCFG-001..003 (debug mode, CORS from any origin, a
+	// JWT read without its signature verified).
+	if got := len(cat); got != 1513 {
+		t.Errorf("Catalog() returned %d rules, want 1513", got)
 	}
 }
 

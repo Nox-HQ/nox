@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- An application-configuration analyzer reports security settings written
+  into the source: web framework debug mode on (APPCFG-001: Flask
+  `app.run(debug=True)`, `app.debug = True`, the DEBUG config key, Django
+  settings `DEBUG = True`, `FastAPI(debug=True)`), CORS opened to every origin
+  (APPCFG-002: `"*"` origins and headers in Spring, Express, Flask-CORS,
+  FastAPI and django-cors-headers, an argument-less `cors()`/`CORS(app)`), and
+  a JSON Web Token read without its signature checked (APPCFG-003: PyJWT with
+  verification off, auth0 `JWT.decode`, jjwt `parse()`, jsonwebtoken
+  `decode()`, golang-jwt `ParseUnverified`, the none algorithm). Matches in
+  comments and strings, test paths and Django settings named for local or
+  development use are skipped. RealVuln: +68 matched, +37 unmatched (most of
+  them the same setting unlabelled at that line); development split F3
+  10.6 -> 11.7, Java 4.9 -> 6.2.
+
 - Sinks the RealVuln development split's missed labels named that the
   catalog did not: needle's verbs (SSRF), Fastify's `reply.redirect` and
   `NextResponse.redirect` (open redirect), Angular's

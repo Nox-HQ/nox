@@ -52,6 +52,7 @@ var analyzerScope = map[string]struct {
 	"variants":   {ScopeCode, []string{"VARIANT-*"}},
 	"weakcrypto": {ScopeCode, []string{"CRYPTO-*"}},
 	"hardening":  {ScopeCode, []string{"HARDEN-*"}},
+	"appconfig":  {ScopeCode, []string{"APPCFG-*"}},
 	"memsafe":    {ScopeCode, []string{"MEMSAFE-*"}},
 	"deps":       {ScopeDeps, []string{"VULN-*", "CONT-*", "LIC-*"}},
 	"iac":        {ScopeIaC, []string{"IAC-*"}},

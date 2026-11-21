@@ -512,6 +512,7 @@ var needsByFamily = map[string]string{
 	"ai-prompt-injection":  "What this input may do once it reaches the model.",
 	"weak-crypto":          "Which algorithm or key size your stored data and peers can move to; changing it can make existing data unreadable.",
 	"transport-security":   "Which protocol versions and certificates your clients support.",
+	"app-config":           "Which origins, keys and settings the deployment actually uses, which the source writes down only as a literal.",
 	"file-permissions":     "Which account should own and access this file.",
 	"memory-safety":        "The size or bound that is right for this buffer, which the code does not state.",
 	"agentic-dataflow":     "Which data this agent step may receive from, and pass to, the next one, and who vouches for it.",
