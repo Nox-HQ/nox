@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 250,
+  "version": 251,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1091,6 +1091,146 @@
       ],
       "started_at": "2026-10-01T11:18:08.884932+02:00",
       "completed_at": "2026-10-01T11:18:13.542332+02:00",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-add-owasp-benchmark-java-and-benchmarkpython": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-authentication-and-session-settings": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-binary-size-and-parse-time-budget-measured-and": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-commit-the-realvuln-harness": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-cross-file-summaries": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-crypto-and-config-recall": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-framework-request-sources": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-freeze-the-70-30-split-seeded-stratified-commit": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-information-exposure": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-interprocedural-finding-location": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-java-deterministic-baseline": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-java-front-end-same-gate-kotlin-follows": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-js-ts-front-end-same-gate": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-m1-gate": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-m2-gate": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-m3-gate": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-mass-assignment-where-the-framework-states-it": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-module-index": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-noise": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-parameter-sql-flows-reachable-from-a-route-are": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-python-front-end-producing-taint-units-from-the": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-remaining-languages-onto-tree-sitter-c-php-ruby": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-route-entry-points-as-sources-across-files": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-sinks-by-class-from-the-dev-split-misses": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-sql-sinks-the-catalog-did-not-name-prisma-raw": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-ssrf": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-tree-sitter-webassembly-build": {
+      "status": "pending",
+      "path": "",
+      "elapsed_minutes": 0
+    },
+    "task-most-accurate-deterministic-scanner-wazero-host-in-core": {
+      "status": "pending",
+      "path": "",
       "elapsed_minutes": 0
     }
   },
