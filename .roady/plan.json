@@ -1219,9 +1219,455 @@
       ],
       "feature_id": "git-history-scanning-for-secrets",
       "source": {}
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-commit-the-realvuln-harness",
+      "title": "Commit the RealVuln harness",
+      "description": "Commit the RealVuln harness: per-class scorer (score_nox.py --by-class), the parallel rescan script with a working timeout on macOS, and the published-run scorer for other tools",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 6
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-freeze-the-70-30-split-seeded-stratified-commit",
+      "title": "Freeze the 70/30 split (seeded, stratified), commit the repo lists, and make every score report…",
+      "description": "Freeze the 70/30 split (seeded, stratified), commit the repo lists, and make every score report dev and held-out separately",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-commit-the-realvuln-harness"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 7
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-add-owasp-benchmark-java-and-benchmarkpython",
+      "title": "Add OWASP Benchmark (Java) and BenchmarkPython",
+      "description": "Add OWASP Benchmark (Java) and BenchmarkPython: pinned clones, scan script, OWASP's scorer, a baseline score for nox",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-freeze-the-70-30-split-seeded-stratified-commit"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 8
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-java-deterministic-baseline",
+      "title": "Java deterministic baseline",
+      "description": "Java deterministic baseline: decide with the maintainer whether to run a third-party deterministic scanner for comparison only, or use published OWASP Benchmark scorecards",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-add-owasp-benchmark-java-and-benchmarkpython"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 9
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-sql-sinks-the-catalog-did-not-name-prisma-raw",
+      "title": "SQL sinks the catalog did not name (Prisma raw, Drizzle sql.raw, TypeORM query, pg-promise, JPA…",
+      "description": "SQL sinks the catalog did not name (Prisma raw, Drizzle sql.raw, TypeORM query, pg-promise, JPA createNativeQuery, R2DBC, JdbcTemplate.query) — branch feat/taint-sql-sinks",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-java-deterministic-baseline"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 13
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-ssrf",
+      "title": "SSRF",
+      "description": "SSRF: a keyword url= argument is the URL; a value in the body is not",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-sql-sinks-the-catalog-did-not-name-prisma-raw"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 14
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-framework-request-sources",
+      "title": "Framework request sources",
+      "description": "Framework request sources: NestJS @Body/@Query/@Param, Next.js route handlers and server actions, Remix loaders/actions, FastAPI parameters, Django class-based views, Express routers mounted from other files",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-ssrf"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 15
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-sinks-by-class-from-the-dev-split-misses",
+      "title": "Sinks by class from the dev-split misses",
+      "description": "Sinks by class from the dev-split misses: XSS (12% recall), SSRF (15%), path traversal (26%), command injection (24%), open redirect (29%)",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-framework-request-sources"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 16
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-crypto-and-config-recall",
+      "title": "Crypto and config recall",
+      "description": "Crypto and config recall: hard-coded credentials (37%), weak randomness, cookie flags, CORS, TLS verification off, debug mode, JWT verification off — from the dev-split misses",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-sinks-by-class-from-the-dev-split-misses"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 17
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-noise",
+      "title": "Noise",
+      "description": "Noise: DATA-001 in seed data, fixtures and migrations; vendored and committed dependency trees (node_modules, site-packages) treated as third-party; IaC-121–124 and IAC-225 sampled and narrowed per \"do not remove rules\"",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-crypto-and-config-recall"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 18
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-interprocedural-finding-location",
+      "title": "Interprocedural finding location",
+      "description": "Interprocedural finding location: report at the sink inside the helper with the call path as evidence — needs the maintainer's decision, as it changes every such fingerprint",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-noise"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 19
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-m1-gate",
+      "title": "M1 gate",
+      "description": "M1 gate: score dev and held-out, read the new unmatched findings, publish the result in the benchmark doc",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-interprocedural-finding-location"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 20
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-tree-sitter-webassembly-build",
+      "title": "Tree-sitter WebAssembly build",
+      "description": "Tree-sitter WebAssembly build: official runtime plus pinned Python, JavaScript, TypeScript, TSX and Java grammars, reproducible, SHA-pinned, flat tree export (ADR 0006)",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-m1-gate"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 24
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-wazero-host-in-core",
+      "title": "wazero host in core",
+      "description": "wazero host in core: bounded parse, trap and timeout recorded as a file limitation, fallback to the line recognizer",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-tree-sitter-webassembly-build"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 25
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-python-front-end-producing-taint-units-from-the",
+      "title": "Python front end producing taint.Units from the tree; A/B against the recognizer on dev,…",
+      "description": "Python front end producing taint.Units from the tree; A/B against the recognizer on dev, rule-diff corpus and precision suites; switch when no worse",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-wazero-host-in-core"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 26
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-js-ts-front-end-same-gate",
+      "title": "JS/TS front end, same gate",
+      "description": "",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-python-front-end-producing-taint-units-from-the"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 27
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-java-front-end-same-gate-kotlin-follows",
+      "title": "Java front end, same gate (Kotlin follows)",
+      "description": "",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-js-ts-front-end-same-gate"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 28
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-module-index",
+      "title": "Module index",
+      "description": "Module index: per-language import and symbol resolution (Python modules, ESM and CommonJS, Java packages and Spring injection)",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-java-front-end-same-gate-kotlin-follows"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 29
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-cross-file-summaries",
+      "title": "Cross-file summaries",
+      "description": "Cross-file summaries: function summaries keyed across the module, call resolution through the index, bounded fixpoint, deterministic order",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-module-index"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 30
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-route-entry-points-as-sources-across-files",
+      "title": "Route entry points as sources across files",
+      "description": "Route entry points as sources across files: the route inventory feeds the taint engine, so a handler's parameters are sources wherever the handler is defined",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-cross-file-summaries"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 31
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-parameter-sql-flows-reachable-from-a-route-are",
+      "title": "Parameter SQL flows reachable from a route are raised from low to medium confidence; unreachable…",
+      "description": "Parameter SQL flows reachable from a route are raised from low to medium confidence; unreachable ones stay low",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-route-entry-points-as-sources-across-files"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 32
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-binary-size-and-parse-time-budget-measured-and",
+      "title": "Binary size and parse-time budget measured and recorded per language",
+      "description": "",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-parameter-sql-flows-reachable-from-a-route-are"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 33
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-m2-gate",
+      "title": "M2 gate",
+      "description": "M2 gate: dev and held-out, OWASP Benchmark, rule-diff corpus, published",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-binary-size-and-parse-time-budget-measured-and"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 34
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-mass-assignment-where-the-framework-states-it",
+      "title": "Mass assignment where the framework states it",
+      "description": "Mass assignment where the framework states it: Django ModelForm fields='all', Spring entity binding, Mongoose create(req.body), Rails permit!, NestJS DTO without whitelist",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-m2-gate"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 38
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-authentication-and-session-settings",
+      "title": "Authentication and session settings",
+      "description": "Authentication and session settings: CSRF protection disabled, session cookie flags, login routes without a rate limit where the framework has a standard limiter",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-mass-assignment-where-the-framework-states-it"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 39
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-information-exposure",
+      "title": "Information exposure",
+      "description": "Information exposure: stack traces and exception messages written to responses, debug endpoints enabled in production configuration",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-authentication-and-session-settings"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 40
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-remaining-languages-onto-tree-sitter-c-php-ruby",
+      "title": "Remaining languages onto tree-sitter (C#, PHP, Ruby, Go via the same front end or kept on…",
+      "description": "Remaining languages onto tree-sitter (C#, PHP, Ruby, Go via the same front end or kept on go/ast, Kotlin, Scala, Swift, Rust, C/C++, and the rest), each behind the same A/B gate",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-information-exposure"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 41
+      }
+    },
+    {
+      "id": "task-most-accurate-deterministic-scanner-m3-gate",
+      "title": "M3 gate",
+      "description": "M3 gate: dev and held-out, OWASP Benchmark, published",
+      "priority": "medium",
+      "estimate": "",
+      "depends_on": [
+        "task-most-accurate-deterministic-scanner-remaining-languages-onto-tree-sitter-c-php-ruby"
+      ],
+      "feature_id": "most-accurate-deterministic-scanner",
+      "origin": "ai",
+      "source": {
+        "doc": "/private/tmp/claude-501/-Users-felixgeelhaar-Developer-klarlabs-oss-nox/589ea159-0600-4f52-a644-1ff72b81a106/scratchpad/plan-tasks.md",
+        "line": 42
+      }
     }
   ],
   "approval_status": "approved",
   "created_at": "2026-02-07T22:13:51.824599+01:00",
-  "updated_at": "2026-06-05T13:07:22.866086+02:00"
+  "updated_at": "2026-11-21T12:27:11.802143+01:00"
 }
