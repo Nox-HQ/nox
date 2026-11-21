@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 263,
+  "version": 265,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1136,8 +1136,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-framework-request-sources": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "#1140 (8200ffb): NestJS decorators, Python route params, Next.js server actions; dev F3 9.3 -\u003e 10.2"
+      ],
+      "started_at": "2026-11-21T17:58:06.757047+01:00",
+      "completed_at": "2026-11-21T17:58:06.882303+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-freeze-the-70-30-split-seeded-stratified-commit": {
@@ -1270,5 +1276,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-11-21T17:03:11.850987+01:00"
+  "updated_at": "2026-11-21T17:58:06.882305+01:00"
 }
