@@ -162,7 +162,13 @@ func extractUnitsAt(path string, lang lexctx.Lang, content []byte) []unitDraft {
 		// Java uses the lexctx line/statement recognizer (no CGo tree-sitter): it is
 		// brace-delimited and `;`-terminated like JS, so it shares the
 		// logicalLines/splitSemicolons segmentation. See extract_java.go.
-		return extractJava(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true), joinAlways)))
+		lines := logicalLines(content, regions, true)
+		if treeFrontEnd("java") {
+			if tl, ok := javaTreeLines(content, regions); ok {
+				lines = tl
+			}
+		}
+		return extractJava(splitSemicolons(joinChainContinuations(lines, joinAlways)))
 	case lexctx.LangRuby:
 		// Ruby uses the lexctx line/statement recognizer like Python. Its `{}` are
 		// block/hash delimiters (not statement bodies — those are `def...end`), so
@@ -427,6 +433,17 @@ func logicalLinesJoined(content []byte, regions []lexctx.Region, bracesAreBlocks
 			if k := len(codeSeg) - len(strings.TrimLeft(codeSeg, " \t")); joinAfter != nil && k <= len(rawSeg) &&
 				(strings.HasPrefix(codeSeg[k:], ".") || strings.HasPrefix(codeSeg[k:], "?.")) {
 				codeSeg, rawSeg = codeSeg[k:], rawSeg[k:]
+				// And the end of the line before: trailing blanks, or a comment
+				// blanked to spaces in the code view, would split the chain too.
+				// Cut by the count measured on the code view, from both views,
+				// so they stay byte-aligned (as joinChainContinuations does).
+				code, raw := codeBuf.String(), rawBuf.String()
+				if cut := len(code) - len(strings.TrimRight(code, " \t")); len(code) == len(raw) && cut > 0 {
+					codeBuf.Reset()
+					rawBuf.Reset()
+					codeBuf.WriteString(code[:len(code)-cut])
+					rawBuf.WriteString(raw[:len(raw)-cut])
+				}
 			} else {
 				codeBuf.WriteByte(' ')
 				rawBuf.WriteByte(' ')
