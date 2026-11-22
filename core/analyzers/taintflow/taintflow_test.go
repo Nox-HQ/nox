@@ -295,6 +295,23 @@ def b():
 		t.Errorf("flow_paths = %q (count %q), want both callers", m["flow_paths"], m["flow_path_count"])
 	}
 
+	// Two calls passing the same variable are two paths, not one.
+	art3 := writeArtifact(t, dir, "same.py", `def run(c):
+    os.system(c)
+
+def a():
+    v = request.args.get("x")
+    run(v)
+    run(v + "-again")
+`)
+	fs, err = NewAnalyzer().ScanArtifacts(context.Background(), []discovery.Artifact{art3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items := fs.Findings(); len(items) != 1 || items[0].Metadata["flow_path_count"] != "2" {
+		t.Fatalf("want one finding with both calls' paths, got %+v", items)
+	}
+
 	art2 := writeArtifact(t, dir, "own.py", `def run(c):
     os.system(request.args.get("z") + c)
 

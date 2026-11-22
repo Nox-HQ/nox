@@ -142,7 +142,10 @@ func (e *StructuralEngine) AnalyzeFileWithSuppressions(units []taint.Unit) ([]ta
 		suppressed = append(suppressed, res.suppressed...)
 		for j := range res.flows {
 			f := &res.flows[j]
-			k := flowKey{f.SinkLine, f.SinkCall, f.SourceLine, f.SourceVar, f.Sink.RuleID}
+			k := flowKey{f.SinkLine, f.SinkCall, f.SourceLine, f.SourceVar, f.Sink.RuleID, 0}
+			if len(f.Path) > 0 {
+				k.callLine = f.Path[0].Line
+			}
 			if _, dup := seen[k]; dup {
 				continue
 			}
@@ -289,6 +292,10 @@ type flowKey struct {
 	sourceLine int
 	sourceVar  string
 	ruleID     string
+	// callLine is an interprocedural flow's first call (Path[0]): reported
+	// at the helper's sink (ADR 0007), two calls passing the same variable
+	// share every other field, and each is a path the finding must keep.
+	callLine int
 }
 
 // computeSummaries derives a funcSummary for each named function, iterating to a

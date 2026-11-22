@@ -28,7 +28,8 @@
     "binding-required": "the vendor name must now BIND the value through an assignment; sitting adjacent to a generic token is not evidence that the token is that vendor's credential",
     "value-shape-required": "the value must now have the identifier's documented shape (case, digits, a boundary after it); a word or code expression assigned to the key is not the identifier",
     "duplicate-merged": "the vulnerability source reported one vulnerability under two identifiers (nox_same_as, e.g. a Go module advisory and its GitHub advisory); they are now one finding that keeps every id in aliases",
-    "equivalent-accepted": "the absence rule's required property is now also satisfied by its standard equivalent, written the way that standard writes it"
+    "equivalent-accepted": "the absence rule's required property is now also satisfied by its standard equivalent, written the way that standard writes it",
+    "location-merged": "an interprocedural flow is reported once, at the sink inside the helper, instead of once per call site; the one finding keeps every caller's call path (flow_paths, flow_path_count)"
   },
   "entries": [
     {
@@ -36,6 +37,12 @@
       "classification": "applicability-narrowed",
       "reason": "DATA-001 no longer reports an e-mail address in seed data or a migration (core.IsSeedDataPath: seed.ts, seed_data.py, DemoDataSeeder.java, V2__seed.sql, seeds/ and migrations/ trees): those addresses are the demo users the file creates. warden 20 -> 14 is six lines of internal/infrastructure/git/seed_test.go configuring user.email in a test's scratch git repository; the file matches by name (it tests seeding a worktree, not a database), and the address is a throwaway commit identity, not personal data in code.",
       "pr": 1147
+    },
+    {
+      "rule": "TAINT-004",
+      "classification": "location-merged",
+      "reason": "ADR 0007: an interprocedural taint flow is reported at the sink inside the helper, not at each call site. vercel-ai-codemod 4 -> 3 is scripts/scaffold-codemod.ts: four calls to writeFileCreatingDirectory (lines 77, 78, 79, 83) passing argv-derived paths were findings at the call sites; they are now one finding at fs.writeFileSync on line 33 whose flow_paths lists all four calls (flow_path_count 4). Lines 79 and 83 still report path.join directly. Checked on the built binary at the pinned commit.",
+      "pr": 1154
     }
   ]
 }
