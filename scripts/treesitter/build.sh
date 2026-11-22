@@ -71,7 +71,9 @@ for m in $modules; do
   # X("name", function) per language, and the grammar sources each needs.
   langs="$(jq -r --arg m "$m" '.modules[] | select(.name == $m) | .languages | map("X(\"\(.name)\", \(.function))") | join(" ")' "$pins")"
   dirs="$(jq -r --arg m "$m" '.modules[] | select(.name == $m) | .languages[].dir' "$pins")"
-  docker run --rm --platform "$platform" --network none --user 10001 \
+  # As the invoking user, so the mounted output is writable on a Linux host
+  # (Docker Desktop maps ownership; a Linux runner does not).
+  docker run --rm --platform "$platform" --network none --user "$(id -u):$(id -g)" \
     -v "$src:/src:ro" -v "$build_out:/out" \
     -e LANGS="$langs" -e DIRS="$dirs" -e MODULE="$m" \
     "$image" bash -euo pipefail -c '
