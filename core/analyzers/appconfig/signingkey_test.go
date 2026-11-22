@@ -49,6 +49,7 @@ func TestSigningKeyInSource(t *testing.T) {
 		{"pydantic secret field", "config.py", pyl, "class Settings(BaseSettings):\n    SESSION_SECRET: str = \"dev-only-change-me-please\"\n", true},
 		{"pyjwt encode literal", "auth.py", pyl, "tok = jwt.encode({'sub': uid}, 'secret', algorithm='HS256')\n", true},
 		{"pyjwt encode variable", "auth.py", pyl, "tok = jwt.encode({'sub': uid}, settings.KEY, algorithm='HS256')\n", false},
+		{"AWS secret access key", "c.py", pyl, "aws_secret_access_key = \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYzEXAMPLEKEY\"\n", false},
 		{"secret's id", "c.py", pyl, "SECRET_ID = 'arn:aws:secretsmanager:x'\n", false},
 
 		// Java.
