@@ -205,6 +205,61 @@ Java 6.9); held-out 8.8 -> 9.9. With hard-coded signing keys: 15.1 (Python 22.8,
 information exposure 0.5%, authentication/session, authorization, business
 logic and mass assignment 0.
 
+## M1 gate, 2026-11-22
+
+nox at `2eeb5af` (#1147), the same offline default configuration, every repository
+rescanned with a build of that commit. The plan's M1 milestone ("catalog and noise,
+current architecture") closes here. Held-out labels were not read between #1128 and
+this gate; they were scored at #1128's results only now, for the comparison.
+
+| | dev F3 | held-out F3 | all 203 F3 |
+|---|---:|---:|---:|
+| nox at #1128 | 9.0 | 5.8 | — |
+| **nox at #1147** | **15.4** | **11.5** | **14.1** |
+
+| nox at #1147 | precision | recall | F3 |
+|---|---:|---:|---:|
+| dev, Python | 0.296 | 0.225 | 23.1 |
+| dev, JS/TS | 0.205 | 0.212 | 21.1 |
+| dev, Java | 0.052 | 0.072 | 6.9 |
+| held-out, Python | 0.374 | 0.211 | 22.1 |
+| held-out, JS/TS | 0.083 | 0.120 | 11.5 |
+| held-out, Java | 0.027 | 0.065 | 5.7 |
+
+Against RealVuln's published Semgrep runs (`--config auto`), on the repositories
+Semgrep was run on (Python and JS/TS; it was not run on Java), same matcher, same
+split:
+
+| Python + JS/TS | nox at #1128 | nox at #1147 | Semgrep |
+|---|---:|---:|---:|
+| dev (97 repos) | 12.3 | **22.0** | 10.7 |
+| held-out (43 repos) | 7.6 | **15.9** | 8.7 |
+
+The held-out gain (7.6 to 15.9) is about the same size as the development gain (12.3
+to 22.0), so the changes generalise rather than fit the development labels. Held-out
+JS/TS is the weakest cell (11.5 against 21.1 on dev): its unmatched findings are the
+next place to look, at the M2 gate.
+
+Recall by vulnerability class, dev / held-out: injection 30.7% / 22.4%,
+crypto/secrets/config 31.2% / 32.0%, authentication/session 4.2% / 2.6%, information
+exposure 3.0% / 0.4%; authorization, business logic and mass assignment 0 on both.
+The zeros are the M3 classes; a deterministic scanner reports them only where the
+framework states the rule.
+
+What moved it, each measured on all 203 repositories and read before it merged:
+SQL sinks and the literal-allowlist select (#1132, #1134), the SSRF URL argument
+(#1138), framework request sources (#1140), sinks by class (#1142), the
+application-configuration analyzer (#1144–#1146: debug mode, CORS from any origin,
+unverified JWT, cookie flags, hard-coded signing keys), and dropping code-pattern
+findings in committed dependency trees and e-mail addresses in seed data (#1147).
+Decided at this gate: reporting a flow at the sink inside a helper instead of at its
+call site moves to M2, with cross-file summaries, so every such fingerprint changes
+once. On the current engine it could recover at most 8 development labels.
+
+Not changed, deliberately: the Dockerfile hygiene rules IAC-121..124 report 860
+unmatched findings and match no label. RealVuln does not label that class; that is
+not evidence against the rules.
+
 ## Measured and rejected: dropping through-call flows
 
 Most of the unmatched findings the framework sources added (#1140) are a
