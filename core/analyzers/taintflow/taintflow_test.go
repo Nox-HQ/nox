@@ -168,11 +168,17 @@ def handler():
 	if f.Metadata["via"] != "run" {
 		t.Errorf("via metadata = %q, want run", f.Metadata["via"])
 	}
-	// The finding is located at the call site (line 6, `run(cmd)`) — the
-	// actionable line in the caller where untrusted data is handed to the helper.
-	// The message and `via` metadata name the helper whose body holds the sink.
-	if f.Location.StartLine != 6 {
-		t.Errorf("sink line = %d, want 6 (the run(cmd) call site)", f.Location.StartLine)
+	// ADR 0007: the finding is at the sink (line 2, `os.system(c)` in run),
+	// where the fix goes and where a benchmark labels it. The call that
+	// handed the value in is the evidence, in the call path.
+	if f.Location.StartLine != 2 || f.Metadata["function"] != "run" {
+		t.Errorf("located at line %d in %q, want line 2 in run (the sink)", f.Location.StartLine, f.Metadata["function"])
+	}
+	if got := f.Metadata["flow_path"]; got != "handler (app.py:6) -> run (app.py:2)" {
+		t.Errorf("flow_path = %q", got)
+	}
+	if f.Metadata["source_line"] != "5" {
+		t.Errorf("source_line = %q, want 5", f.Metadata["source_line"])
 	}
 }
 
@@ -259,5 +265,65 @@ func TestAnalyzerRules(t *testing.T) {
 		if !seen {
 			t.Errorf("rule %s not registered", id)
 		}
+	}
+}
+
+// ADR 0007: two callers handing a source to one helper's sink are one finding,
+// at the sink; a source in the helper itself is the finding there.
+func TestAnalyzerInterproceduralOneFindingPerSink(t *testing.T) {
+	dir := t.TempDir()
+	art := writeArtifact(t, dir, "app.py", `def run(c):
+    os.system(c)
+
+def a():
+    run(request.args.get("x"))
+
+def b():
+    v = request.form["y"]
+    run(v)
+`)
+	fs, err := NewAnalyzer().ScanArtifacts(context.Background(), []discovery.Artifact{art})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items := fs.Findings(); len(items) != 1 || items[0].Location.StartLine != 2 {
+		t.Fatalf("want one finding at line 2, got %+v", items)
+	}
+	// Each caller is a separate injection point: one finding, every path.
+	m := fs.Findings()[0].Metadata
+	if m["flow_path_count"] != "2" || m["flow_paths"] != "a (app.py:5) -> run (app.py:2); b (app.py:9) -> run (app.py:2)" {
+		t.Errorf("flow_paths = %q (count %q), want both callers", m["flow_paths"], m["flow_path_count"])
+	}
+
+	// Two calls passing the same variable are two paths, not one.
+	art3 := writeArtifact(t, dir, "same.py", `def run(c):
+    os.system(c)
+
+def a():
+    v = request.args.get("x")
+    run(v)
+    run(v + "-again")
+`)
+	fs, err = NewAnalyzer().ScanArtifacts(context.Background(), []discovery.Artifact{art3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if items := fs.Findings(); len(items) != 1 || items[0].Metadata["flow_path_count"] != "2" {
+		t.Fatalf("want one finding with both calls' paths, got %+v", items)
+	}
+
+	art2 := writeArtifact(t, dir, "own.py", `def run(c):
+    os.system(request.args.get("z") + c)
+
+def a():
+    run(request.args.get("x"))
+`)
+	fs, err = NewAnalyzer().ScanArtifacts(context.Background(), []discovery.Artifact{art2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := fs.Findings()
+	if len(items) != 1 || items[0].Metadata["interprocedural"] == "true" {
+		t.Fatalf("want the helper's own flow alone, got %+v", items)
 	}
 }

@@ -133,6 +133,8 @@ func (b *SourceBuilder) Build(routes []Route) *Graph {
 		intoSymbol:     map[string][]string{},
 		intoDependency: map[string][]string{},
 		stmtOwner:      map[string]map[int]string{},
+		crossFile:      map[string]map[string]string{},
+		unitName:       map[string]string{},
 		analysis:       "source call graph (taint units)",
 		buildID:        "syntactic, every language the taint extractor reads",
 	}
@@ -172,6 +174,7 @@ func (b *SourceBuilder) Build(routes []Route) *Graph {
 			}
 			if u.FuncName != "" {
 				ix.add(f, u.FuncName, key)
+				g.unitName[key] = u.FuncName
 			}
 		}
 	}
@@ -374,6 +377,7 @@ func (g *Graph) resolveSourceCall(ix *sourceIndex, f *sourceFile, caller *Func, 
 		if len(ix.byFile[f.path][name]) == 0 {
 			if to, ok := one(ix.byLang[f.lang][name]); ok {
 				g.addEdge(caller, to)
+				g.recordCrossFile(f.path, call, to)
 				return
 			}
 		}
@@ -391,6 +395,7 @@ func (g *Graph) resolveSourceCall(ix *sourceIndex, f *sourceFile, caller *Func, 
 	if target, ok := ix.moduleFile(f, qual); ok {
 		if to, ok := one(ix.byFile[target][name]); ok {
 			g.addEdge(caller, to)
+			g.recordCrossFile(f.path, call, to)
 			return
 		}
 	}
@@ -693,4 +698,38 @@ func (g *Graph) Covers(file string) bool {
 	}
 	_, ok := g.stmtOwner[file]
 	return ok
+}
+
+// recordCrossFile notes that call, made in file, was bound to the function to
+// when to is in another file: the input to cross-file taint (ADR 0007).
+func (g *Graph) recordCrossFile(file, call, to string) {
+	fn, ok := g.funcs[to]
+	if !ok || fn.File == file {
+		return
+	}
+	m := g.crossFile[file]
+	if m == nil {
+		m = map[string]string{}
+		g.crossFile[file] = m
+	}
+	m[call] = to
+}
+
+// FileUnits is one file's units as the builder holds them.
+type FileUnits struct {
+	Path  string
+	Units []taint.Unit
+}
+
+// Files returns every file's units, in path order.
+func (b *SourceBuilder) Files() []FileUnits {
+	if b == nil {
+		return nil
+	}
+	out := make([]FileUnits, 0, len(b.files))
+	for i := range b.files {
+		out = append(out, FileUnits{Path: b.files[i].path, Units: b.files[i].units})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
 }

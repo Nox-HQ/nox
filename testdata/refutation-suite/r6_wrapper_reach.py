@@ -11,13 +11,17 @@
 # sink in this function?" finds nothing in either function and concludes the
 # code is safe. The vulnerability is fully reachable; only the analysis was
 # intraprocedural.
+#
+# The finding is at the sink, inside the wrapper, with the call from handle as
+# its evidence (ADR 0007): that is where the fix goes. Before ADR 0007 it was
+# at the call site.
 import os
 
 
 def _exec(argument):
-    os.system(argument)
+    os.system(argument)  # nox-expect: TAINT-002
 
 
 def handle(request):
     host = request.args.get("host")
-    _exec("ping -c1 " + host)  # nox-expect: TAINT-002
+    _exec("ping -c1 " + host)

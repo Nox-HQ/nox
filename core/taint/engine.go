@@ -221,6 +221,26 @@ type Flow struct {
 	// still carries the taint of what went in. Conservative within a function;
 	// a summary does not carry it to a caller (see summarize).
 	ThroughCall bool
+	// SourceFile is the file the source is in, when it is not FilePath: an
+	// interprocedural flow is reported at its sink, inside the function that
+	// reaches it (ADR 0007), and a cross-file one starts in another file.
+	SourceFile string
+	// Path is the call path of an interprocedural flow, caller first: each
+	// step is a call that carried the tainted value one function closer to
+	// the sink. Empty for an intraprocedural flow.
+	Path []CallStep
+	// OtherPaths are the further call paths that reach this same sink. One
+	// flow is reported per sink and rule (ADR 0007); each caller that reaches
+	// it is a separate injection point, so its path is kept here, not dropped.
+	OtherPaths [][]CallStep
+}
+
+// CallStep is one call on an interprocedural flow's path: the call at Line
+// in File, made from the function Func.
+type CallStep struct {
+	File string
+	Line int
+	Func string
 }
 
 // Suppression is a flow the engine REFUSED to report, and why.

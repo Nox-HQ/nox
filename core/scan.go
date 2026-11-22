@@ -977,6 +977,20 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}
 	}
 
+	// The source call graph, from the units the flow analyzers extracted.
+	// Built here, before refinement, because cross-file taint reads it.
+	var graphRoutes []callgraph.Route
+	if opts.Scopes.RunsAnalyzer("authz") {
+		graphRoutes = callgraphRoutes(authzAnalyzer)
+	}
+	sourceGraph := buildSourceGraph(ctx, sourceUnits, artifacts, graphRoutes, scanRootDir(target))
+	// Cross-file taint (ADR 0007): flows from a source in one file to a sink
+	// in another through calls the graph bound by the files' imports.
+	if opts.Scopes.RunsAnalyzer("taintflow") {
+		_, supersede := taintflow.MergeCrossFile(allFindings, taintflowAnalyzer.ScanCrossFile(sourceUnits.Files(), sourceGraph))
+		recordWithheld(reasons, allFindings, "parameter SQL finding superseded by a cross-file flow from a source", supersede)
+	}
+
 	if aiInventory == nil {
 		aiInventory = &ai.Inventory{}
 	}
@@ -1177,11 +1191,6 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// a larger change than this one and are left to the E track.
 	recordObservations(reasons, allFindings)
 	recordCapabilityCoverage(coverage, allFindings)
-	var graphRoutes []callgraph.Route
-	if opts.Scopes.RunsAnalyzer("authz") {
-		graphRoutes = callgraphRoutes(authzAnalyzer)
-	}
-	sourceGraph := buildSourceGraph(ctx, sourceUnits, artifacts, graphRoutes, scanRootDir(target))
 	recordCallGraphCoverage(coverage, allFindings, target, sourceGraph, graphRoutes)
 	raiseDependencyReachability(allFindings, sourceGraph)
 	competenceProfiles := assignCompetenceProfiles(coverage, allFindings)

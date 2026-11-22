@@ -1,6 +1,10 @@
 package engine
 
-import "github.com/nox-hq/nox/core/taint"
+import (
+	"slices"
+
+	"github.com/nox-hq/nox/core/taint"
+)
 
 // This file adds SAME-FILE interprocedural taint analysis on top of the
 // intraprocedural StructuralEngine, via FUNCTION SUMMARIES. It is the multiplier
@@ -55,6 +59,13 @@ type argSink struct {
 	// via is the chain of local functions between the summarized function and the
 	// sink, nearest-caller first. Empty when the sink is directly in the body.
 	via []string
+	// file, line and fn locate the sink statement itself, which may be in a
+	// helper several calls down or another file; path is the calls from the
+	// summarized function to it (ADR 0007: reported at the sink).
+	file string
+	line int
+	fn   string
+	path []taint.CallStep
 }
 
 // funcSummary is the interprocedural summary of one locally-defined function.
@@ -131,7 +142,10 @@ func (e *StructuralEngine) AnalyzeFileWithSuppressions(units []taint.Unit) ([]ta
 		suppressed = append(suppressed, res.suppressed...)
 		for j := range res.flows {
 			f := &res.flows[j]
-			k := flowKey{f.SinkLine, f.SinkCall, f.SourceLine, f.SourceVar, f.Sink.RuleID}
+			k := flowKey{f.SinkLine, f.SinkCall, f.SourceLine, f.SourceVar, f.Sink.RuleID, 0}
+			if len(f.Path) > 0 {
+				k.callLine = f.Path[0].Line
+			}
 			if _, dup := seen[k]; dup {
 				continue
 			}
@@ -141,8 +155,69 @@ func (e *StructuralEngine) AnalyzeFileWithSuppressions(units []taint.Unit) ([]ta
 	}
 	flows = append(flows, e.paramSQLFlows(lang, units, summaries, flows)...)
 	sortFlows(flows)
+	flows = onePerSink(flows)
 	sortSuppressions(suppressed)
 	return flows, suppressed
+}
+
+// onePerSink keeps, at each sink (file, line, rule), the interprocedural
+// flows only where nothing else is reported, and then only the first.
+//
+// An interprocedural flow is reported at its sink inside the helper (ADR
+// 0007), so every caller that hands a source to the same helper lands on the
+// same line. They are one defect -- the fix goes in the helper -- and the
+// call path of the first, in the flow order, is the evidence shown. A flow
+// whose source is in the helper itself already names that sink, and a
+// caller's path adds nothing a reader acts on. Intraprocedural flows are left
+// as they were.
+func onePerSink(flows []taint.Flow) []taint.Flow {
+	type at struct {
+		file, rule string
+		line       int
+	}
+	direct := map[at]bool{}
+	for i := range flows {
+		if len(flows[i].Path) == 0 {
+			direct[at{flows[i].FilePath, flows[i].Sink.RuleID, flows[i].SinkLine}] = true
+		}
+	}
+	taken := map[at]int{}
+	out := flows[:0:0]
+	for i := range flows {
+		f := &flows[i]
+		if len(f.Path) == 0 {
+			out = append(out, *f)
+			continue
+		}
+		k := at{f.FilePath, f.Sink.RuleID, f.SinkLine}
+		if direct[k] {
+			continue
+		}
+		if j, ok := taken[k]; ok {
+			// Another caller reaching the same sink: one finding, every path.
+			if !hasPath(out[j], f.Path) {
+				out[j].OtherPaths = append(out[j].OtherPaths, f.Path)
+			}
+			out[j].OtherPaths = append(out[j].OtherPaths, f.OtherPaths...)
+			continue
+		}
+		taken[k] = len(out)
+		out = append(out, *f)
+	}
+	return out
+}
+
+// hasPath reports whether f already carries path, as its own or another's.
+func hasPath(f taint.Flow, path []taint.CallStep) bool {
+	if slices.Equal(f.Path, path) {
+		return true
+	}
+	for _, p := range f.OtherPaths {
+		if slices.Equal(p, path) {
+			return true
+		}
+	}
+	return false
 }
 
 // SourceParameter is the source kind of a flow from a function's own
@@ -217,13 +292,26 @@ type flowKey struct {
 	sourceLine int
 	sourceVar  string
 	ruleID     string
+	// callLine is an interprocedural flow's first call (Path[0]): reported
+	// at the helper's sink (ADR 0007), two calls passing the same variable
+	// share every other field, and each is a path the finding must keep.
+	callLine int
 }
 
 // computeSummaries derives a funcSummary for each named function, iterating to a
 // bounded fixpoint so summaries that depend on other summaries (a helper that
 // returns tainted, then whose result is sunk) converge.
 func (e *StructuralEngine) computeSummaries(lang string, units []taint.Unit) map[string]*funcSummary {
-	summaries := map[string]*funcSummary{}
+	return e.computeSummariesWith(lang, units, nil)
+}
+
+// computeSummariesWith is computeSummaries with the summaries of calls bound
+// to other files' functions supplied as fixed inputs (crossfile.go).
+func (e *StructuralEngine) computeSummariesWith(lang string, units []taint.Unit, external map[string]*funcSummary) map[string]*funcSummary {
+	summaries := make(map[string]*funcSummary, len(units)+len(external))
+	for k, v := range external {
+		summaries[k] = v
+	}
 	for i := range units {
 		if units[i].FuncName != "" {
 			summaries[units[i].FuncName] = newFuncSummary(units[i].FuncName)
@@ -299,7 +387,7 @@ func (e *StructuralEngine) summarize(lang string, u *taint.Unit, summaries map[s
 			if f.SourceVar != param && f.ThroughCall {
 				continue
 			}
-			sum.sinksArg[idx] = append(sum.sinksArg[idx], argSink{sink: f.Sink, via: f.Via})
+			sum.sinksArg[idx] = append(sum.sinksArg[idx], argSink{sink: f.Sink, via: f.Via, file: f.FilePath, line: f.SinkLine, fn: f.FuncName, path: f.Path})
 		}
 		// Did the parameter's taint reach a return unsanitized?
 		for _, rv := range res.returned {
@@ -352,7 +440,8 @@ func summaryEqual(a, b *funcSummary) bool {
 			return false
 		}
 		for i := range av {
-			if av[i].sink.RuleID != bv[i].sink.RuleID || av[i].sink.Call != bv[i].sink.Call {
+			if av[i].sink.RuleID != bv[i].sink.RuleID || av[i].sink.Call != bv[i].sink.Call ||
+				av[i].file != bv[i].file || av[i].line != bv[i].line {
 				return false
 			}
 		}
@@ -410,6 +499,9 @@ func (e *StructuralEngine) passGetterSource(lang string, u *taint.Unit, summarie
 	}
 	if returns == 0 {
 		return nil
+	}
+	if first.srcFile == "" {
+		first.srcFile = u.FilePath
 	}
 	return first
 }

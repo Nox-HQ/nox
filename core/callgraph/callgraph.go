@@ -153,6 +153,34 @@ type Graph struct {
 	linesMu sync.Mutex
 	// analysis and buildID describe the graph in its Scope.
 	analysis, buildID string
+	// crossFile maps a source file and a call as its units record it to the
+	// function in ANOTHER file the call was bound to (CrossFileCallees);
+	// unitName maps a function key to its unit's FuncName.
+	crossFile map[string]map[string]string
+	unitName  map[string]string
+}
+
+// Callee is a function in the source graph, by file and unit name.
+type Callee struct {
+	File, Func string
+}
+
+// CrossFileCallees returns the calls made in file that this graph bound to a
+// function in another file, keyed by the call as the file's units record it.
+// A call is bound only as the graph binds any call: to the one candidate, or
+// not at all (see SourceBuilder). nil when there are none.
+func (g *Graph) CrossFileCallees(file string) map[string]Callee {
+	calls := g.crossFile[file]
+	if len(calls) == 0 {
+		return nil
+	}
+	out := make(map[string]Callee, len(calls))
+	for call, key := range calls {
+		if fn, ok := g.funcs[key]; ok && g.unitName[key] != "" {
+			out[call] = Callee{File: fn.File, Func: g.unitName[key]}
+		}
+	}
+	return out
 }
 
 // Len returns the number of functions in the graph.

@@ -998,6 +998,18 @@ func (fs *FindingSet) RemoveByRuleIDsInDirs(ruleIDs, dirSegments []string) {
 	fs.items = kept
 }
 
+// RemoveWhere removes the findings drop reports true for.
+func (fs *FindingSet) RemoveWhere(drop func(*Finding) bool) {
+	kept := make([]Finding, 0, len(fs.items))
+	for i := range fs.items {
+		if drop(&fs.items[i]) {
+			continue
+		}
+		kept = append(kept, fs.items[i])
+	}
+	fs.items = kept
+}
+
 // RemoveByRuleIDsWhere removes findings matching ruleIDs whose file path
 // satisfies inPath.
 func (fs *FindingSet) RemoveByRuleIDsWhere(ruleIDs []string, inPath func(path string) bool) {

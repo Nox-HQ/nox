@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 283,
+  "version": 289,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1126,8 +1126,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-cross-file-summaries": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "ADR 0007; core/taint/engine/crossfile.go AnalyzeCrossFile, bounded 4-round fixpoint; dev F3 15.6-\u003e16.5 (45adbc6, 54e5d89)"
+      ],
+      "started_at": "2026-11-23T00:07:57.077974+01:00",
+      "completed_at": "2026-11-23T00:07:57.100059+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-crypto-and-config-recall": {
@@ -1169,8 +1175,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-interprocedural-finding-location": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "Interprocedural findings reported at the sink with flow_path / flow_paths evidence; ADR 0007 decision 4 (45adbc6, 54e5d89)"
+      ],
+      "started_at": "2026-11-23T00:07:57.129504+01:00",
+      "completed_at": "2026-11-23T00:07:57.158867+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-java-deterministic-baseline": {
@@ -1233,8 +1245,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-module-index": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "core/callgraph SourceBuilder already resolved cross-file calls; Graph.CrossFileCallees + SourceBuilder.Files expose them (45adbc6)"
+      ],
+      "started_at": "2026-11-23T00:07:57.01421+01:00",
+      "completed_at": "2026-11-23T00:07:57.043221+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-noise": {
@@ -1330,5 +1348,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-11-22T19:08:35.990486+01:00"
+  "updated_at": "2026-11-23T00:07:57.158867+01:00"
 }
