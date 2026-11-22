@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 277,
+  "version": 279,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1242,8 +1242,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-python-front-end-producing-taint-units-from-the": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "tree segmentation on by default; 2,076/2,101 corpus files identical, +2 labelled, 0 lost; this PR"
+      ],
+      "started_at": "2026-11-22T18:09:50.189871+01:00",
+      "completed_at": "2026-11-22T18:09:50.255586+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-remaining-languages-onto-tree-sitter-c-php-ruby": {
@@ -1312,5 +1318,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-11-22T17:42:56.703305+01:00"
+  "updated_at": "2026-11-22T18:09:50.255586+01:00"
 }
