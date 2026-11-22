@@ -21,6 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a 256 MiB memory limit, and no clock, file or network (the four WASI
   functions the runtime links are stubs that fail). Module sizes: Python 553
   KB, JavaScript 524 KB, Java 517 KB, TypeScript and TSX 2.9 MB.
+- The tree-sitter host (`core/treesitter`, not yet used by an analyzer) pools
+  module instances and bounds every parse. `ParseFile` returns a tree or a
+  classified limitation the caller falls back on: too large (over 2 MiB,
+  declined before any work), deadline (5 s plus 5 s per MiB, counted from
+  after the module is compiled), memory, trap, error tree (the tree is
+  returned too) or language. An instance that failed, or whose memory grew
+  past 64 MiB, is closed instead of reused, and a failure on a reused
+  instance is tried again on a fresh one, so a file's outcome does not depend
+  on what the instance parsed before. Reuse took Python from 7.6 to 3.5 ms a
+  file and TypeScript from 7.8 to 5.6 ms on two RealVuln repositories; the
+  rest is the guest's own parse, about 2 MB/s on an 805 KB file.
 
 - An application-configuration analyzer reports security settings written
   into the source: web framework debug mode on (APPCFG-001: Flask
