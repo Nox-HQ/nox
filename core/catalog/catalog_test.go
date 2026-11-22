@@ -139,8 +139,9 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1510 -> 1513 adds APPCFG-001..003 (debug mode, CORS from any origin, a
 	// JWT read without its signature verified).
 	// 1513 -> 1515 adds APPCFG-004/005 (cookie HttpOnly and Secure).
-	if got := len(cat); got != 1515 {
-		t.Errorf("Catalog() returned %d rules, want 1515", got)
+	// 1515 -> 1516 adds APPCFG-006 (a signing key written in the source).
+	if got := len(cat); got != 1516 {
+		t.Errorf("Catalog() returned %d rules, want 1516", got)
 	}
 }
 

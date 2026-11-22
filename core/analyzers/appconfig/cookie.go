@@ -50,7 +50,7 @@ var cookieRules = []rule{
 			{langs: py, need: "httponly", re: regexp.MustCompile(`\bhttponly\s*=\s*False\b`)},
 			{langs: py, need: "SESSION_COOKIE_HTTPONLY", re: regexp.MustCompile(`(?m)^\s*SESSION_COOKIE_HTTPONLY\s*=\s*False\b`)},
 			{langs: java, need: "HttpOnly", re: regexp.MustCompile(`\.\s*setHttpOnly\s*\(\s*false\s*\)`)},
-			{langs: java, need: "httpOnly", re: regexp.MustCompile(`\bResponseCookie\b[^;]*?\.\s*httpOnly\s*\(\s*false\s*\)`)},
+			{langs: java, need: "httpOnly", whole: true, re: regexp.MustCompile(`\bResponseCookie\b[^;]*?\.\s*httpOnly\s*\(\s*false\s*\)`)},
 		},
 	},
 	{
