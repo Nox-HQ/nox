@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Tree-sitter modules for Python, JavaScript, TypeScript/TSX and Java (ADR
-  0006), not yet used by any analyzer. `scripts/treesitter/build.sh` compiles
+  0006). `scripts/treesitter/build.sh` compiles
   the official tree-sitter runtime (v0.27.2) and pinned upstream grammars to
   WebAssembly in a pinned container (wasi-sdk 34 by SHA-256, the base image
   by digest), and `--check` rebuilds them and fails unless every module and
@@ -21,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a 256 MiB memory limit, and no clock, file or network (the four WASI
   functions the runtime links are stubs that fail). Module sizes: Python 553
   KB, JavaScript 524 KB, Java 517 KB, TypeScript and TSX 2.9 MB.
-- The tree-sitter host (`core/treesitter`, not yet used by an analyzer) pools
+- The tree-sitter host (`core/treesitter`) pools
   module instances and bounds every parse. `ParseFile` returns a tree or a
   classified limitation the caller falls back on: too large (over 2 MiB,
   declined before any work), deadline (5 s plus 5 s per MiB, counted from
@@ -136,6 +136,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is no database are not reported.
 
 ### Changed
+
+- Python statements are segmented from the tree-sitter parse tree (ADR 0006).
+  Extraction is unchanged; the tree decides where a statement starts and
+  ends and what belongs to a block, where the line segmenter guessed:
+  `a = f(); os.system(a)` is two statements, `if x: y` puts y inside the if,
+  a triple-quoted string keeps its `% (…)` or `.format(…)` call, a multi-line
+  f-string no longer pushes the statements after it out of their function,
+  and a trailing comment is no longer read as part of the statement (one that
+  quoted SQL made a parameterized query look concatenated). A file the
+  parser declines falls back to the line segmenter. Of 2,101 Python files in
+  the RealVuln corpus 2,076 produce identical units; on the repositories
+  holding the other 24, two labelled findings are gained (SSTI through a
+  `'''…''' % (name)` template, SQL injection through a multi-line f-string)
+  and none lost. `NOX_TAINT_TREESITTER` replaces the list of languages the
+  tree segments (`none` for the line segmenter everywhere), to A/B a front
+  end on the same binary.
 
 - The application-configuration analyzer matches each pattern only on the
   lines around an occurrence of its literal, not across the whole file: on

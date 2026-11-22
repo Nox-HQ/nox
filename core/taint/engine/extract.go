@@ -123,6 +123,11 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 
 	switch lang {
 	case lexctx.LangPython:
+		if treeFrontEnd("python") {
+			if lines, ok := pyTreeLines(content, regions); ok {
+				return extractPython(lines)
+			}
+		}
 		return extractPython(logicalLines(content, regions, false))
 	case lexctx.LangJavaScript:
 		// JS statements are `;`-terminated and brace-delimited; only paren/array
