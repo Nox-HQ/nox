@@ -112,8 +112,8 @@ func TestPythonTreeFallsBackOnAnErrorTree(t *testing.T) {
 }
 
 func TestTreeFrontEndSwitch(t *testing.T) {
-	if !treeFrontEnd("python") {
-		t.Error("python is not on by default")
+	if !treeFrontEnd("python") || !treeFrontEnd("javascript") {
+		t.Error("python and javascript are not on by default")
 	}
 	t.Setenv("NOX_TAINT_TREESITTER", "none")
 	if treeFrontEnd("python") {

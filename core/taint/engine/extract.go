@@ -119,6 +119,13 @@ type sinkArgDraft struct {
 // (joining bracket/paren continuations), and recognizes assignments and calls.
 // Deterministic: same bytes in, same units out, in source order.
 func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
+	return extractUnitsAt("", lang, content)
+}
+
+// extractUnitsAt is extractUnits for a file whose path is known: the path picks
+// the grammar a tree-sitter front end parses it with (TypeScript and TSX are
+// lexctx.LangJavaScript too).
+func extractUnitsAt(path string, lang lexctx.Lang, content []byte) []unitDraft {
 	regions := lexctx.Classify(lang, content)
 
 	switch lang {
@@ -133,6 +140,11 @@ func extractUnits(lang lexctx.Lang, content []byte) []unitDraft {
 		// JS statements are `;`-terminated and brace-delimited; only paren/array
 		// continuations should merge physical lines, and each logical line is
 		// then split on top-level semicolons into separate statements.
+		if treeFrontEnd("javascript") {
+			if lines, ok := jsTreeLines(path, content, regions); ok {
+				return extractJavaScript(splitSemicolons(lines))
+			}
+		}
 		return extractJavaScript(splitSemicolons(logicalLines(content, regions, true)))
 	case lexctx.LangGo:
 		// Go gets an AST-precise extractor (go/parser) rather than the lexctx line
@@ -354,6 +366,13 @@ func logicalLines(content []byte, regions []lexctx.Region, bracesAreBlocks bool)
 // its own: a brace directly after one of blockWords, inside parens, opens a
 // function body (see bracketNest).
 func logicalLinesWith(content []byte, regions []lexctx.Region, bracesAreBlocks bool, blockWords map[string]bool) []logicalLine {
+	return logicalLinesJoined(content, regions, bracesAreBlocks, blockWords, nil)
+}
+
+// logicalLinesJoined is logicalLinesWith with one more reason to continue a
+// line: joinAfter(n) reports that physical line n (1-based) and the next are
+// one statement, as a parse tree knows and bracket counting cannot.
+func logicalLinesJoined(content []byte, regions []lexctx.Region, bracesAreBlocks bool, blockWords map[string]bool, joinAfter func(line int) bool) []logicalLine {
 	// codeMask is content with non-code bytes replaced by spaces (newlines kept
 	// so line counting stays correct).
 	codeMask := make([]byte, len(content))
@@ -386,6 +405,9 @@ func logicalLinesWith(content []byte, regions []lexctx.Region, bracesAreBlocks b
 	i := 0
 	n := len(content)
 	lineStart := true
+	// sep: a continuation is pending, and the next physical line is joined
+	// to this one with a space, so tokens do not glue.
+	sep := false
 	for i < n {
 		// Read one physical line [i, eol).
 		eol := i
@@ -396,6 +418,20 @@ func logicalLinesWith(content []byte, regions []lexctx.Region, bracesAreBlocks b
 		rawSeg := string(content[i:eol])
 		if lineStart {
 			startLine = lineNo
+		}
+		if sep {
+			// A member access continued on the next line (`db\n  .query(q)`)
+			// joins with no space, so the chain reads db.query. Only where a
+			// tree said the lines are one statement (joinAfter set): the line
+			// segmenters for other languages are unchanged.
+			if k := len(codeSeg) - len(strings.TrimLeft(codeSeg, " \t")); joinAfter != nil && k <= len(rawSeg) &&
+				(strings.HasPrefix(codeSeg[k:], ".") || strings.HasPrefix(codeSeg[k:], "?.")) {
+				codeSeg, rawSeg = codeSeg[k:], rawSeg[k:]
+			} else {
+				codeBuf.WriteByte(' ')
+				rawBuf.WriteByte(' ')
+			}
+			sep = false
 		}
 		codeBuf.WriteString(codeSeg)
 		rawBuf.WriteString(rawSeg)
@@ -408,15 +444,17 @@ func logicalLinesWith(content []byte, regions []lexctx.Region, bracesAreBlocks b
 			continued = depth > 0
 		}
 		backslashCont := strings.HasSuffix(strings.TrimRight(codeSeg, " \t"), "\\")
+		if joinAfter != nil && joinAfter(lineNo) {
+			continued = true
+		}
 
 		if !continued && !backslashCont {
 			flush()
 			depth = 0
 			lineStart = true
 		} else {
-			// Continue onto next physical line; add a space so tokens don't glue.
-			codeBuf.WriteByte(' ')
-			rawBuf.WriteByte(' ')
+			// Continue onto the next physical line (see sep).
+			sep = true
 			lineStart = false
 		}
 

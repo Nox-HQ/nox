@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 279,
+  "version": 281,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1190,8 +1190,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-js-ts-front-end-same-gate": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "statement joining on by default; +8 labelled, 0 lost on all 203 repos"
+      ],
+      "started_at": "2026-11-22T18:39:47.14136+01:00",
+      "completed_at": "2026-11-22T18:39:47.178305+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-m1-gate": {
@@ -1318,5 +1324,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-11-22T18:09:50.255586+01:00"
+  "updated_at": "2026-11-22T18:39:47.178306+01:00"
 }

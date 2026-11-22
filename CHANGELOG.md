@@ -152,6 +152,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and none lost. `NOX_TAINT_TREESITTER` replaces the list of languages the
   tree segments (`none` for the line segmenter everywhere), to A/B a front
   end on the same binary.
+- JavaScript and TypeScript statements that span lines are read as one
+  statement, from the tree-sitter parse tree (ADR 0006). A line was joined
+  to the next only inside an open bracket, so `const q = "SELECT …" +` then
+  `req.query.id;` was two statements and q never read the request, and a
+  method chain continued on the next line lost its receiver (`db` then
+  `.query(q)` read as a bare `query`). Each expression statement, return,
+  throw and declarator the grammar delimits that spans lines and holds no
+  function or class body now has its lines joined, a member access with no
+  space; everything else is segmented as before, and a declaration is joined
+  per declarator so `var a = f(),` then `b = g(a);` stays two bindings.
+  `.ts` and `.tsx` files parse with their own grammars. RealVuln, all 203
+  repositories, the same binary with and without it: +8 labelled findings
+  (SQL concatenated across lines into `db.exec` and `$queryRawUnsafe`, an
+  open redirect, an XSS), none lost, 43 unmatched added (JSON replies read as
+  HTML and file paths from records looked up by a request id, existing
+  precision gaps the completed flows now reach); development split F3
+  15.5 -> 15.6, JS/TS 21.1 -> 21.5.
 
 - The application-configuration analyzer matches each pattern only on the
   lines around an occurrence of its literal, not across the whole file: on
