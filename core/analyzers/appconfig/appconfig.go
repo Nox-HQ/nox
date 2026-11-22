@@ -38,7 +38,7 @@ const (
 // is matched against.
 type pattern struct {
 	langs []lexctx.Lang
-	// need is a literal every match contains. A file without it is not
+	// need is a literal every match contains ("a|b": one of them). A file without it is not
 	// matched against re at all: most files hold none of these settings, and
 	// a regex that cannot start from a literal scans the whole file.
 	need string
@@ -49,6 +49,20 @@ type pattern struct {
 	// near, when set, is a literal that must occur within nearWindow bytes
 	// of the match (`secure: false` is a cookie's only beside "cookie").
 	near string
+	// valueOK, when set, decides on the literal a match captured in its
+	// first group (a key named "JWT_SECRET" is the variable's name, not one).
+	valueOK func(value string) bool
+	// nameOK, when set, decides on the identifier a match captured in its
+	// first group; the value is then the second.
+	nameOK func(name string) bool
+	// whole matches re over the whole file. Otherwise re runs only on the
+	// lines around each occurrence of need: from windowLinesBefore lines
+	// above it to matchWindow bytes past its line. A regex that cannot begin
+	// with its literal scans a whole file wherever the literal occurs, which
+	// on a minified bundle is most of the cost. A pattern whose match can
+	// start further above its literal (`[^;]*?` across a builder chain)
+	// must be whole.
+	whole bool
 }
 
 const nearWindow = 300
@@ -70,7 +84,7 @@ func (r rule) conf() findings.Confidence {
 }
 
 // allRules is every rule the analyzer reports: settings, then cookie flags.
-var allRules = append(append([]rule{}, builtin...), cookieRules...)
+var allRules = append(append(append([]rule{}, builtin...), cookieRules...), signingKeyRules...)
 
 var (
 	py   = []lexctx.Lang{lexctx.LangPython}
@@ -124,9 +138,9 @@ var builtin = []rule{
 		patterns: []pattern{
 			{langs: py, need: "verify", re: regexp.MustCompile(`\bjwt\.decode\s*\([^)\n]*\bverify\s*=\s*False\b`)},
 			{langs: py, need: "verify_signature", re: regexp.MustCompile(`["']verify_signature["']\s*:\s*False\b`)},
-			{langs: append(append([]lexctx.Lang{}, py...), js...), need: "none", re: regexp.MustCompile(`\balgorithms\s*[=:]\s*\[\s*["']none["']`)},
+			{langs: append(append([]lexctx.Lang{}, py...), js...), need: "algorithms", re: regexp.MustCompile(`\balgorithms\s*[=:]\s*\[\s*["']none["']`)},
 			{langs: java, need: "JWT", re: regexp.MustCompile(`\bJWT\s*\.\s*decode\s*\(`)},
-			{langs: java, need: "Jwts", re: regexp.MustCompile(`\bJwts\s*\.\s*parser(?:Builder)?\s*\(\s*\)[^;]*?\.\s*parse\s*\(`)},
+			{langs: java, need: "Jwts", whole: true, re: regexp.MustCompile(`\bJwts\s*\.\s*parser(?:Builder)?\s*\(\s*\)[^;]*?\.\s*parse\s*\(`)},
 			{langs: js, need: "decode", re: regexp.MustCompile(`\b(?:jwt|jsonwebtoken)\s*\.\s*decode\s*\(`)},
 			{langs: goL, need: "ParseUnverified", re: regexp.MustCompile(`\.\s*ParseUnverified\s*\(`)},
 		},
@@ -187,7 +201,7 @@ var langByExt = map[string]lexctx.Lang{
 var configExt = map[string]bool{".properties": true, ".yml": true, ".yaml": true, ".xml": true}
 
 // triggers is a cheap prefilter: a file that names none of these cannot match.
-var triggers = [][]byte{[]byte("debug"), []byte("DEBUG"), []byte("rigin"), []byte("CORS"), []byte("cors"), []byte("decode"), []byte("parse"), []byte("Unverified"), []byte("none"), []byte("ookie"), []byte("ession("), []byte("httpOnly"), []byte("httponly"), []byte("HttpOnly"), []byte("SESSION_COOKIE")}
+var triggers = [][]byte{[]byte("debug"), []byte("DEBUG"), []byte("rigin"), []byte("CORS"), []byte("cors"), []byte("decode"), []byte("parse"), []byte("Unverified"), []byte("none"), []byte("ookie"), []byte("ession("), []byte("httpOnly"), []byte("httponly"), []byte("HttpOnly"), []byte("SESSION_COOKIE"), []byte("ecret"), []byte("ECRET"), []byte("sign("), []byte("verify("), []byte("encode("), []byte("HMAC"), []byte("SigningKey"), []byte("signWith"), []byte("cookieParser(")}
 
 // ScanArtifacts reports the settings across the discovered source files.
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
@@ -231,10 +245,13 @@ func ScanFile(path string, lang lexctx.Lang, content []byte) []findings.Finding 
 	seen := map[string]bool{}
 	for _, r := range allRules {
 		for _, p := range r.patterns {
-			if !slices.Contains(p.langs, lang) || (p.fileOK != nil && !p.fileOK(path)) || !bytes.Contains(content, []byte(p.need)) {
+			if !slices.Contains(p.langs, lang) || (p.fileOK != nil && !p.fileOK(path)) || !containsAny(content, p.need) {
 				continue
 			}
-			for _, loc := range p.re.FindAllIndex(content, -1) {
+			for _, loc := range p.matches(content) {
+				if !p.groupsOK(content, loc) {
+					continue
+				}
 				start := firstNonSpace(content, loc[0], loc[1])
 				if masked == nil {
 					masked = lexctx.MaskNonCode(lang, content)
@@ -296,4 +313,140 @@ func firstNonSpace(b []byte, from, to int) int {
 		return i
 	}
 	return -1
+}
+
+// groupsOK applies nameOK and valueOK to a match's captured groups: with
+// nameOK the name is group 1 and the value group 2, otherwise the value is 1.
+func (p pattern) groupsOK(content []byte, loc []int) bool {
+	group := func(i int) (string, bool) {
+		if len(loc) < 2*i+2 || loc[2*i] < 0 {
+			return "", false
+		}
+		return string(content[loc[2*i]:loc[2*i+1]]), true
+	}
+	vi := 1
+	if p.nameOK != nil {
+		if n, ok := group(1); ok && !p.nameOK(n) {
+			return false
+		}
+		vi = 2
+	}
+	if p.valueOK != nil {
+		if v, ok := group(vi); ok && !p.valueOK(v) {
+			return false
+		}
+		// A literal concatenated with more ("crm_live_" + random) is a
+		// prefix of a value built at run time, not the value.
+		if end := loc[2*vi+1] + 1; end > 0 && end <= len(content) && nextIsPlus(content[end:]) {
+			return false
+		}
+	}
+	return true
+}
+
+func nextIsPlus(b []byte) bool {
+	for _, c := range b {
+		switch c {
+		case ' ', '\t', '\r', '\n':
+			continue
+		case '+':
+			return true
+		}
+		return false
+	}
+	return false
+}
+
+// containsAny reports whether content holds any of need's "|"-separated
+// literals.
+func containsAny(content []byte, need string) bool {
+	for _, n := range strings.Split(need, "|") {
+		if bytes.Contains(content, []byte(n)) {
+			return true
+		}
+	}
+	return false
+}
+
+// wholeAll matches every pattern over the whole file (the equivalence
+// check compares the two).
+var wholeAll = false
+
+// windowLinesBefore is how many lines above its literal a match may start.
+const windowLinesBefore = 2
+
+// matchWindow is how far past the line holding need a windowed match may
+// run (a fallback written on the next line).
+const matchWindow = 400
+
+// matches returns re's submatch indexes in content, whole-file or windowed.
+func (p pattern) matches(content []byte) [][]int {
+	if p.whole || wholeAll {
+		return p.submatches(content, p.re.FindAllIndex(content, -1), 0)
+	}
+	var out [][]int
+	done := map[int]bool{} // one window per line start
+	for _, n := range strings.Split(p.need, "|") {
+		for off := 0; ; {
+			i := bytes.Index(content[off:], []byte(n))
+			if i < 0 {
+				break
+			}
+			at := off + i
+			off = at + len(n)
+			ol := bytes.LastIndexByte(content[:at], '\n') + 1 // the literal's line
+			if done[ol] {
+				continue
+			}
+			done[ol] = true
+			ls := ol
+			for k := 0; k < windowLinesBefore && ls > 0; k++ {
+				ls = bytes.LastIndexByte(content[:ls-1], '\n') + 1
+			}
+			le := bytes.IndexByte(content[at:], '\n')
+			if le < 0 {
+				le = len(content)
+			} else {
+				le += at
+			}
+			end := min(len(content), le+matchWindow)
+			var first [][]int
+			for _, m := range p.re.FindAllIndex(content[ls:end], -1) {
+				if m[0] > le-ls {
+					break // starts on a later line: that line's own window has it
+				}
+				first = append(first, m)
+			}
+			out = append(out, p.submatches(content[ls:end], first, ls)...)
+		}
+	}
+	return out
+}
+
+// submatches turns match positions in b into submatch indexes offset by base.
+// Groups are extracted only for a pattern that reads them, and only over the
+// matched text: Go matches positions with its fast engine, and group
+// extraction over a whole file is several times slower.
+func (p pattern) submatches(b []byte, locs [][]int, base int) [][]int {
+	out := make([][]int, 0, len(locs))
+	for _, l := range locs {
+		m := []int{l[0], l[1]}
+		if p.valueOK != nil || p.nameOK != nil {
+			if sm := p.re.FindSubmatchIndex(b[l[0]:l[1]]); sm != nil {
+				m = sm
+				for k := range m {
+					if m[k] >= 0 {
+						m[k] += l[0]
+					}
+				}
+			}
+		}
+		for k := range m {
+			if m[k] >= 0 {
+				m[k] += base
+			}
+		}
+		out = append(out, m)
+	}
+	return out
 }

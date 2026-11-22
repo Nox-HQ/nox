@@ -34,6 +34,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`secure: isProd`), options passed by name, and a cookie being deleted (an
   empty or null value) are not reported. RealVuln: +100 matched; development
   split F3 11.7 -> 13.1 (JS/TS 13.1 -> 16.2), held-out 8.8 -> 9.9.
+- A key that signs tokens or sessions written in the source (APPCFG-006,
+  CWE-321): a literal passed as the key to `jwt.sign`/`verify`/`encode`/
+  `decode`, `Algorithm.HMAC256`, `signWith`, `setSigningKey`; the secret of
+  express-session, cookie-session or `cookieParser`; and a literal assigned to
+  a name that is a secret or a signing key (`app.secret_key`, `SECRET_KEY`,
+  `JWT_SECRET`, `accessTokenSecret`), including as the fallback of an
+  environment lookup (`os.getenv("SECRET_KEY", "change-me")`,
+  `process.env.JWT_SECRET || 'secret'`). The secrets rules find a key by its
+  entropy or format; a signing key ('keyboard cat', 'hardsecret') is usually
+  neither. Not reported: a value that names a variable, a placeholder, a
+  prefix concatenated with generated text, names about a secret (secretName,
+  secretPreview, SECRET_HEADER), test directories, and files named as an
+  example, sample or template. RealVuln: +100 matched;
+  development split F3 13.1 -> 15.1 (JS/TS 16.2 -> 20.1, Python 19.8 ->
+  22.8), held-out 9.9 -> 11.2.
 
 - Sinks the RealVuln development split's missed labels named that the
   catalog did not: needle's verbs (SSRF), Fastify's `reply.redirect` and
@@ -95,6 +110,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   receiver or a separate argument of the call taking the SQL, a value bound by
   a tagged template (Drizzle's `` sql`... ${id}` ``), and a JVM `execute` that
   is no database are not reported.
+
+### Changed
+
+- The application-configuration analyzer matches each pattern only on the
+  lines around an occurrence of its literal, not across the whole file: on
+  minified bundles a pattern whose literal is common (`none`, `keys`) cost a
+  whole-file pass per file. Identical findings on all 45,372 source files of
+  the RealVuln corpus; a test holds the two modes equal on multi-line cases.
 
 ### Fixed
 
