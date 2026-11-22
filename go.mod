@@ -16,6 +16,7 @@ require (
 	github.com/nox-hq/nox-core v0.18.0
 	github.com/openai/openai-go/v3 v3.99.0
 	github.com/pelletier/go-toml/v2 v2.4.3
+	github.com/tetratelabs/wazero v1.12.0
 	go.klarlabs.de/mcp v1.30.1
 	golang.org/x/sync v0.25.0
 	golang.org/x/term v0.48.0

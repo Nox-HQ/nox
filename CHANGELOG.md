@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Tree-sitter modules for Python, JavaScript, TypeScript/TSX and Java (ADR
+  0006), not yet used by any analyzer. `scripts/treesitter/build.sh` compiles
+  the official tree-sitter runtime (v0.27.2) and pinned upstream grammars to
+  WebAssembly in a pinned container (wasi-sdk 34 by SHA-256, the base image
+  by digest), and `--check` rebuilds them and fails unless every module and
+  license is byte-equal to the committed one; a workflow runs it whenever an
+  input or a module changes. `core/treesitter` embeds the modules with their
+  SHA-256 sums and parses through wazero: one boundary crossing per parse (the
+  guest writes the tree as a flat record array), a fresh instance per parse,
+  a 256 MiB memory limit, and no clock, file or network (the four WASI
+  functions the runtime links are stubs that fail). Module sizes: Python 553
+  KB, JavaScript 524 KB, Java 517 KB, TypeScript and TSX 2.9 MB.
+
 - An application-configuration analyzer reports security settings written
   into the source: web framework debug mode on (APPCFG-001: Flask
   `app.run(debug=True)`, `app.debug = True`, the DEBUG config key, Django

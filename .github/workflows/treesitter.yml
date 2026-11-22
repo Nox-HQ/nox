@@ -1,0 +1,37 @@
+name: Tree-sitter modules reproducible
+
+# ADR 0006, rule 1: the embedded tree-sitter modules are rebuilt from
+# scripts/treesitter/pins.json in the pinned container and must come out byte
+# for byte equal to the committed ones. Runs whenever an input or an output
+# changes; the Go test TestEmbeddedModulesMatchTheirRecordedSums holds the
+# embedded files to SHA256SUMS on every CI run regardless.
+on:
+  pull_request:
+    paths:
+      - 'scripts/treesitter/**'
+      - 'core/treesitter/wasm/**'
+      - '.github/workflows/treesitter.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/treesitter/**'
+      - 'core/treesitter/wasm/**'
+  workflow_dispatch: {} # nox:ignore IAC-308,IAC-155 -- re-proves the committed modules on demand; it publishes nothing
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true # nox:ignore IAC-309 -- a newer push supersedes the old rebuild
+
+jobs:
+  rebuild:
+    name: Rebuild and compare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rebuild every module from pins.json and compare
+        run: scripts/treesitter/build.sh --check
