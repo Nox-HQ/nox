@@ -93,7 +93,12 @@ type Parser struct {
 
 	mu       sync.Mutex
 	compiled map[string]wazero.CompiledModule
-	names    map[string]*names // per language
+	names    map[string]*names      // per language
+	idle     map[string][]*instance // per module, ready for reuse
+
+	// onDeadlineStart, when set, is called as a parse's deadline starts; a
+	// test uses it to see what was already done by then.
+	onDeadlineStart func(module string)
 }
 
 // names are a language's symbol and field names, read once from the guest.
@@ -105,14 +110,18 @@ type names struct {
 
 // NewParser returns a parser. Close releases it.
 func NewParser(ctx context.Context) (*Parser, error) {
+	return newParserWithLimit(ctx, memoryLimitPages)
+}
+
+func newParserWithLimit(ctx context.Context, limitPages uint32) (*Parser, error) {
 	rt := wazero.NewRuntimeWithConfig(ctx, wazero.NewRuntimeConfig().
-		WithMemoryLimitPages(memoryLimitPages).
+		WithMemoryLimitPages(limitPages).
 		WithCloseOnContextDone(true))
 	if err := instantiateWASIStubs(ctx, rt); err != nil {
 		_ = rt.Close(ctx)
 		return nil, err
 	}
-	return &Parser{rt: rt, compiled: map[string]wazero.CompiledModule{}, names: map[string]*names{}}, nil
+	return &Parser{rt: rt, compiled: map[string]wazero.CompiledModule{}, names: map[string]*names{}, idle: map[string][]*instance{}}, nil
 }
 
 // Close releases the runtime and every compiled module.
@@ -162,22 +171,35 @@ func (p *Parser) compiledModule(ctx context.Context, module string) (wazero.Comp
 }
 
 // Parse parses src as lang, one of Languages().
+//
+// The parse runs on a pooled instance of lang's module. A failure on a
+// reused instance is tried again on a fresh one, and only the fresh
+// instance's answer is returned: a failure can then never depend on which
+// files an instance parsed before (see pool.go).
 func (p *Parser) Parse(ctx context.Context, lang string, src []byte) (*Tree, error) {
 	module, ok := moduleOf[lang]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrLanguage, lang)
 	}
-	c, err := p.compiledModule(ctx, module)
+	inst, err := p.acquire(ctx, module, false)
 	if err != nil {
 		return nil, err
 	}
-	// A fresh instance per parse: nothing a previous file did can reach this one.
-	m, err := p.rt.InstantiateModule(ctx, c, wazero.NewModuleConfig().WithName("").WithStartFunctions("_initialize"))
-	if err != nil {
-		return nil, fmt.Errorf("treesitter: instantiate %s: %w", module, err)
+	tree, err := p.parseOn(ctx, inst.m, module, lang, src)
+	p.release(ctx, inst, err == nil)
+	if err == nil || inst.fresh || ctx.Err() != nil {
+		return tree, err
 	}
-	defer func() { _ = m.Close(ctx) }()
+	if inst, err = p.acquire(ctx, module, true); err != nil {
+		return nil, err
+	}
+	tree, err = p.parseOn(ctx, inst.m, module, lang, src)
+	p.release(ctx, inst, err == nil)
+	return tree, err
+}
 
+// parseOn runs one parse on the instance m of module.
+func (p *Parser) parseOn(ctx context.Context, m api.Module, module, lang string, src []byte) (*Tree, error) {
 	g := guest{ctx: ctx, m: m}
 	if words := g.call("nox_record_words"); g.err == nil && words != recordWords {
 		return nil, fmt.Errorf("treesitter: %s writes %d-word records, host reads %d", module, words, recordWords)

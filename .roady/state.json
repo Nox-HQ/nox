@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 273,
+  "version": 277,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1290,15 +1290,27 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-tree-sitter-webassembly-build": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "#1149 (dd60dbb): pinned, reproducible modules for Python, JS, TS/TSX, Java; build.sh --check in CI"
+      ],
+      "started_at": "2026-11-22T16:24:30.112417+01:00",
+      "completed_at": "2026-11-22T17:42:56.624375+01:00",
+      "elapsed_minutes": 78
     },
     "task-most-accurate-deterministic-scanner-wazero-host-in-core": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "pooled, bounded ParseFile with classified limitations; this PR"
+      ],
+      "started_at": "2026-11-22T17:42:56.664962+01:00",
+      "completed_at": "2026-11-22T17:42:56.703304+01:00",
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-11-22T15:32:43.960427+01:00"
+  "updated_at": "2026-11-22T17:42:56.703305+01:00"
 }
