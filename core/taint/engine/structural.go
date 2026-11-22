@@ -27,7 +27,7 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) (units []ta
 			extractPanics.Add(1)
 		}
 	}()
-	drafts := extractUnitsFn(lang, content)
+	drafts := extractUnitsFn(filePath, lang, content)
 	// A sink is named in the catalog by its qualified path, and the recognizers
 	// record a call exactly as written — so `from os import system; system(x)`
 	// matched nothing. Expanding through the file's imports is what lets an
@@ -1867,7 +1867,7 @@ func weakMerge(old, updated taintInfo) taintInfo {
 }
 
 // extractUnitsFn is extractUnits, swappable so a test can make it panic.
-var extractUnitsFn = extractUnits
+var extractUnitsFn = extractUnitsAt
 
 // extractPanics counts files whose extraction panicked and was abandoned.
 var extractPanics atomic.Int64

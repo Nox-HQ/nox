@@ -11,7 +11,7 @@ import (
 func TestExtractUnitsRecoversFromAPanic(t *testing.T) {
 	orig := extractUnitsFn
 	t.Cleanup(func() { extractUnitsFn = orig })
-	extractUnitsFn = func(lexctx.Lang, []byte) []unitDraft { panic("boom") }
+	extractUnitsFn = func(string, lexctx.Lang, []byte) []unitDraft { panic("boom") }
 
 	before := ExtractPanics()
 	if units := ExtractUnits("a.php", lexctx.LangPHP, []byte("<?php echo $x;")); units != nil {
