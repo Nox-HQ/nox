@@ -218,6 +218,9 @@ func NewStructuralEngine(cat *taint.Catalog) *StructuralEngine {
 type taintInfo struct {
 	src     taint.Source
 	srcLine int
+	// srcFile is the file srcLine is in when the source was read in another
+	// file (a getter resolved across files, ADR 0007); empty means this unit's.
+	srcFile string
 	cleared map[taint.VulnClass]bool
 	// via is the nearest-caller-first chain of local helper functions whose
 	// summaries carried this taint (empty for a directly-assigned source). It
@@ -507,6 +510,7 @@ func (e *StructuralEngine) forwardPass(
 				flows = append(flows, taint.Flow{
 					Source:      ti.src,
 					SourceLine:  ti.srcLine,
+					SourceFile:  otherFile(ti.srcFile, unit.FilePath),
 					SourceVar:   sourceVar,
 					Sink:        sink,
 					SinkLine:    st.Line,
@@ -650,7 +654,7 @@ func (e *StructuralEngine) forwardPass(
 			}
 		}
 		checked.admit(cleared, st.Assigns, st.Line, e.partialClasses(lang, st.Calls))
-		setTaint(taintInfo{src: carried.src, srcLine: carried.srcLine, cleared: cleared, via: carried.via,
+		setTaint(taintInfo{src: carried.src, srcLine: carried.srcLine, srcFile: carried.srcFile, cleared: cleared, via: carried.via,
 			sqlBuilt: carried.sqlBuilt, throughCall: carried.throughCall || !handsOn(st.Calls)})
 	}
 
@@ -698,10 +702,11 @@ func (e *StructuralEngine) interprocSinkFlows(lang string, unit *taint.Unit, st 
 						sinkFile, sinkLine, sinkFn = unit.FilePath, st.Line, unit.FuncName
 					}
 					path := append([]taint.CallStep{{File: unit.FilePath, Line: st.Line, Func: stepFunc(unit)}}, as.path...)
-					srcFile := ""
-					if sinkFile != unit.FilePath {
+					srcFile := op.ti.srcFile
+					if srcFile == "" {
 						srcFile = unit.FilePath
 					}
+					srcFile = otherFile(srcFile, sinkFile)
 					out = append(out, taint.Flow{
 						Source:     op.ti.src,
 						SourceLine: op.ti.srcLine,
@@ -808,7 +813,7 @@ func (e *StructuralEngine) interprocReturnTaint(lang string, st *taint.Statement
 				}
 				via := append(append([]string(nil), op.ti.via...), sum.name)
 				via = append(via, sum.returnVia[argIdx]...)
-				return taintInfo{src: op.ti.src, srcLine: op.ti.srcLine, cleared: cleared, via: via}, true
+				return taintInfo{src: op.ti.src, srcLine: op.ti.srcLine, srcFile: op.ti.srcFile, cleared: cleared, via: via}, true
 			}
 		}
 	}
@@ -881,7 +886,16 @@ func cloneTaintInfo(ti taintInfo) taintInfo {
 	for k, v := range ti.cleared {
 		cleared[k] = v
 	}
-	return taintInfo{src: ti.src, srcLine: ti.srcLine, cleared: cleared, via: append([]string(nil), ti.via...), sqlBuilt: ti.sqlBuilt, throughCall: ti.throughCall}
+	return taintInfo{src: ti.src, srcLine: ti.srcLine, srcFile: ti.srcFile, cleared: cleared, via: append([]string(nil), ti.via...), sqlBuilt: ti.sqlBuilt, throughCall: ti.throughCall}
+}
+
+// otherFile is file when it is not the reporting file, else empty: a flow
+// names its source's file only when the source is elsewhere.
+func otherFile(file, reporting string) string {
+	if file == reporting {
+		return ""
+	}
+	return file
 }
 
 // sortedReads returns a deterministically ordered copy of a read/call slice so

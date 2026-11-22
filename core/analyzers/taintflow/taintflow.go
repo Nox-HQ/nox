@@ -324,6 +324,13 @@ func (a *Analyzer) toFinding(flow *taint.Flow) findings.Finding {
 	// does not move the finding's identity.
 	if len(flow.Path) > 0 {
 		meta["flow_path"] = callPath(flow)
+		if len(flow.OtherPaths) > 0 {
+			all := []string{meta["flow_path"]}
+			for _, p := range flow.OtherPaths {
+				all = append(all, renderPath(p, flow))
+			}
+			setFlowPaths(meta, all)
+		}
 	}
 	if flow.SourceFile != "" {
 		meta["source_file"] = flow.SourceFile
@@ -361,9 +368,55 @@ func viaPath(via []string) string {
 
 // callPath renders a flow's calls and its sink, caller first, with each
 // file as the scan names it: `handler (app.py:6) -> run (app.py:2)`.
+// addFlowPaths records cross's call paths on the scan's finding i, which
+// already reports the same sink: the cross-file caller is another injection
+// point behind it, not a second finding. A finding with no call path (the sink
+// reached in its own function) has no path list to extend.
+func addFlowPaths(fs *findings.FindingSet, i int, cross findings.Finding) {
+	have := fs.Findings()[i].Metadata
+	if have["flow_path"] == "" || cross.Metadata["flow_path"] == "" {
+		return
+	}
+	all := flowPaths(have)
+	for _, p := range flowPaths(cross.Metadata) {
+		if !slices.Contains(all, p) {
+			all = append(all, p)
+		}
+	}
+	if len(all) == len(flowPaths(have)) {
+		return
+	}
+	fs.SetMetadata(i, "flow_paths", strings.Join(all, flowPathSep))
+	fs.SetMetadata(i, "flow_path_count", strconv.Itoa(len(all)))
+}
+
+// flowPaths is every call path a finding's metadata records.
+func flowPaths(meta map[string]string) []string {
+	if all := meta["flow_paths"]; all != "" {
+		return strings.Split(all, flowPathSep)
+	}
+	return []string{meta["flow_path"]}
+}
+
 func callPath(flow *taint.Flow) string {
-	steps := make([]string, 0, len(flow.Path)+1)
-	for _, s := range flow.Path {
+	return renderPath(flow.Path, flow)
+}
+
+// flowPathSep separates the paths in flow_paths; " -> " joins the steps of one.
+const flowPathSep = "; "
+
+// setFlowPaths records every call path reaching a finding's sink: flow_paths
+// lists them (the first is flow_path) and flow_path_count counts the callers,
+// each a separate injection point behind the one finding.
+func setFlowPaths(meta map[string]string, all []string) {
+	meta["flow_paths"] = strings.Join(all, flowPathSep)
+	meta["flow_path_count"] = strconv.Itoa(len(all))
+}
+
+// renderPath renders path, caller first, ending at flow's sink.
+func renderPath(path []taint.CallStep, flow *taint.Flow) string {
+	steps := make([]string, 0, len(path)+1)
+	for _, s := range path {
 		steps = append(steps, fmt.Sprintf("%s (%s:%d)", stepName(s.Func), s.File, s.Line))
 	}
 	steps = append(steps, fmt.Sprintf("%s (%s:%d)", stepName(flow.FuncName), flow.FilePath, flow.SinkLine))
@@ -423,24 +476,27 @@ func MergeCrossFile(fs *findings.FindingSet, cross []findings.Finding) (added in
 		rule, file string
 		line       int
 	}
-	existing := map[at]bool{}
+	existing := map[at]int{}
 	param := map[at]bool{}
-	for _, f := range fs.Findings() {
+	for i, f := range fs.Findings() {
 		k := at{f.RuleID, f.Location.FilePath, f.Location.StartLine}
 		if f.Metadata["source_kind"] == string(engine.SourceParameter) {
 			param[k] = true
 			continue
 		}
-		existing[k] = true
+		if _, ok := existing[k]; !ok {
+			existing[k] = i
+		}
 	}
 	var replaced []at
 	for i := range cross {
 		f := cross[i]
 		k := at{f.RuleID, f.Location.FilePath, f.Location.StartLine}
-		if existing[k] {
+		if j, ok := existing[k]; ok {
+			addFlowPaths(fs, j, f)
 			continue
 		}
-		existing[k] = true
+		existing[k] = len(fs.Findings())
 		if param[k] {
 			replaced = append(replaced, k)
 		}

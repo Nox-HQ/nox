@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Taint follows a source across files (ADR 0007). A call the call graph
+  binds to exactly one function in another file of the same language is
+  analysed through that function's summary -- the parameters it hands to a
+  sink, returns or sanitizes, and a request value it returns -- computed per
+  file and iterated across files to a fixed point (at most 4 rounds). A
+  handler that reads the request and calls a DAO, a service or a shell helper
+  in another module is now a finding, reported at the sink with the calls as
+  evidence (`flow_path`, and `source_file` for the source's file). A
+  parameter-SQL finding at a sink a real source now reaches is replaced by
+  the sourced one and recorded in the withheld ledger. RealVuln development
+  split F3 15.6 -> 16.5 (Java 7.0 -> 8.0, JavaScript/TypeScript 21.5 ->
+  23.0).
 - Tree-sitter modules for Python, JavaScript, TypeScript/TSX and Java (ADR
   0006). `scripts/treesitter/build.sh` compiles
   the official tree-sitter runtime (v0.27.2) and pinned upstream grammars to
@@ -137,6 +149,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- An interprocedural taint finding (a source in one function reaching a sink
+  in another) is reported at the sink, inside the helper, instead of at the
+  call site, with the call path as evidence (ADR 0007). Its fingerprint
+  changes once. Several callers reaching one sink are one finding:
+  `flow_paths` lists every caller's path and `flow_path_count` counts them,
+  so no injection point is dropped.
 - Python statements are segmented from the tree-sitter parse tree (ADR 0006).
   Extraction is unchanged; the tree decides where a statement starts and
   ends and what belongs to a block, where the line segmenter guessed:

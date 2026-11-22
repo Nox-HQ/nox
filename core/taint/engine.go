@@ -229,6 +229,10 @@ type Flow struct {
 	// step is a call that carried the tainted value one function closer to
 	// the sink. Empty for an intraprocedural flow.
 	Path []CallStep
+	// OtherPaths are the further call paths that reach this same sink. One
+	// flow is reported per sink and rule (ADR 0007); each caller that reaches
+	// it is a separate injection point, so its path is kept here, not dropped.
+	OtherPaths [][]CallStep
 }
 
 // CallStep is one call on an interprocedural flow's path: the call at Line

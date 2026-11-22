@@ -73,6 +73,36 @@ func TestScan_CrossFileTaint(t *testing.T) {
 		}
 	})
 
+	t.Run("a getter in another file names its file as the source", func(t *testing.T) {
+		got := taintFindings(t, writeCrossTree(t, map[string]string{
+			"app/inputs.py": "from flask import request\n\n\ndef user_name():\n    return request.args.get(\"name\")\n",
+			"app/views.py":  "import os\nfrom app.inputs import user_name\n\n\ndef handler():\n    n = user_name()\n    os.system(\"ls \" + n)\n",
+		}))
+		if len(got) != 1 || got[0].Location.FilePath != "app/views.py" || got[0].Location.StartLine != 7 {
+			t.Fatalf("want one finding at app/views.py:7, got %+v", got)
+		}
+		// The source line is the getter's, so the file must be too.
+		if m := got[0].Metadata; m["source_file"] != "app/inputs.py" || m["source_line"] != "5" {
+			t.Errorf("source %s:%s, want app/inputs.py:5", m["source_file"], m["source_line"])
+		}
+	})
+
+	t.Run("a caller in the sink's file and one in another: one finding, both paths", func(t *testing.T) {
+		local := helpers + "\n\ndef local_handler():\n    run_cmd(request.args.get(\"q\"))\n"
+		got := taintFindings(t, writeCrossTree(t, map[string]string{
+			"app/helpers.py": "from flask import request\n" + local,
+			"app/views.py":   views,
+		}))
+		if len(got) != 1 || got[0].Location.FilePath != "app/helpers.py" || got[0].Location.StartLine != 6 {
+			t.Fatalf("want one finding at app/helpers.py:6, got %+v", got)
+		}
+		m := got[0].Metadata
+		want := "local_handler (app/helpers.py:10) -> run_cmd (app/helpers.py:6); handler (app/views.py:7) -> run_cmd (app/helpers.py:6)"
+		if m["flow_paths"] != want || m["flow_path_count"] != "2" {
+			t.Errorf("flow_paths = %q (count %q), want %q", m["flow_paths"], m["flow_path_count"], want)
+		}
+	})
+
 	t.Run("a helper that sanitizes is no finding", func(t *testing.T) {
 		safe := strings.Replace(helpers, `os.system("ls " + c)`, `os.system("ls " + shlex.quote(c))`, 1)
 		if got := taintFindings(t, writeCrossTree(t, map[string]string{"app/helpers.py": "import shlex\n" + safe, "app/views.py": views})); len(got) != 0 {

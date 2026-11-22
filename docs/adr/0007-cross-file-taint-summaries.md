@@ -69,9 +69,14 @@ sink.
 4. **Reported at the sink.** An interprocedural flow -- same-file or
    cross-file -- is reported at the sink statement inside the function that
    reaches it, in that function's file. The call path, caller first with
-   each step's file and line, is the evidence. One finding per sink and
-   rule: several callers reaching one sink are one defect, and the first
-   path in a deterministic order is the one shown.
+   each step's file and line, is the evidence (`flow_path`). One finding per
+   sink and rule, carrying every path that reaches it: each caller that hands
+   a source to the sink is a separate injection point, so `flow_paths` lists
+   them all (the first, in a deterministic order, is `flow_path`) and
+   `flow_path_count` counts them. A cross-file caller of a sink a same-file
+   caller already reaches adds its path to that finding instead of a second
+   one. A source read in another file (a getter resolved across files) is
+   named with its file (`source_file`), since its line is that file's.
 5. **A real source supersedes a parameter.** A parameter-SQL finding
    (`paramSQLFlows`, low confidence: no source in the file) at a sink a
    source now reaches through a resolved call is replaced by the sourced
@@ -79,6 +84,13 @@ sink.
 
 ## Consequences
 
+- Measured on the RealVuln development split (A/B of built binaries over one
+  pinned tree): F3 15.6 -> 16.5 (Java 7.0 -> 8.0, JavaScript/TypeScript
+  21.5 -> 23.0, Python 23.2 -> 23.1). Cross-file flows: +33 labelled, +70
+  unlabelled. Same-file flows moved to the sink: +12 labelled where the label
+  is at the sink, -5 where it is at the call site (vfapi's four handlers
+  into one `run_sql_query`, pygoat's `command_out`); those call sites stay on
+  the finding as its paths.
 - Fingerprints of existing same-file interprocedural findings change once,
   because their location moves from the call site to the sink. The rule-diff
   ledger records it in the PR that makes the change.

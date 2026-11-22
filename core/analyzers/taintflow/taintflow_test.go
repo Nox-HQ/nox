@@ -289,6 +289,11 @@ def b():
 	if items := fs.Findings(); len(items) != 1 || items[0].Location.StartLine != 2 {
 		t.Fatalf("want one finding at line 2, got %+v", items)
 	}
+	// Each caller is a separate injection point: one finding, every path.
+	m := fs.Findings()[0].Metadata
+	if m["flow_path_count"] != "2" || m["flow_paths"] != "a (app.py:5) -> run (app.py:2); b (app.py:9) -> run (app.py:2)" {
+		t.Errorf("flow_paths = %q (count %q), want both callers", m["flow_paths"], m["flow_path_count"])
+	}
 
 	art2 := writeArtifact(t, dir, "own.py", `def run(c):
     os.system(request.args.get("z") + c)

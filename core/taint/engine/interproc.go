@@ -1,6 +1,10 @@
 package engine
 
-import "github.com/nox-hq/nox/core/taint"
+import (
+	"slices"
+
+	"github.com/nox-hq/nox/core/taint"
+)
 
 // This file adds SAME-FILE interprocedural taint analysis on top of the
 // intraprocedural StructuralEngine, via FUNCTION SUMMARIES. It is the multiplier
@@ -174,7 +178,7 @@ func onePerSink(flows []taint.Flow) []taint.Flow {
 			direct[at{flows[i].FilePath, flows[i].Sink.RuleID, flows[i].SinkLine}] = true
 		}
 	}
-	taken := map[at]bool{}
+	taken := map[at]int{}
 	out := flows[:0:0]
 	for i := range flows {
 		f := &flows[i]
@@ -183,13 +187,34 @@ func onePerSink(flows []taint.Flow) []taint.Flow {
 			continue
 		}
 		k := at{f.FilePath, f.Sink.RuleID, f.SinkLine}
-		if direct[k] || taken[k] {
+		if direct[k] {
 			continue
 		}
-		taken[k] = true
+		if j, ok := taken[k]; ok {
+			// Another caller reaching the same sink: one finding, every path.
+			if !hasPath(out[j], f.Path) {
+				out[j].OtherPaths = append(out[j].OtherPaths, f.Path)
+			}
+			out[j].OtherPaths = append(out[j].OtherPaths, f.OtherPaths...)
+			continue
+		}
+		taken[k] = len(out)
 		out = append(out, *f)
 	}
 	return out
+}
+
+// hasPath reports whether f already carries path, as its own or another's.
+func hasPath(f taint.Flow, path []taint.CallStep) bool {
+	if slices.Equal(f.Path, path) {
+		return true
+	}
+	for _, p := range f.OtherPaths {
+		if slices.Equal(p, path) {
+			return true
+		}
+	}
+	return false
 }
 
 // SourceParameter is the source kind of a flow from a function's own
@@ -467,6 +492,9 @@ func (e *StructuralEngine) passGetterSource(lang string, u *taint.Unit, summarie
 	}
 	if returns == 0 {
 		return nil
+	}
+	if first.srcFile == "" {
+		first.srcFile = u.FilePath
 	}
 	return first
 }
