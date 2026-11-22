@@ -25,6 +25,7 @@ import (
 
 	"github.com/nox-hq/nox-core/evidence"
 	"github.com/nox-hq/nox/core/analyzers/flowunits"
+	"github.com/nox-hq/nox/core/callgraph"
 	"github.com/nox-hq/nox/core/discovery"
 	"github.com/nox-hq/nox/core/findings"
 	"github.com/nox-hq/nox/core/reasoning"
@@ -315,6 +316,18 @@ func (a *Analyzer) toFinding(flow *taint.Flow) findings.Finding {
 		meta["interprocedural"] = "true"
 		meta["via"] = strings.Join(flow.Via, " -> ")
 	}
+	// The calls the tainted value took, caller first, ending at the sink: the
+	// evidence for an interprocedural flow reported where the sink is (ADR
+	// 0007). Not call_path, which the call-graph stage writes as the path from
+	// an entry point to the function -- reachability, a different claim. Kept
+	// out of the message, which the fingerprint hashes, so a caller moving
+	// does not move the finding's identity.
+	if len(flow.Path) > 0 {
+		meta["flow_path"] = callPath(flow)
+	}
+	if flow.SourceFile != "" {
+		meta["source_file"] = flow.SourceFile
+	}
 	// For a role-aware prompt-injection (LLM) sink, record the chat role the
 	// tainted value lands in so the verdict is auditable: "system"/"developer" is
 	// the trust-inverting injection this keeps; a user-role placement behind a
@@ -344,4 +357,107 @@ func viaPath(via []string) string {
 		quoted[i] = fmt.Sprintf("%q", v)
 	}
 	return "helper " + strings.Join(quoted, " -> ")
+}
+
+// callPath renders a flow's calls and its sink, caller first, with each
+// file as the scan names it: `handler (app.py:6) -> run (app.py:2)`.
+func callPath(flow *taint.Flow) string {
+	steps := make([]string, 0, len(flow.Path)+1)
+	for _, s := range flow.Path {
+		steps = append(steps, fmt.Sprintf("%s (%s:%d)", stepName(s.Func), s.File, s.Line))
+	}
+	steps = append(steps, fmt.Sprintf("%s (%s:%d)", stepName(flow.FuncName), flow.FilePath, flow.SinkLine))
+	return strings.Join(steps, " -> ")
+}
+
+func stepName(fn string) string {
+	if fn == "" {
+		return "<module>"
+	}
+	return fn
+}
+
+// ScanCrossFile returns the findings for flows whose path crosses a file
+// (ADR 0007): a source in one file reaching a sink in another through calls
+// the call graph bound by the files' imports. files are the units the scan
+// extracted; g is the source call graph built from them. Each finding is at
+// the sink, with the call path as evidence. MergeCrossFile puts them beside
+// the per-file findings.
+func (a *Analyzer) ScanCrossFile(files []callgraph.FileUnits, g *callgraph.Graph) []findings.Finding {
+	if g == nil || len(files) == 0 {
+		return nil
+	}
+	in := make([]engine.CrossFile, 0, len(files))
+	for _, f := range files {
+		cf := engine.CrossFile{Path: f.Path, Units: f.Units}
+		if callees := g.CrossFileCallees(f.Path); len(callees) > 0 {
+			cf.Callees = make(map[string]engine.CalleeRef, len(callees))
+			for call, c := range callees {
+				cf.Callees[call] = engine.CalleeRef{File: c.File, Func: c.Func}
+			}
+		}
+		in = append(in, cf)
+	}
+	flows := a.eng.AnalyzeCrossFile(in)
+	out := make([]findings.Finding, 0, len(flows))
+	for i := range flows {
+		if flows[i].Sink.OptIn && !a.optIn[flows[i].Sink.RuleID] {
+			continue
+		}
+		f := a.toFinding(&flows[i])
+		f.Metadata["cross_file"] = "true"
+		out = append(out, f)
+	}
+	return out
+}
+
+// MergeCrossFile adds cross-file findings to fs, the scan's findings, one per
+// sink and rule: a sink a per-file flow already reports keeps that finding,
+// and a parameter-SQL finding there (no source in its file, low confidence)
+// is replaced by the flow that now has one (ADR 0007, rule 5). It returns how
+// many were added, and supersede, which removes the parameter findings they
+// replace; the caller runs it where a removal is recorded (the scan's
+// withheld ledger), never silently.
+func MergeCrossFile(fs *findings.FindingSet, cross []findings.Finding) (added int, supersede func()) {
+	type at struct {
+		rule, file string
+		line       int
+	}
+	existing := map[at]bool{}
+	param := map[at]bool{}
+	for _, f := range fs.Findings() {
+		k := at{f.RuleID, f.Location.FilePath, f.Location.StartLine}
+		if f.Metadata["source_kind"] == string(engine.SourceParameter) {
+			param[k] = true
+			continue
+		}
+		existing[k] = true
+	}
+	var replaced []at
+	for i := range cross {
+		f := cross[i]
+		k := at{f.RuleID, f.Location.FilePath, f.Location.StartLine}
+		if existing[k] {
+			continue
+		}
+		existing[k] = true
+		if param[k] {
+			replaced = append(replaced, k)
+		}
+		fs.Add(f)
+		added++
+	}
+	drop := map[at]bool{}
+	for _, k := range replaced {
+		drop[k] = true
+	}
+	return added, func() {
+		if len(drop) == 0 {
+			return
+		}
+		fs.RemoveWhere(func(f *findings.Finding) bool {
+			return f.Metadata["source_kind"] == string(engine.SourceParameter) &&
+				drop[at{f.RuleID, f.Location.FilePath, f.Location.StartLine}]
+		})
+	}
 }

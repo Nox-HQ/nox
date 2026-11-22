@@ -691,17 +691,30 @@ func (e *StructuralEngine) interprocSinkFlows(lang string, unit *taint.Unit, st 
 					}
 					via := append(append([]string(nil), op.ti.via...), sum.name)
 					via = append(via, as.via...)
+					// Reported at the sink, inside the function that reaches
+					// it (ADR 0007); this call is the first step of the path.
+					sinkFile, sinkLine, sinkFn := as.file, as.line, as.fn
+					if sinkLine == 0 {
+						sinkFile, sinkLine, sinkFn = unit.FilePath, st.Line, unit.FuncName
+					}
+					path := append([]taint.CallStep{{File: unit.FilePath, Line: st.Line, Func: stepFunc(unit)}}, as.path...)
+					srcFile := ""
+					if sinkFile != unit.FilePath {
+						srcFile = unit.FilePath
+					}
 					out = append(out, taint.Flow{
 						Source:     op.ti.src,
 						SourceLine: op.ti.srcLine,
 						SourceVar:  op.sourceVar,
 						Sink:       as.sink,
-						SinkLine:   st.Line,
+						SinkLine:   sinkLine,
 						SinkCall:   as.sink.Call,
-						FilePath:   unit.FilePath,
-						FuncName:   unit.FuncName,
+						FilePath:   sinkFile,
+						FuncName:   sinkFn,
 						Language:   unit.Language,
 						Via:        via,
+						SourceFile: srcFile,
+						Path:       path,
 						// The helper's summary holds only what it hands on;
 						// what the caller bound through a call is still the
 						// caller's to report.
@@ -847,6 +860,12 @@ func (e *StructuralEngine) rhsIsLoneLocalCall(st *taint.Statement, summaries map
 // also resolves. An unknown callee returns nil — we never invent a summary,
 // which keeps unknown/cross-file calls fail-safe (no false positive).
 func resolveLocalCallee(rawCall string, summaries map[string]*funcSummary) *funcSummary {
+	// A call the call graph bound to a function in another file (ADR 0007)
+	// is keyed by the exact call, and wins: it was resolved by the file's
+	// imports, not by a name that happens to match.
+	if sum, ok := summaries[externalKey(rawCall)]; ok {
+		return sum
+	}
 	for _, key := range suffixKeys(rawCall) {
 		if sum, ok := summaries[key]; ok {
 			return sum
