@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 267,
+  "version": 269,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1131,8 +1131,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-crypto-and-config-recall": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "#1144, #1145, #1146: APPCFG-001..006; dev F3 10.6 -\u003e 15.1, held-out 9.9 -\u003e 11.2"
+      ],
+      "started_at": "2026-11-22T14:18:41.178307+01:00",
+      "completed_at": "2026-11-22T14:18:41.194222+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-framework-request-sources": {
@@ -1282,5 +1288,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-11-21T20:26:23.802786+01:00"
+  "updated_at": "2026-11-22T14:18:41.194223+01:00"
 }

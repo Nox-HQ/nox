@@ -30,5 +30,12 @@
     "duplicate-merged": "the vulnerability source reported one vulnerability under two identifiers (nox_same_as, e.g. a Go module advisory and its GitHub advisory); they are now one finding that keeps every id in aliases",
     "equivalent-accepted": "the absence rule's required property is now also satisfied by its standard equivalent, written the way that standard writes it"
   },
-  "entries": []
+  "entries": [
+    {
+      "rule": "DATA-001",
+      "classification": "applicability-narrowed",
+      "reason": "DATA-001 no longer reports an e-mail address in seed data or a migration (core.IsSeedDataPath: seed.ts, seed_data.py, DemoDataSeeder.java, V2__seed.sql, seeds/ and migrations/ trees): those addresses are the demo users the file creates. warden 20 -> 14 is six lines of internal/infrastructure/git/seed_test.go configuring user.email in a test's scratch git repository; the file matches by name (it tests seeding a worktree, not a database), and the address is a throwaway commit identity, not personal data in code.",
+      "pr": 1147
+    }
+  ]
 }

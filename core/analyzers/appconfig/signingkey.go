@@ -106,7 +106,9 @@ var envName = regexp.MustCompile(`^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$`)
 // isSecretName rejects an identifier that holds something ABOUT a secret.
 func isSecretName(name string) bool {
 	n := strings.ToLower(name)
-	for _, w := range []string{"name", "id", "path", "file", "header", "param", "type", "env", "label", "url", "prefix", "len", "field", "arn", "ref", "manager", "client_secret", "clientsecret", "store", "version", "rotation", "expir", "ttl", "algorithm", "alg", "preview", "hint", "tag", "show", "encrypted", "expected", "mask"} {
+	for _, w := range []string{"name", "id", "path", "file", "header", "param", "type", "env", "label", "url", "prefix", "len", "field", "arn", "ref", "manager", "client_secret", "clientsecret", "store", "version", "rotation", "expir", "ttl", "algorithm", "alg", "preview", "hint", "tag", "show", "encrypted", "expected", "mask",
+		// A cloud credential is not a signing key; the secrets rules report it.
+		"aws", "access_key", "accesskey"} {
 		if strings.Contains(n, w) {
 			return false
 		}
