@@ -62,11 +62,19 @@ var jsBodyKinds = map[string]bool{"statement_block": true, "class_body": true}
 // jsTreeLines returns the logical lines of a JavaScript-family source with the
 // tree's statement extents joined, or false when the parser declines it.
 func jsTreeLines(path string, content []byte, regions []lexctx.Region) ([]logicalLine, bool) {
+	return treeJoinedLines(jsGrammar(path), jsStatementKinds, jsBodyKinds, content, regions)
+}
+
+// treeJoinedLines returns the logical lines of a brace-delimited source with
+// the physical lines of each statement of stmtKinds joined, unless it holds a
+// node of bodyKinds; false when the parser declines the file. The grammar is
+// a treesitter language name.
+func treeJoinedLines(grammar string, stmtKinds, bodyKinds map[string]bool, content []byte, regions []lexctx.Region) ([]logicalLine, bool) {
 	p := sharedTreeParser()
 	if p == nil {
 		return nil, false
 	}
-	tree, lim := p.ParseFile(context.Background(), jsGrammar(path), content, treesitter.Budget{})
+	tree, lim := p.ParseFile(context.Background(), grammar, content, treesitter.Budget{})
 	if lim != nil {
 		return nil, false
 	}
@@ -74,7 +82,7 @@ func jsTreeLines(path string, content []byte, regions []lexctx.Region) ([]logica
 	// pre-order with parents earlier, so one backward pass carries it up.
 	hasBody := make([]bool, len(tree.Nodes))
 	for i := len(tree.Nodes) - 1; i > 0; i-- {
-		if hasBody[i] || jsBodyKinds[tree.Nodes[i].Kind] {
+		if hasBody[i] || bodyKinds[tree.Nodes[i].Kind] {
 			hasBody[tree.Nodes[i].Parent] = true
 		}
 	}
@@ -93,7 +101,7 @@ func jsTreeLines(path string, content []byte, regions []lexctx.Region) ([]logica
 	}
 	join := map[int]bool{}
 	for i, n := range tree.Nodes {
-		if !jsStatementKinds[n.Kind] || hasBody[i] || n.End <= n.Start {
+		if !stmtKinds[n.Kind] || hasBody[i] || n.End <= n.Start {
 			continue
 		}
 		first, last := row(n.Start), row(n.End-1)

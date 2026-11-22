@@ -87,3 +87,18 @@ func TestJSTreeTypeScriptGrammar(t *testing.T) {
 		t.Error("jsGrammar chose the wrong grammar")
 	}
 }
+
+// A chain continued after a line ending in a comment keeps its receiver: the
+// comment is blanked to spaces in the code view, and those spaces would
+// split the chain as surely as the line break.
+func TestJSTreeChainAfterATrailingComment(t *testing.T) {
+	us := jsTreeUnits(t, "r.js", "function h(req, db) {\n  const q = req.query.q;\n  return db // the pool\n    .query(q);\n}\n")
+	for _, u := range us {
+		for _, st := range u.stmts {
+			if slices.Contains(st.calls, "db.query") {
+				return
+			}
+		}
+	}
+	t.Fatalf("no statement calls db.query; got %+v", us)
+}

@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 281,
+  "version": 283,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1185,8 +1185,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-java-front-end-same-gate-kotlin-follows": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "Java statement joining on by default; +3 labelled, 0 lost on all 203 repos; Kotlin follows"
+      ],
+      "started_at": "2026-11-22T19:08:35.969875+01:00",
+      "completed_at": "2026-11-22T19:08:35.990486+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-js-ts-front-end-same-gate": {
@@ -1324,5 +1330,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-11-22T18:39:47.178306+01:00"
+  "updated_at": "2026-11-22T19:08:35.990486+01:00"
 }

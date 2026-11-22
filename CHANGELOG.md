@@ -169,6 +169,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   HTML and file paths from records looked up by a request id, existing
   precision gaps the completed flows now reach); development split F3
   15.5 -> 15.6, JS/TS 21.1 -> 21.5.
+- Java statements that span lines are read as one statement, from the
+  tree-sitter parse tree, as JavaScript's are. SQL concatenated across lines
+  with no bracket open (`String q = "SELECT … " +` then `"WHERE id = " + id;`)
+  was two statements and q never read id. Declarations are joined per
+  declarator; method, lambda and anonymous-class bodies keep their own
+  statements. A joined statement's finding is reported on its first line.
+  RealVuln, all 203 repositories, the same binary with and without it: +3
+  labelled findings (a native query, an XPath evaluation, a
+  deserialization), 7 reported on the statement's first line and still
+  matched, none lost; 54 unmatched added, flows the engine already models
+  reaching further through servlet HTML assembled over many lines.
+- A call chain continued after a line that ends in a comment keeps its
+  receiver: the comment's blanked spaces split `db // pool` then `.query(q)`
+  into a bare `query`, as the line break did before.
 
 - The application-configuration analyzer matches each pattern only on the
   lines around an occurrence of its literal, not across the whole file: on
