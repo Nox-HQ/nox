@@ -998,6 +998,23 @@ func (fs *FindingSet) RemoveByRuleIDsInDirs(ruleIDs, dirSegments []string) {
 	fs.items = kept
 }
 
+// RemoveByRuleIDsWhere removes findings matching ruleIDs whose file path
+// satisfies inPath.
+func (fs *FindingSet) RemoveByRuleIDsWhere(ruleIDs []string, inPath func(path string) bool) {
+	if len(ruleIDs) == 0 || inPath == nil {
+		return
+	}
+	kept := make([]Finding, 0, len(fs.items))
+	for i := range fs.items {
+		f := fs.items[i]
+		if matchRulePatterns(f.RuleID, ruleIDs) && inPath(f.Location.FilePath) {
+			continue
+		}
+		kept = append(kept, f)
+	}
+	fs.items = kept
+}
+
 // pathHasSegment reports whether any slash-separated segment of path is in set.
 func pathHasSegment(path string, set map[string]struct{}) bool {
 	for _, seg := range strings.Split(filepath.ToSlash(path), "/") {

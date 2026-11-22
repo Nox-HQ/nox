@@ -119,6 +119,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whole-file pass per file. Identical findings on all 45,372 source files of
   the RealVuln corpus; a test holds the two modes equal on multi-line cases.
 
+- Code-pattern findings inside a committed dependency tree are dropped:
+  node_modules, bower_components, jspm_packages, site-packages,
+  dist-packages, a virtualenv (.venv, venv) and vendor. Discovery honours
+  .gitignore, so these are scanned only where a repository commits them; the
+  findings describe the dependency's code, and a known vulnerability in it is
+  the dependency analyzer's to report. Secrets (SEC-*), the DATA rules other
+  than DATA-001, and dependency facts are kept. DATA-001 (an e-mail address)
+  is also dropped in seed data and migrations: seed.ts, seed_data.py,
+  DemoDataSeeder.java, V2__seed.sql, seeds/ and migrations/ trees; the
+  addresses are the demo users the file creates. Both are recorded as
+  withheld stages. RealVuln: 1,663 unmatched findings removed (DATA-001
+  1,350), no matched finding lost; development split F3 15.1 -> 15.4 (JS/TS
+  precision 0.14 -> 0.21), held-out 11.2 -> 11.5.
+
 ### Fixed
 
 - `Files.write(Paths.get(p), data)` was reported as XSS, through the generic

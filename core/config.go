@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	osvsource "github.com/nox-hq/nox-core/vulnsource/osv"
@@ -313,6 +314,61 @@ func ContextDowngradeRulePatterns() []string {
 //     fixture is a real leak.
 func NoiseDirDropRulePatterns() []string {
 	return []string{"AI-*", "MCP-*", "DATA-001"}
+}
+
+// ThirdPartyDirs are directory segments that hold a committed dependency
+// tree: an installed package's own code, not the project's. Discovery
+// honours .gitignore, so these are scanned only where a repository commits
+// them (a checked-in node_modules, a virtualenv, a vendored copy of jQuery).
+func ThirdPartyDirs() []string {
+	return []string{
+		"node_modules", "bower_components", "jspm_packages",
+		"site-packages", "dist-packages", ".venv", "venv",
+		"vendor",
+	}
+}
+
+// ThirdPartyDropRulePatterns are the families dropped inside a third-party
+// tree: the code-pattern families, whose finding is about how code was
+// written, and that code is the dependency's. A known vulnerability in the
+// dependency is the dependency analyzer's to report, from the manifest.
+//
+// Kept: SEC-* (a secret is graded by the secret itself, as in
+// ContextDowngradeRulePatterns), the DATA-* rules other than DATA-001 (a real
+// card number or national ID is a leak wherever it sits), and VULN-*,
+// CONT-*, LIC-*.
+func ThirdPartyDropRulePatterns() []string {
+	return []string{
+		"AI-*", "MCP-*", "AGENT-*", "IAC-*", "TAINT-*", "SLOP-*", "VARIANT-*",
+		"CRYPTO-*", "APPCFG-*", "HARDEN-*", "DATA-001",
+	}
+}
+
+// seedFileName matches a file that seeds a database with demo or development
+// records: seed.ts, seeds.py, seed_data.py, seed-users.js, db_seed.py,
+// DemoDataSeeder.java, SeedService.java, V2__seed.sql.
+var seedFileName = regexp.MustCompile(`(?i)(?:^|[_\-.])seed(?:s|er|ers|ing|data|_data|-data)?(?:$|[_\-.])|seeder|seedservice|demodata`)
+
+// IsSeedDataPath reports whether path holds seed data or a schema migration:
+// a seed file by name, or a file under a seeds, seeders or migrations
+// directory. The e-mail addresses in them are the demo users and fixtures
+// the file exists to create; DATA-001 reports hard-coded personal data, and
+// these are made up. Only DATA-001 is dropped there (see the scan stage):
+// a credential in a seed file is still a credential.
+func IsSeedDataPath(path string) bool {
+	p := strings.ToLower(filepath.ToSlash(path))
+	parts := strings.Split(p, "/")
+	for _, d := range parts[:len(parts)-1] {
+		switch d {
+		case "seed", "seeds", "seeders", "seeding", "migrations", "migration", "db_migrations":
+			return true
+		}
+	}
+	base := parts[len(parts)-1]
+	if i := strings.LastIndexByte(base, '.'); i > 0 {
+		base = base[:i]
+	}
+	return seedFileName.MatchString(base)
 }
 
 // MatchesNonProductionPath reports whether path matches any of the given globs

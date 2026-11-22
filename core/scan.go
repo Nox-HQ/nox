@@ -1716,6 +1716,22 @@ func refineFindings(allFindings *findings.FindingSet, cfg *ScanConfig, opts Scan
 		})
 	}
 
+	// Code-pattern findings inside a committed dependency tree describe the
+	// dependency's code; secrets and dependency facts are kept (see
+	// ThirdPartyDropRulePatterns). RealVuln: 548 such findings across 203
+	// repositories, none matching a label.
+	if !cfg.Scan.GeneratedPaths.Disabled {
+		withheld("code-pattern rule dropped inside a third-party dependency tree", func() {
+			allFindings.RemoveByRuleIDsInDirs(ThirdPartyDropRulePatterns(), ThirdPartyDirs())
+		})
+		// An e-mail address in seed data or a migration is a made-up demo
+		// user. RealVuln development split: 758 DATA-001 findings in seed
+		// files, none matching a label.
+		withheld("e-mail address in seed data or a migration", func() {
+			allFindings.RemoveByRuleIDsWhere([]string{"DATA-001"}, IsSeedDataPath)
+		})
+	}
+
 	// conditional_severity overrides based on rule + path.
 	for _, cs := range cfg.Scan.ConditionalSeverity {
 		if len(cs.Rules) > 0 && len(cs.Paths) > 0 {
