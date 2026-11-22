@@ -67,21 +67,21 @@ misses to convert). We do not.
 
 ### Measurement
 
-- [ ] Commit the RealVuln harness: per-class scorer (`score_nox.py --by-class`), the parallel rescan script with a working timeout on macOS, and the published-run scorer for other tools
-- [ ] Freeze the 70/30 split (seeded, stratified), commit the repo lists, and make every score report dev and held-out separately
-- [ ] Add OWASP Benchmark (Java) and BenchmarkPython: pinned clones, scan script, OWASP's scorer, a baseline score for nox
-- [ ] Java deterministic baseline: decide with the maintainer whether to run a third-party deterministic scanner for comparison only, or use published OWASP Benchmark scorecards
+- [x] Commit the RealVuln harness: per-class scorer (`score_nox.py --by-class`), the parallel rescan script with a working timeout on macOS, and the published-run scorer for other tools
+- [x] Freeze the 70/30 split (seeded, stratified), commit the repo lists, and make every score report dev and held-out separately
+- [x] Add OWASP Benchmark (Java) and BenchmarkPython: pinned clones, scan script, OWASP's scorer, a baseline score for nox
+- [x] Java deterministic baseline: decide with the maintainer whether to run a third-party deterministic scanner for comparison only, or use published OWASP Benchmark scorecards
 
 ### M1 — catalog and noise
 
-- [ ] SQL sinks the catalog did not name (Prisma raw, Drizzle sql.raw, TypeORM query, pg-promise, JPA createNativeQuery, R2DBC, JdbcTemplate.query) — branch feat/taint-sql-sinks
-- [ ] SSRF: a keyword url= argument is the URL; a value in the body is not
-- [ ] Framework request sources: NestJS @Body/@Query/@Param, Next.js route handlers and server actions, Remix loaders/actions, FastAPI parameters, Django class-based views, Express routers mounted from other files
-- [ ] Sinks by class from the dev-split misses: XSS (12% recall), SSRF (15%), path traversal (26%), command injection (24%), open redirect (29%)
-- [ ] Crypto and config recall: hard-coded credentials (37%), weak randomness, cookie flags, CORS, TLS verification off, debug mode, JWT verification off — from the dev-split misses
-- [ ] Noise: DATA-001 in seed data, fixtures and migrations; vendored and committed dependency trees (node_modules, site-packages) treated as third-party; IaC-121–124 and IAC-225 sampled and narrowed per "do not remove rules"
-- [ ] Interprocedural finding location: report at the sink inside the helper with the call path as evidence — needs the maintainer's decision, as it changes every such fingerprint
-- [ ] M1 gate: score dev and held-out, read the new unmatched findings, publish the result in the benchmark doc
+- [x] SQL sinks the catalog did not name (Prisma raw, Drizzle sql.raw, TypeORM query, pg-promise, JPA createNativeQuery, R2DBC, JdbcTemplate.query) — branch feat/taint-sql-sinks
+- [x] SSRF: a keyword url= argument is the URL; a value in the body is not
+- [x] Framework request sources: NestJS @Body/@Query/@Param, Next.js route handlers and server actions, Remix loaders/actions, FastAPI parameters, Django class-based views, Express routers mounted from other files
+- [x] Sinks by class from the dev-split misses: XSS (12% recall), SSRF (15%), path traversal (26%), command injection (24%), open redirect (29%)
+- [x] Crypto and config recall: hard-coded credentials (37%), weak randomness, cookie flags, CORS, TLS verification off, debug mode, JWT verification off — from the dev-split misses
+- [x] Noise: DATA-001 in seed data, fixtures and migrations; vendored and committed dependency trees (node_modules, site-packages) treated as third-party; IaC-121–124 and IAC-225 sampled and narrowed per "do not remove rules"
+- [ ] Interprocedural finding location: report at the sink inside the helper with the call path as evidence — **moved to M2** (decided 2026-11-22): the fingerprint change is made once, with cross-file summaries; on the current engine it could recover at most 8 dev labels
+- [x] M1 gate: score dev and held-out, read the new unmatched findings, publish the result in the benchmark doc
 
 ### M2 — tree-sitter and cross-file taint
 

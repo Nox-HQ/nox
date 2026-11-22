@@ -1381,11 +1381,11 @@
     {
       "id": "task-most-accurate-deterministic-scanner-interprocedural-finding-location",
       "title": "Interprocedural finding location",
-      "description": "Interprocedural finding location: report at the sink inside the helper with the call path as evidence — needs the maintainer's decision, as it changes every such fingerprint",
+      "description": "Interprocedural finding location: report at the sink inside the helper with the call path as evidence — moved to M2 (maintainer, 2026-11-22): the fingerprint change is made once, with cross-file summaries",
       "priority": "medium",
       "estimate": "",
       "depends_on": [
-        "task-most-accurate-deterministic-scanner-noise"
+        "task-most-accurate-deterministic-scanner-cross-file-summaries"
       ],
       "feature_id": "most-accurate-deterministic-scanner",
       "origin": "ai",
@@ -1401,7 +1401,7 @@
       "priority": "medium",
       "estimate": "",
       "depends_on": [
-        "task-most-accurate-deterministic-scanner-interprocedural-finding-location"
+        "task-most-accurate-deterministic-scanner-noise"
       ],
       "feature_id": "most-accurate-deterministic-scanner",
       "origin": "ai",

@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 269,
+  "version": 273,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1195,8 +1195,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-m1-gate": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "docs/benchmarks/2026-11-21-realvuln README 'M1 gate': dev 9.0-\u003e15.4, held-out 5.8-\u003e11.5; Py+JS vs Semgrep dev 22.0/10.7, held-out 15.9/8.7"
+      ],
+      "started_at": "2026-11-22T15:32:43.927263+01:00",
+      "completed_at": "2026-11-22T15:32:43.960426+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-m2-gate": {
@@ -1220,8 +1226,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-noise": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "#1147 (2eeb5af): dependency trees and seed data; 1,663 unmatched removed, 0 matched lost; IAC-121..124 unchanged by maintainer decision"
+      ],
+      "started_at": "2026-11-22T15:32:10.063288+01:00",
+      "completed_at": "2026-11-22T15:32:10.079627+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-parameter-sql-flows-reachable-from-a-route-are": {
@@ -1288,5 +1300,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-11-22T14:18:41.194223+01:00"
+  "updated_at": "2026-11-22T15:32:43.960427+01:00"
 }
