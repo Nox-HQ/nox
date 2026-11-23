@@ -111,10 +111,17 @@ var (
 	ejsRawOutput = regexp.MustCompile(`<%-([\s\S]*?)-?%>`)
 	// Layout and partial helpers whose output is another template.
 	ejsFrameworkHTML = regexp.MustCompile(`^(?:body|(?:include|partial|block|script|style|defineContent)\b.*)$`)
+	// A number, or a name plus or minus a number: a loop counter when the
+	// template declares that name as one.
+	ejsNumber      = regexp.MustCompile(`^\d+(?:\.\d+)?$`)
+	ejsCounterExpr = regexp.MustCompile(`^([A-Za-z_]\w*)(?:\s*[+-]\s*\d+)?$`)
 
 	// JSF, Facelets, Struts, JSP.
 	markupNoEscape = regexp.MustCompile(`\bescape(?:Html)?\s*=\s*["']false["']`)
 	jspRequestExpr = regexp.MustCompile(`<%=\s*request\s*\.\s*(?:getParameter|getHeader|getQueryString|getRequestURI)\b`)
+	// The same expression as the attribute of a tag that includes, imports or
+	// redirects: the value names a resource and is not printed.
+	jspResourceAttr = regexp.MustCompile(`<(?:c:import|c:redirect|c:url|jsp:include|jsp:forward|jsp:param)\b[^>]*?<%=\s*request\s*\.`)
 )
 
 // ScanArtifacts reports unescaped template output across discovered templates.
@@ -243,7 +250,8 @@ func scanEJS(path string, content []byte) []findings.Finding {
 	lastLine := 0
 	for _, m := range ejsRawOutput.FindAllSubmatchIndex(content, -1) {
 		expr := strings.TrimSpace(string(content[m[2]:m[3]]))
-		if expr == "" || ejsFrameworkHTML.MatchString(expr) || stringLiteral.MatchString(expr) {
+		if expr == "" || ejsFrameworkHTML.MatchString(expr) || stringLiteral.MatchString(expr) ||
+			ejsNumericValue(expr, content) {
 			continue
 		}
 		line := 1 + strings.Count(string(content[:m[0]]), "\n")
@@ -266,12 +274,33 @@ func scanMarkup(path string, content []byte) []findings.Finding {
 		case markupNoEscape.MatchString(line):
 			out = append(out, finding(path, i+1, "jsf",
 				"Tag output with escape=\"false\" is printed without HTML escaping"))
-		case jspRequestExpr.MatchString(line):
+		case jspRequestExpr.MatchString(line) && !jspRequestOnlyNamesResource(line):
 			out = append(out, finding(path, i+1, "jsp",
 				"JSP expression prints a request value without HTML escaping"))
 		}
 	}
 	return out
+}
+
+// ejsNumericValue reports whether an EJS expression can only be a number: a
+// numeric literal, or a for-loop counter the template declares, plus or minus
+// a number.
+func ejsNumericValue(expr string, content []byte) bool {
+	if ejsNumber.MatchString(expr) {
+		return true
+	}
+	m := ejsCounterExpr.FindStringSubmatch(expr)
+	if m == nil {
+		return false
+	}
+	counter := regexp.MustCompile(`\bfor\s*\(\s*(?:var|let)?\s*` + regexp.QuoteMeta(m[1]) + `\s*=\s*\d+\s*;`)
+	return counter.Match(content)
+}
+
+// jspRequestOnlyNamesResource reports whether every request expression on the
+// line is the attribute of an include, import or redirect tag.
+func jspRequestOnlyNamesResource(line string) bool {
+	return len(jspResourceAttr.FindAllStringIndex(line, -1)) == len(jspRequestExpr.FindAllStringIndex(line, -1))
 }
 
 func finding(path string, line int, engine, msg string) findings.Finding {
