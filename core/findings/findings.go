@@ -1194,6 +1194,16 @@ func (fs *FindingSet) SetMessage(i int, msg string) {
 	fs.items[i].Message = msg
 }
 
+// SetConfidence replaces finding i's confidence. For a scan stage that
+// establishes more than the analyzer could (core.raiseRouteReachableParameterFlows);
+// confidence is not a fingerprint ingredient, so the identity does not move.
+func (fs *FindingSet) SetConfidence(i int, c Confidence) {
+	if i < 0 || i >= len(fs.items) || !c.IsValid() {
+		return
+	}
+	fs.items[i].Confidence = c
+}
+
 // GatesByDefault reports whether an active finding fails a scan that has no
 // policy. Every finding does, except a dependency vulnerability (VULN-001)
 // nox decided is not impacting: the scan established deterministically that
