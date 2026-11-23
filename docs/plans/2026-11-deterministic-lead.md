@@ -97,6 +97,13 @@ misses to convert). We do not.
 - [x] Binary size and parse-time budget measured and recorded per language — docs/benchmarks/2026-11-23-treesitter-budget; the budget is now counted work, not time, so a parse no longer depends on machine load
 - [x] M2 gate: dev and held-out, OWASP Benchmark, rule-diff corpus, published — targets **not met**: F3 17.0 / 12.8 (target 20), injection recall 37.0% / 27.8% (target 45%); OWASP Java 56.3, Python 52.8 (Python tree front-end regression); docs/benchmarks/2026-11-21-realvuln#m2-gate-2026-11-23
 
+### M2 follow-up — the gap to the M2 targets (decided 2026-11-23, before M3)
+
+- [x] Python tree-reader regression on OWASP BenchmarkPython: tab-indented `match` statements lost their case structure; 52.8 -> 56.1
+- [ ] Sinks the catalog does not recognise: the largest share of dev injection misses
+- [ ] Java recall: F3 a third to a half of the other languages'
+- [ ] Fastify `reply.send({ ... })` read as XSS: an object serialised as JSON
+
 ### M3 — remaining classes and languages
 
 - [ ] Mass assignment where the framework states it: Django ModelForm fields='__all__', Spring entity binding, Mongoose create(req.body), Rails permit!, NestJS DTO without whitelist
