@@ -2,6 +2,7 @@ package engine
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/nox-hq/nox/core/lexctx"
@@ -86,6 +87,37 @@ func TestPythonTreeSegmentation(t *testing.T) {
 		u := unitNamed(treeUnits(t, "@app.route('/u/<uid>')\ndef show(uid, fmt='json'):\n    return uid\n"), "show")
 		if u == nil || !slices.Equal(u.params, []string{"uid", "fmt"}) || u.headerLine != 2 {
 			t.Fatalf("got %+v", u)
+		}
+	})
+	// A match statement's block starts on the header's row in the grammar,
+	// though its case clauses are on the lines below. Read as a one-line
+	// body, the cases were given the header's indentation plus four spaces:
+	// under tab indentation deeper than their own bodies, which then left
+	// every case and read as unconditional assignments in sequence, the last
+	// one overwriting a tainted value.
+	for _, indent := range []string{"\t", "    "} {
+		t.Run("case bodies are conditional, indented by "+map[string]string{"\t": "tabs", "    ": "spaces"}[indent], func(t *testing.T) {
+			src := strings.ReplaceAll("def h(request):\n~bar = 'safe'\n~match request.args.get('c'):\n~~case 'a':\n~~~bar = request.args.get('x')\n~~case _:\n~~~bar = 'constant'\n~os.system(bar)\n", "~", indent)
+			for name, units := range map[string][]unitDraft{"tree": treeUnits(t, src), "line": lineUnits(src)} {
+				u := unitNamed(units, "h")
+				var bodies []stmtDraft
+				for _, st := range u.stmts {
+					if st.assigns == "bar" && st.line > 2 {
+						bodies = append(bodies, st)
+					}
+				}
+				if len(bodies) != 2 || !bodies[0].conditional || !bodies[1].conditional {
+					t.Errorf("%s reader: both case bodies must be conditional assignments; got %+v", name, bodies)
+				}
+			}
+		})
+	}
+	t.Run("a one-line if body under tabs is inside the if", func(t *testing.T) {
+		u := unitNamed(treeUnits(t, "def h(request, ok):\n\tif ok: a = request.args.get('a')\n\treturn a\n"), "h")
+		for _, st := range u.stmts {
+			if st.assigns == "a" && !st.conditional {
+				t.Fatalf("the body of `if ok:` on its line must be conditional; got %+v", u.stmts)
+			}
 		}
 	})
 	t.Run("nested statements keep their function", func(t *testing.T) {

@@ -141,6 +141,15 @@ RealVuln, so these idioms are not in that split. This benchmark is not read case
 by case (plan rules); the cause is to be found by a differential of the two
 segmenters on development-split Python.
 
+*Resolved.* The development-split differential found nothing (no tree-reader
+loss there), so, by maintainer decision, the same differential ran on this
+benchmark's sources at the level of statement shapes, with no labels or
+per-case scores read. The readers produced the same statements on every file
+but different units in 122, all around tab-indented `match` statements: the
+tree reader read a match block, which the grammar starts on the header's row,
+as a one-line body and over-indented each `case`. Fixed with a test of its own
+(tabs and spaces); Python is back to **56.1**, every category as on 2026-11-21.
+
 ## Limits
 
 - The benchmarks are synthetic. A score here is evidence about a rule's

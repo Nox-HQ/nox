@@ -243,6 +243,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A Python `match` statement indented with tabs lost its case bodies' branch
+  structure. The grammar starts a match statement's block on the header's
+  row, and the tree reader took that for a one-line body (`if x: y`),
+  indenting each `case` by the header's indentation plus four spaces: under
+  tabs, deeper than the case bodies themselves. Every body then read as an
+  unconditional assignment, and the last case overwrote a tainted value. A
+  body is now one-line only when its first statement is on the header's
+  row. OWASP BenchmarkPython 52.8 -> 56.1, its score before the tree reader;
+  no RealVuln development-split finding changes.
 - A scan's findings no longer depend on how busy the machine is. A
   tree-sitter parse was bounded by a 5-second deadline; under a load average
   above 100 a normal file missed it, fell back silently to the line reader,

@@ -179,6 +179,16 @@ func (s *pySegmenter) block(i int, indent string) {
 	}
 }
 
+// firstStatement is the first named, non-comment child of block i, or -1.
+func (s *pySegmenter) firstStatement(i int) int {
+	for _, c := range s.children[i] {
+		if n := s.tree.Nodes[c]; n.Named && n.Kind != "comment" {
+			return c
+		}
+	}
+	return -1
+}
+
 // statement emits one statement: a simple statement as one logical line, a
 // compound one as its header line followed by its body and clauses.
 func (s *pySegmenter) statement(i int, indent string) {
@@ -208,8 +218,14 @@ func (s *pySegmenter) statement(i int, indent string) {
 	}
 	// The header: from the statement's start to its body, the colon included.
 	s.emit(n.Start, s.tree.Nodes[body].Start, indent)
+	// A one-line body (`if x: y`) has its first statement on the header's
+	// row. Ask the statement, not the block: a match statement's block starts
+	// on the header's row though its case clauses are on the lines below, and
+	// read as a one-line body they were indented past their own bodies (under
+	// tabs, `\t` plus four spaces outranks `\t\t\t`), which unnested every
+	// case body into unconditional assignments.
 	bodyIndent := ""
-	if s.row(s.tree.Nodes[body].Start) == s.row(n.Start) {
+	if first := s.firstStatement(body); first >= 0 && s.row(s.tree.Nodes[first].Start) == s.row(n.Start) {
 		bodyIndent = indent + "    "
 	}
 	seenBody := false
