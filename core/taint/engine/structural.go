@@ -1627,7 +1627,14 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		"getForEntity", "getForObject", "postForEntity", "postForObject", "postForLocation",
 		"patchForObject", "headForHeaders", "optionsForAllow", "restTemplate.exchange",
 		"client.target", "newClient.target", "HttpClient.create", "Jsoup.connect",
-		"HttpGet", "HttpPost", "HttpPut", "HttpPatch", "HttpDelete", "HttpHead":
+		"HttpGet", "HttpPost", "HttpPut", "HttpPatch", "HttpDelete", "HttpHead",
+		// Java expression languages and Handlebars: the expression or template
+		// is the first argument. The context, root or variable map after it is
+		// data the expression reads, never parsed.
+		"spel_parser.parseExpression", "SpelExpressionParser.parseExpression", "spel_parser.parseRaw",
+		"Ognl.getValue", "Ognl.setValue", "Ognl.parseExpression",
+		"MVEL.eval", "MVEL.evalToString", "MVEL.executeExpression", "MVEL.compileExpression",
+		"handlebars.compileInline":
 		// JDBC and Spring JdbcTemplate: the SQL string is the first argument;
 		// everything after it is bind parameters or a row mapper, which is
 		// the safe parameterized form. A zero-argument executeUpdate() runs a
@@ -1951,6 +1958,10 @@ var sinkValueSlot = map[string]int{
 	// Java NIO and java.io: the path is the first argument, the data after it.
 	"Files.write": 0, "Files.writeString": 0, "Files.newOutputStream": 0, "Files.newBufferedWriter": 0,
 	"FileOutputStream": 0, "FileWriter": 0,
+	// Java templates: Velocity's evaluate(context, writer, logTag, template)
+	// and FreeMarker's new Template(name, source, cfg). The context or model
+	// holds data; only the template source is parsed.
+	"Velocity.evaluate": 3, "velocity_engine.evaluate": 3, "freemarker.template.Template": 1,
 	// Swift: createFile(atPath:contents:) -- the data written is not the path.
 	"createFile.atPath": 0,
 	// Not a bare `open`: Python's takes the path first, Perl's third.

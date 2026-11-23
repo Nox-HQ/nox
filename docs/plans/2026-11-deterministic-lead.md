@@ -103,7 +103,8 @@ misses to convert). We do not.
 - [ ] Sinks the catalog does not recognise: the largest share of dev injection misses
   - [x] Java SSRF clients (RestClient/WebClient, RestTemplate, java.net.http, JAX-RS, Micronaut, jsoup, Apache): dev +15 labels, Java F3 8.8 -> 9.5. Follow-up: a value appended after a fixed host (`"http://internal/x/" + id`, a base-URL client's `uri("/api/" + id)`) is path, not SSRF; most of the 34 new unmatched findings are that shape
   - [ ] Log injection (CWE-117, 59 dev misses): no taint sink exists for it
-  - [ ] Template injection (Java FreeMarker/Velocity, 27), expression injection (SpEL/OGNL/MVEL, 22), XXE (30), template-file XSS (98)
+  - [x] Java template injection (FreeMarker, Velocity, Handlebars) and expression injection (SpEL, OGNL, MVEL): dev +40 labels, none lost, Java F3 9.5 -> 11.4, injection recall 38.2% -> 41.4%. The 4 unmatched are real: 3 labelled CWE-917/95 where nox says CWE-94, 1 the evaluate step after a parse already reported. Not covered: Thymeleaf through a StringTemplateResolver, FreeMarker `getTemplate(name)`
+  - [ ] XXE (30), template-file XSS (98)
 - [ ] Java recall: F3 a third to a half of the other languages'
 - [ ] Fastify `reply.send({ ... })` read as XSS: an object serialised as JSON
 
