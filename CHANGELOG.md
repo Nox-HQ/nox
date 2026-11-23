@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- XSS-001: a template prints a value without HTML escaping (CWE-79, low
+  confidence). Jinja, Django and Nunjucks `{{ x | safe }}` and outputs inside
+  `{% autoescape false %}`; EJS `<%- x %>`; JSF, Facelets and Struts
+  `escape="false"`; a JSP expression printing a request parameter. The taint
+  engine reads code and never saw where escaping is switched off, and most
+  such labels are stored XSS, which no taint source reaches. Framework-built
+  HTML is left out: EJS `<%- body %>` and `include`, Django `form|safe`,
+  `field.help_text|safe` and `csrf_token|safe`. Thymeleaf `th:utext` and Vue
+  `v-html` are not reported. A `.html` file is read as Jinja only under a
+  `templates/` directory or when it contains `{%`.
 - Node XXE through libxmljs (TAINT-010, CWE-611). libxmljs and libxmljs2
   substitute entities, and so read external ones, only when given
   `noent: true`. `parseXmlString` and `parseXml` are reported when that option

@@ -38,6 +38,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/slop"
 	"github.com/nox-hq/nox/core/analyzers/slop/feed"
 	"github.com/nox-hq/nox/core/analyzers/taintflow"
+	"github.com/nox-hq/nox/core/analyzers/templates"
 	"github.com/nox-hq/nox/core/analyzers/variants"
 	"github.com/nox-hq/nox/core/analyzers/weakcrypto"
 	"github.com/nox-hq/nox/core/baseline"
@@ -745,6 +746,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	cryptoAnalyzer := weakcrypto.NewAnalyzer()
 	filepermsAnalyzer := fileperms.NewAnalyzer()
 	hardeningAnalyzer := hardening.NewAnalyzer()
+	templatesAnalyzer := templates.NewAnalyzer()
 	appconfigAnalyzer := appconfig.NewAnalyzer()
 	memsafeAnalyzer := memsafe.NewAnalyzer()
 	variantsAnalyzer := variants.NewAnalyzer()
@@ -861,6 +863,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}},
 		{"hardening", func(c context.Context) error {
 			fs, err := hardeningAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		}},
+		{"templates", func(c context.Context) error {
+			fs, err := templatesAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
@@ -1013,6 +1023,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		{"weakcrypto", cryptoAnalyzer.Rules()},
 		{"fileperms", filepermsAnalyzer.Rules()},
 		{"hardening", hardeningAnalyzer.Rules()},
+		{"templates", templatesAnalyzer.Rules()},
 		{"appconfig", appconfigAnalyzer.Rules()},
 		{"memsafe", memsafeAnalyzer.Rules()},
 		{"slop", slopAnalyzer.Rules()},

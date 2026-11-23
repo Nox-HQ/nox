@@ -26,6 +26,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/secrets"
 	"github.com/nox-hq/nox/core/analyzers/slop"
 	"github.com/nox-hq/nox/core/analyzers/taintflow"
+	"github.com/nox-hq/nox/core/analyzers/templates"
 	"github.com/nox-hq/nox/core/analyzers/variants"
 	"github.com/nox-hq/nox/core/analyzers/weakcrypto"
 	"github.com/nox-hq/nox/core/rules"
@@ -77,6 +78,7 @@ func allRuleSets() []*rules.RuleSet {
 		appconfig.NewAnalyzer().Rules(),
 		weakcrypto.NewAnalyzer().Rules(),
 		hardening.NewAnalyzer().Rules(),
+		templates.NewAnalyzer().Rules(),
 		memsafe.NewAnalyzer().Rules(),
 		fileperms.NewAnalyzer().Rules(),
 	}

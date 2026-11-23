@@ -23,6 +23,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/secrets"
 	"github.com/nox-hq/nox/core/analyzers/slop"
 	"github.com/nox-hq/nox/core/analyzers/taintflow"
+	"github.com/nox-hq/nox/core/analyzers/templates"
 	"github.com/nox-hq/nox/core/analyzers/variants"
 	"github.com/nox-hq/nox/core/analyzers/weakcrypto"
 	"github.com/nox-hq/nox/core/compliance"
@@ -67,6 +68,7 @@ func analyzerRuleSets(t *testing.T) map[string]*rules.RuleSet {
 		"agentflow":  agentflow.NewAnalyzer().Rules(),
 		"fileperms":  fileperms.NewAnalyzer().Rules(),
 		"hardening":  hardening.NewAnalyzer().Rules(),
+		"templates":  templates.NewAnalyzer().Rules(),
 		"memsafe":    memsafe.NewAnalyzer().Rules(),
 		"taintflow":  taintflow.NewAnalyzer().Rules(),
 		"weakcrypto": weakcrypto.NewAnalyzer().Rules(),
