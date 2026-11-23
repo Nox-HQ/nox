@@ -235,6 +235,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A scan's findings no longer depend on how busy the machine is. A
+  tree-sitter parse was bounded by a 5-second deadline; under a load average
+  above 100 a normal file missed it, fell back silently to the line reader,
+  and the same binary reported different findings for the same tree. A parse
+  is now bounded by work the guest counts -- tree-sitter's progress checks,
+  one per 100 parser operations, 2,000 plus 64 per KiB -- which depends only
+  on the grammar and the source. On the RealVuln corpus (44,857 files) the
+  costliest real file took 27.6 checks per KiB, and two runs at different
+  load counted the same checks for every file. A parse that can no longer
+  avoid an error tree, which the taint front ends never use, now stops at
+  that point: 300 KB of random bytes read as JavaScript took over 50 s and takes
+  5 ms. The wall-clock deadline stays only as a backstop, at 1 minute plus
+  1 minute per MiB.
 - `Files.write(Paths.get(p), data)` was reported as XSS, through the generic
   response-writer `write` sink. It is a path write, reported as path
   traversal on its path argument; writing request data to a fixed path is no

@@ -60,6 +60,10 @@ type Node struct {
 type Tree struct {
 	Language string
 	Nodes    []Node
+	// Checks is the work the parse took: tree-sitter's progress checks, one
+	// per 100 parser operations. It depends only on the grammar and the
+	// source, never on the machine.
+	Checks uint32
 }
 
 // HasError reports whether the parse needed error recovery anywhere.
@@ -70,6 +74,10 @@ var (
 	ErrLanguage = errors.New("treesitter: language not available")
 	ErrParse    = errors.New("treesitter: the parser returned no tree")
 	ErrMemory   = errors.New("treesitter: the guest ran out of memory")
+	ErrBudget   = errors.New("treesitter: the parse used up its operation budget")
+	// ErrRecovery is a parse stopped because it could no longer avoid an
+	// error tree (ParseFile's early stop).
+	ErrRecovery = errors.New("treesitter: every parse version entered error recovery")
 )
 
 // memoryLimitPages caps a guest's linear memory: 4096 pages of 64 KiB, 256 MiB.
@@ -177,6 +185,19 @@ func (p *Parser) compiledModule(ctx context.Context, module string) (wazero.Comp
 // instance's answer is returned: a failure can then never depend on which
 // files an instance parsed before (see pool.go).
 func (p *Parser) Parse(ctx context.Context, lang string, src []byte) (*Tree, error) {
+	return p.parse(ctx, lang, src, bounds{})
+}
+
+// bounds are what stops a parse early: more than maxChecks progress checks
+// (0 for no bound), and, with stopAtError, the point where every parse
+// version is recovering from an error.
+type bounds struct {
+	maxChecks   uint32
+	stopAtError bool
+}
+
+// parse is Parse within b.
+func (p *Parser) parse(ctx context.Context, lang string, src []byte, b bounds) (*Tree, error) {
 	module, ok := moduleOf[lang]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrLanguage, lang)
@@ -185,21 +206,23 @@ func (p *Parser) Parse(ctx context.Context, lang string, src []byte) (*Tree, err
 	if err != nil {
 		return nil, err
 	}
-	tree, err := p.parseOn(ctx, inst.m, module, lang, src)
+	tree, err := p.parseOn(ctx, inst.m, module, lang, src, b)
 	p.release(ctx, inst, err == nil)
-	if err == nil || inst.fresh || ctx.Err() != nil {
+	// A spent budget or an early stop is the file's, not the instance's: a
+	// fresh instance stops at the same point.
+	if err == nil || inst.fresh || ctx.Err() != nil || errors.Is(err, ErrBudget) || errors.Is(err, ErrRecovery) {
 		return tree, err
 	}
 	if inst, err = p.acquire(ctx, module, true); err != nil {
 		return nil, err
 	}
-	tree, err = p.parseOn(ctx, inst.m, module, lang, src)
+	tree, err = p.parseOn(ctx, inst.m, module, lang, src, b)
 	p.release(ctx, inst, err == nil)
 	return tree, err
 }
 
 // parseOn runs one parse on the instance m of module.
-func (p *Parser) parseOn(ctx context.Context, m api.Module, module, lang string, src []byte) (*Tree, error) {
+func (p *Parser) parseOn(ctx context.Context, m api.Module, module, lang string, src []byte, b bounds) (*Tree, error) {
 	g := guest{ctx: ctx, m: m}
 	if words := g.call("nox_record_words"); g.err == nil && words != recordWords {
 		return nil, fmt.Errorf("treesitter: %s writes %d-word records, host reads %d", module, words, recordWords)
@@ -216,7 +239,8 @@ func (p *Parser) parseOn(ctx context.Context, m api.Module, module, lang string,
 	if g.err == nil && !m.Memory().Write(srcPtr, src) {
 		return nil, ErrMemory
 	}
-	count := int32(uint32(g.call("nox_parse", uint64(n.index), uint64(srcPtr), uint64(len(src)))))
+	count := int32(uint32(g.call("nox_parse", uint64(n.index), uint64(srcPtr), uint64(len(src)), uint64(b.maxChecks), boolWord(b.stopAtError))))
+	checks := uint32(g.call("nox_checks"))
 	resPtr := uint32(g.call("nox_result"))
 	if g.err != nil {
 		return nil, g.err
@@ -228,6 +252,10 @@ func (p *Parser) parseOn(ctx context.Context, m api.Module, module, lang string,
 		return nil, ErrParse
 	case count == -3:
 		return nil, ErrMemory
+	case count == -4:
+		return nil, fmt.Errorf("%w: more than %d checks", ErrBudget, b.maxChecks)
+	case count == -5:
+		return nil, fmt.Errorf("%w: after %d checks", ErrRecovery, checks)
 	case count < 0:
 		return nil, fmt.Errorf("treesitter: nox_parse returned %d", count)
 	}
@@ -235,7 +263,11 @@ func (p *Parser) parseOn(ctx context.Context, m api.Module, module, lang string,
 	if !ok {
 		return nil, fmt.Errorf("treesitter: %d records at %#x are outside guest memory", count, resPtr)
 	}
-	return decode(lang, n, raw, int(count))
+	tree, err := decode(lang, n, raw, int(count))
+	if tree != nil {
+		tree.Checks = checks
+	}
+	return tree, err
 }
 
 // guest calls exports and keeps the first error, so a sequence of calls reads
@@ -361,4 +393,11 @@ func decode(lang string, n *names, raw []byte, count int) (*Tree, error) {
 		}
 	}
 	return t, nil
+}
+
+func boolWord(b bool) uint64 {
+	if b {
+		return 1
+	}
+	return 0
 }
