@@ -101,6 +101,9 @@ misses to convert). We do not.
 
 - [x] Python tree-reader regression on OWASP BenchmarkPython: tab-indented `match` statements lost their case structure; 52.8 -> 56.1
 - [ ] Sinks the catalog does not recognise: the largest share of dev injection misses
+  - [x] Java SSRF clients (RestClient/WebClient, RestTemplate, java.net.http, JAX-RS, Micronaut, jsoup, Apache): dev +15 labels, Java F3 8.8 -> 9.5. Follow-up: a value appended after a fixed host (`"http://internal/x/" + id`, a base-URL client's `uri("/api/" + id)`) is path, not SSRF; most of the 34 new unmatched findings are that shape
+  - [ ] Log injection (CWE-117, 59 dev misses): no taint sink exists for it
+  - [ ] Template injection (Java FreeMarker/Velocity, 27), expression injection (SpEL/OGNL/MVEL, 22), XXE (30), template-file XSS (98)
 - [ ] Java recall: F3 a third to a half of the other languages'
 - [ ] Fastify `reply.send({ ... })` read as XSS: an object serialised as JSON
 

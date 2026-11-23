@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Java SSRF sinks for the HTTP clients services actually use: Spring
+  RestClient and WebClient (`.get().uri(url)` and the other methods), Spring
+  RestTemplate (`getForEntity`, `postForObject`, ... and
+  `restTemplate.exchange`), java.net.http `HttpRequest.newBuilder(uri)` and
+  `.uri(uri)`, JAX-RS `client.target(url)`, Micronaut `HttpClient.create`,
+  jsoup `Jsoup.connect` and Apache HttpClient's `new HttpGet(url)` and its
+  siblings. Before, Java had only `openStream` and `openConnection`. Each is
+  a sink on its first argument only: a URI template variable
+  (`.uri("https://api/{id}", id)`), a request body or a response type does not
+  choose where the request goes. RealVuln development split: +15 labelled
+  SSRF findings, none lost; Java F3 8.8 -> 9.5, overall 17.0 -> 17.3.
 - Taint follows a source across files (ADR 0007). A call the call graph
   binds to exactly one function in another file of the same language is
   analysed through that function's summary -- the parameters it hands to a

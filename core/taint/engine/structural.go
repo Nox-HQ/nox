@@ -1617,7 +1617,17 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		// JPA's createNativeQuery(sql, resultClass) and JdbcTemplate.query(sql,
 		// mapper, args...): the SQL is the first argument and nothing after it
 		// is interpolated.
-		"createNativeQuery", "jdbcTemplate.query", "jdbc.query":
+		"createNativeQuery", "jdbcTemplate.query", "jdbc.query",
+		// Java HTTP clients (SSRF): the first argument is the request's
+		// target. What follows is a URI template variable (encoded into the
+		// URL, not the host), a request body or a response type, so a tainted
+		// value there does not choose where the request goes.
+		"get.uri", "post.uri", "put.uri", "patch.uri", "delete.uri", "head.uri",
+		"options.uri", "method.uri", "newBuilder.uri", "HttpRequest.newBuilder",
+		"getForEntity", "getForObject", "postForEntity", "postForObject", "postForLocation",
+		"patchForObject", "headForHeaders", "optionsForAllow", "restTemplate.exchange",
+		"client.target", "newClient.target", "HttpClient.create", "Jsoup.connect",
+		"HttpGet", "HttpPost", "HttpPut", "HttpPatch", "HttpDelete", "HttpHead":
 		// JDBC and Spring JdbcTemplate: the SQL string is the first argument;
 		// everything after it is bind parameters or a row mapper, which is
 		// the safe parameterized form. A zero-argument executeUpdate() runs a

@@ -3872,6 +3872,209 @@
           "note": "new URL(u).openConnection() — matched on the method suffix"
         },
         {
+          "call": "get.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.get().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "post.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.post().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "put.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.put().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "patch.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.patch().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "delete.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.delete().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "head.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.head().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "options.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.options().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "method.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.method().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "newBuilder.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "java.net.http `HttpRequest.newBuilder().uri(URI.create(url))`; the request is sent by HttpClient.send/sendAsync."
+        },
+        {
+          "call": "HttpRequest.newBuilder",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "java.net.http `HttpRequest.newBuilder(URI.create(url))`: the one-argument form names the target."
+        },
+        {
+          "call": "getForEntity",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `getForEntity(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "getForObject",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `getForObject(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "postForEntity",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `postForEntity(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "postForObject",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `postForObject(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "postForLocation",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `postForLocation(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "patchForObject",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `patchForObject(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "headForHeaders",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `headForHeaders(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "optionsForAllow",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `optionsForAllow(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "restTemplate.exchange",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `exchange(url, method, ...)`, keyed on the conventional field name because `exchange` alone is generic."
+        },
+        {
+          "call": "client.target",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "JAX-RS `Client.target(url)`, keyed on the conventional variable name because `target` alone is generic."
+        },
+        {
+          "call": "newClient.target",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "JAX-RS `ClientBuilder.newClient().target(url)`."
+        },
+        {
+          "call": "HttpClient.create",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Micronaut / Reactor `HttpClient.create(url)`: the client is bound to that base URL."
+        },
+        {
+          "call": "Jsoup.connect",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "jsoup `Jsoup.connect(url)` fetches the URL."
+        },
+        {
+          "call": "HttpGet",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Apache HttpClient `new HttpGet(url)`: the request object carries its target."
+        },
+        {
+          "call": "HttpPost",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Apache HttpClient `new HttpPost(url)`: the request object carries its target."
+        },
+        {
+          "call": "HttpPut",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Apache HttpClient `new HttpPut(url)`: the request object carries its target."
+        },
+        {
+          "call": "HttpPatch",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Apache HttpClient `new HttpPatch(url)`: the request object carries its target."
+        },
+        {
+          "call": "HttpDelete",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Apache HttpClient `new HttpDelete(url)`: the request object carries its target."
+        },
+        {
+          "call": "HttpHead",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Apache HttpClient `new HttpHead(url)`: the request object carries its target."
+        },
+        {
           "call": "ObjectInputStream.readObject",
           "vuln_class": "unsafe_deserialization",
           "cwe": "CWE-502",
