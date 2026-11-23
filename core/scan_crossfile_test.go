@@ -133,4 +133,34 @@ func TestScan_CrossFileTaint(t *testing.T) {
 			t.Fatalf("want the cross-file flow alone at line %d, got %+v", only[0].Location.StartLine, got)
 		}
 	})
+
+	t.Run("java: a controller calls an injected service", func(t *testing.T) {
+		controller := "package a.web;\n\nimport a.service.StaffDirectory;\n\n@RestController\npublic class DirectoryController {\n" +
+			"    private final StaffDirectory directory;\n\n" +
+			"    public DirectoryController(StaffDirectory directory) {\n        this.directory = directory;\n    }\n\n" +
+			"    @GetMapping(\"/search\")\n    public List<String> search(@RequestParam(\"n\") String n) {\n" +
+			"        List<String> rows = new ArrayList<>();\n        for (String cn : directory.byNumber(n)) {\n            rows.add(cn);\n        }\n        return rows;\n    }\n}\n"
+		service := "package a.service;\n\npublic class StaffDirectory {\n    public List<String> byNumber(String n) throws Exception {\n" +
+			"        DirContext ctx = new InitialDirContext(env);\n" +
+			"        NamingEnumeration<SearchResult> r = ctx.search(baseDn, \"(employeeNumber=\" + n + \")\", new SearchControls());\n" +
+			"        return names(r);\n    }\n}\n"
+		got := taintFindings(t, writeCrossTree(t, map[string]string{
+			"src/a/web/DirectoryController.java": controller, "src/a/service/StaffDirectory.java": service}))
+		if len(got) != 1 || got[0].Location.FilePath != "src/a/service/StaffDirectory.java" || got[0].Location.StartLine != 6 ||
+			got[0].Metadata["source_file"] != "src/a/web/DirectoryController.java" {
+			t.Fatalf("want one finding at src/a/service/StaffDirectory.java:6 sourced in the controller, got %+v", got)
+		}
+	})
+
+	t.Run("typescript: a NestJS controller calls an injected service", func(t *testing.T) {
+		controller := "import { Body, Controller, Post } from '@nestjs/common';\nimport { FetchService } from './fetch.service';\n\n" +
+			"@Controller('f')\nexport class FetchController {\n  constructor(private readonly fetcher: FetchService) {}\n\n" +
+			"  @Post()\n  grab(@Body() dto: { url: string }) {\n    return this.fetcher.capture(dto.url);\n  }\n}\n"
+		service := "export class FetchService {\n  async capture(url: string) {\n    const r = await fetch(url);\n    return r.text();\n  }\n}\n"
+		got := taintFindings(t, writeCrossTree(t, map[string]string{
+			"src/f/fetch.controller.ts": controller, "src/f/fetch.service.ts": service}))
+		if len(got) != 1 || got[0].Location.FilePath != "src/f/fetch.service.ts" || got[0].Location.StartLine != 3 {
+			t.Fatalf("want one finding at src/f/fetch.service.ts:3, got %+v", got)
+		}
+	})
 }

@@ -100,7 +100,23 @@ sink.
 - Deterministic: path order, a bounded fixpoint over a monotone lattice, and
   the existing flow ordering.
 - Limits, stated on the rules: same-language only; positional argument
-  binding only; dispatch through an interface, a dependency-injected field of
-  a type the graph cannot name, or a function value is unresolved. Java's
-  Spring injection is the largest of these and is the route-entry-point
-  task's to address, not this one's.
+  binding only; dispatch through an interface with more than one
+  implementation, a value whose type the file does not declare, or a
+  function value is unresolved.
+- Amended 2026-11-23 (route entry points across files): a call on a field,
+  parameter or variable binds through the type the file declares it with
+  (`private final StaffService directory;`, `constructor(private readonly
+  svc: FetchService)`, `self.repo = UserRepository()`) to that type's method
+  in the one file declaring the type, or, for an interface or abstract type,
+  to its one subtype that has the method. A name declared with two types, a
+  type two files declare, or two implementations bind to nothing. This is
+  how a Spring or NestJS controller reaches the service it is injected with;
+  it is still the call graph's resolution (decision 1), one candidate or
+  none. An enhanced `for (T x : items)` header is now a statement, `x =
+  items`, so a call made there is a call of the method. Measured on the
+  development split (both binaries rescanned at low load): F3 16.5 -> 17.0,
+  +28 labelled, none lost, +38 unlabelled, mostly existing sink matches the
+  flows now reach (a class's own `exec` method read as a shell, a
+  `PrintWriter` on an SSH channel read as a response); one wrong edge
+  removed, where a field typed `PortalAuditService auditService` had bound to
+  another module's `AuditService.java` by its stem.

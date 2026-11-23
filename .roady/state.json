@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 289,
+  "version": 291,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1288,9 +1288,15 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-route-entry-points-as-sources-across-files": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "Felix Geelhaar",
+      "evidence": [
+        "receiver-type call resolution + Java for-each; dev F3 16.5-\u003e17.0, +28 TP, 0 lost (branch feat/route-sources-xf)"
+      ],
+      "started_at": "2026-11-23T03:09:44.364078+01:00",
+      "completed_at": "2026-11-23T04:00:58.880407+01:00",
+      "elapsed_minutes": 51
     },
     "task-most-accurate-deterministic-scanner-sinks-by-class-from-the-dev-split-misses": {
       "status": "done",
@@ -1348,5 +1354,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-11-23T00:07:57.158867+01:00"
+  "updated_at": "2026-11-23T04:00:58.880408+01:00"
 }

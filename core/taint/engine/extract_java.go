@@ -116,6 +116,10 @@ func extractJava(lines []logicalLine) []unitDraft {
 			if g, ok := conditionGuard(langJava, ll); ok {
 				cur.guards = append(cur.guards, g)
 			}
+			// `for (T x : items)` binds x from items, and only if the loop runs.
+			if inner, ok := javaForEachStatement(ll); ok {
+				javaStatement(cur, jb, inner, branchMaybe)
+			}
 			if h, ok := parseJavaHeader(ll); ok {
 				st := jb.header(h, depthHere)
 				switch {
@@ -446,4 +450,49 @@ func javaRequestBound(header string) map[string]string {
 	// opens the first parenthesis; the parameter list follows it.
 	_, rest := leadingAnnotations(header)
 	return requestBoundParams(headerParamList(rest), splitJavaParamList, lastIdentifier)
+}
+
+// javaForEachStatement returns the binding an enhanced for header carries,
+// `for (T x : items)`, as the statement `x = items` in place: the element
+// holds the collection's values, and a call in the header (a service lookup
+// whose results the body uses) is a call the method makes. A classic
+// `for (init; cond; step)` header carries none here.
+func javaForEachStatement(ll logicalLine) (logicalLine, bool) {
+	code := ll.code
+	lead := len(code) - len(strings.TrimLeft(code, " \t}"))
+	rest := code[lead:]
+	if !strings.HasPrefix(rest, "for") {
+		return logicalLine{}, false
+	}
+	open := strings.IndexByte(rest, '(')
+	if open < 0 || strings.TrimSpace(rest[len("for"):open]) != "" {
+		return logicalLine{}, false
+	}
+	open += lead
+	closing := matchParen(code, open)
+	if closing < 0 {
+		return logicalLine{}, false
+	}
+	inner := code[open+1 : closing]
+	if topLevelKeyword(inner, ";") >= 0 {
+		return logicalLine{}, false
+	}
+	colon := topLevelKeyword(inner, ":")
+	if colon < 0 {
+		return logicalLine{}, false
+	}
+	decl := strings.Fields(inner[:colon])
+	if len(decl) < 2 {
+		return logicalLine{}, false
+	}
+	name := decl[len(decl)-1]
+	if !isSimpleIdent(name) {
+		return logicalLine{}, false
+	}
+	b := []byte(strings.Repeat(" ", len(code)))
+	copy(b[open+1:], name)
+	at := open + 1 + colon
+	b[at] = '='
+	copy(b[at+1:], code[at+1:closing])
+	return logicalLine{line: ll.line, code: string(b), raw: string(b)}, true
 }
