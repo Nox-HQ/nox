@@ -1042,6 +1042,13 @@
       ],
       "sinks": [
         {
+          "call": "xxe_noent_parser.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "synthetic chain: libxmljs/libxmljs2 parseXmlString or parseXml given noent: true, which substitutes entities and reads external ones; see engine/xxe_libxmljs.go"
+        },
+        {
           "call": "child_process.exec",
           "vuln_class": "command_injection",
           "cwe": "CWE-78",

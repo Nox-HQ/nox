@@ -37,6 +37,10 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) (units []ta
 		// XXE: see xxe_python.go.
 		applyXXEParsers(drafts, pythonXXEParsers(content))
 	}
+	if lang == lexctx.LangJavaScript {
+		// XXE through libxmljs's noent option: see xxe_libxmljs.go.
+		applyLibxmljsNoent(drafts, content)
+	}
 	if lang == lexctx.LangPython {
 		// Trust boundary: see trust_boundary_python.go.
 		applySessionStores(drafts, content)
@@ -1641,7 +1645,10 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		"xml_sax_parser.parse", "newSAXParser.parse", "getXMLReader.parse",
 		"xml_stax_factory.createXMLStreamReader", "xml_stax_factory.createXMLEventReader",
 		"newInstance.createXMLStreamReader", "newInstance.createXMLEventReader",
-		"newFactory.createXMLStreamReader", "newFactory.createXMLEventReader":
+		"newFactory.createXMLStreamReader", "newFactory.createXMLEventReader",
+		// libxmljs with noent (XXE): the document is the first argument; the
+		// second is the options object.
+		"xxe_noent_parser.parse":
 		// JDBC and Spring JdbcTemplate: the SQL string is the first argument;
 		// everything after it is bind parameters or a row mapper, which is
 		// the safe parameterized form. A zero-argument executeUpdate() runs a
