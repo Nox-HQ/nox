@@ -92,7 +92,7 @@ misses to convert). We do not.
 - [ ] Java front end, same gate (Kotlin follows)
 - [ ] Module index: per-language import and symbol resolution (Python modules, ESM and CommonJS, Java packages and Spring injection)
 - [ ] Cross-file summaries: function summaries keyed across the module, call resolution through the index, bounded fixpoint, deterministic order
-- [ ] Route entry points as sources across files: the route inventory feeds the taint engine, so a handler's parameters are sources wherever the handler is defined
+- [x] Route entry points as sources across files: the route inventory feeds the taint engine, so a handler's parameters are sources wherever the handler is defined — done as call resolution through declared receiver types (Spring and NestJS injection) and Java for-each headers; dev F3 16.5 -> 17.0
 - [ ] Parameter SQL flows reachable from a route are raised from low to medium confidence; unreachable ones stay low
 - [ ] Binary size and parse-time budget measured and recorded per language
 - [ ] M2 gate: dev and held-out, OWASP Benchmark, rule-diff corpus, published

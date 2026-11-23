@@ -52,6 +52,10 @@ type sourceFile struct {
 	imports []string
 	units   []taint.Unit
 	test    bool
+	// receivers maps a field or variable to its declared type, and classes
+	// are the types the file declares (receivers.go).
+	receivers map[string]string
+	classes   []classDecl
 }
 
 // NewSourceBuilder returns an empty builder.
@@ -65,13 +69,16 @@ func (b *SourceBuilder) Add(filePath string, content []byte, units []taint.Unit)
 		return
 	}
 	eco, imports := depimports.FileImports(filePath, content)
+	receivers, classes := receiverTypes(units[0].Language, content)
 	b.files = append(b.files, sourceFile{
-		path:    filePath,
-		lang:    units[0].Language,
-		eco:     eco,
-		imports: imports,
-		units:   units,
-		test:    isTestPath(filePath),
+		path:      filePath,
+		lang:      units[0].Language,
+		eco:       eco,
+		imports:   imports,
+		units:     units,
+		test:      isTestPath(filePath),
+		receivers: receivers,
+		classes:   classes,
 	})
 }
 
@@ -291,6 +298,11 @@ type sourceIndex struct {
 	// the files carrying it, per language.
 	files map[string]*sourceFile
 	stems map[string]map[string][]string
+	// classes maps a type name to the files declaring it, and subtypes a
+	// type name to the files declaring a class that extends or implements
+	// it, per language.
+	classes  map[string]map[string][]string
+	subtypes map[string]map[string][]string
 }
 
 func newSourceIndex() *sourceIndex {
@@ -299,6 +311,9 @@ func newSourceIndex() *sourceIndex {
 		byLang: map[string]map[string][]string{},
 		files:  map[string]*sourceFile{},
 		stems:  map[string]map[string][]string{},
+
+		classes:  map[string]map[string][]string{},
+		subtypes: map[string]map[string][]string{},
 	}
 }
 
@@ -313,6 +328,7 @@ func (ix *sourceIndex) addFile(f *sourceFile) {
 		}
 		stem := foldName(strings.TrimSuffix(path.Base(f.path), path.Ext(f.path)))
 		st[stem] = append(st[stem], f.path)
+		ix.addClasses(f)
 	}
 }
 
@@ -390,6 +406,14 @@ func (g *Graph) resolveSourceCall(ix *sourceIndex, f *sourceFile, caller *Func, 
 			return
 		}
 		g.unresolvedCall()
+		return
+	}
+	// A field or variable the file declares with a type: the type's method,
+	// before the qualifier is read as a module, which a field named like a
+	// file would otherwise match.
+	if to, ok := ix.byReceiverType(f, qual, name); ok {
+		g.addEdge(caller, to)
+		g.recordCrossFile(f.path, call, to)
 		return
 	}
 	if target, ok := ix.moduleFile(f, qual); ok {

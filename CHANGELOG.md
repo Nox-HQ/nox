@@ -21,6 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the sourced one and recorded in the withheld ledger. RealVuln development
   split F3 15.6 -> 16.5 (Java 7.0 -> 8.0, JavaScript/TypeScript 21.5 ->
   23.0).
+- Taint follows a controller into the service it is injected with. A call
+  on a field, parameter or variable binds through the type the file declares
+  it with -- Spring constructor injection (`private final StaffService
+  directory;`), NestJS parameter properties (`constructor(private readonly
+  svc: FetchService)`), a Python attribute assigned a constructed instance --
+  to that type's method, or to the one implementation of an interface. A
+  name declared with two types, or an interface with two implementations,
+  binds to nothing. Java's enhanced `for (T x : items)` header is now read
+  as `x = items`, so a service call there is followed. RealVuln development
+  split F3 16.5 -> 17.0: +28 labelled findings (LDAP, XPath, SSRF, path
+  traversal, code injection in services), none lost.
 - Tree-sitter modules for Python, JavaScript, TypeScript/TSX and Java (ADR
   0006). `scripts/treesitter/build.sh` compiles
   the official tree-sitter runtime (v0.27.2) and pinned upstream grammars to
