@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Node XXE through libxmljs (TAINT-010, CWE-611). libxmljs and libxmljs2
+  substitute entities, and so read external ones, only when given
+  `noent: true`. `parseXmlString` and `parseXml` are reported when that option
+  is passed, in the call or through an options object assigned in the same
+  file, and the document is untrusted. A parse without the option is not.
 - Java template and expression injection sinks. Templates (TAINT-003,
   CWE-1336): FreeMarker `new Template(name, source, cfg)`, Velocity
   `Velocity.evaluate` and `VelocityEngine.evaluate`, Handlebars.java
