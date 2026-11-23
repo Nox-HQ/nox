@@ -144,6 +144,10 @@ func javaReceiverBindings(content []byte) map[string]string {
 	if javaFreemarkerImport.Match(content) {
 		out["Template"] = "freemarker.template.Template"
 	}
+	// XML parsers from a factory nobody hardened: see xxe_java.go.
+	for name, kind := range javaXMLParserBindings(content) {
+		out[name] = kind
+	}
 	return out
 }
 

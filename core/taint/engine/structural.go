@@ -1639,6 +1639,13 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		"Ognl.getValue", "Ognl.setValue", "Ognl.parseExpression",
 		"MVEL.eval", "MVEL.evalToString", "MVEL.executeExpression", "MVEL.compileExpression",
 		"handlebars.compileInline",
+		// Java XML parsers (XXE): the document is the first argument. A
+		// SAX handler or a system ID after it is not parsed as XML.
+		"xml_dom_builder.parse", "newDocumentBuilder.parse",
+		"xml_sax_parser.parse", "newSAXParser.parse", "getXMLReader.parse",
+		"xml_stax_factory.createXMLStreamReader", "xml_stax_factory.createXMLEventReader",
+		"newInstance.createXMLStreamReader", "newInstance.createXMLEventReader",
+		"newFactory.createXMLStreamReader", "newFactory.createXMLEventReader",
 		// libxmljs with noent (XXE): the document is the first argument; the
 		// second is the options object.
 		"xxe_noent_parser.parse":

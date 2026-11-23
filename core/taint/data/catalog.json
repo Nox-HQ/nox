@@ -4208,6 +4208,111 @@
           "note": "Handlebars.java `compileInline(template)`: the template is arg 0; the context passed to apply() is data. The local is bound by its declared type (receivers.go)."
         },
         {
+          "call": "xml_dom_builder.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a DocumentBuilder from a DocumentBuilderFactory made in this file and never hardened (see engine/xxe_java.go)"
+        },
+        {
+          "call": "xml_dom_factory.newDocumentBuilder.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "parse on a builder made from an unhardened DocumentBuilderFactory"
+        },
+        {
+          "call": "DocumentBuilderFactory.newInstance.newDocumentBuilder.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a factory made inline, which cannot have been hardened"
+        },
+        {
+          "call": "xml_sax_parser.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a SAXParser or XMLReader from a factory made in this file and never hardened"
+        },
+        {
+          "call": "xml_sax_factory.newSAXParser.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "parse on a parser made from an unhardened SAXParserFactory"
+        },
+        {
+          "call": "xml_sax_parser.getXMLReader.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "the XMLReader of an unhardened SAXParser"
+        },
+        {
+          "call": "xml_sax_factory.newSAXParser.getXMLReader.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "the XMLReader of a parser from an unhardened SAXParserFactory"
+        },
+        {
+          "call": "SAXParserFactory.newInstance.newSAXParser.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a factory made inline, which cannot have been hardened"
+        },
+        {
+          "call": "SAXParserFactory.newInstance.newSAXParser.getXMLReader.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a factory made inline, which cannot have been hardened"
+        },
+        {
+          "call": "xml_stax_factory.createXMLStreamReader",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "StAX: an XMLInputFactory made in this file with DTD support left on"
+        },
+        {
+          "call": "xml_stax_factory.createXMLEventReader",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "StAX: an XMLInputFactory made in this file with DTD support left on"
+        },
+        {
+          "call": "XMLInputFactory.newInstance.createXMLStreamReader",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a factory made inline, which cannot have been hardened"
+        },
+        {
+          "call": "XMLInputFactory.newInstance.createXMLEventReader",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a factory made inline, which cannot have been hardened"
+        },
+        {
+          "call": "XMLInputFactory.newFactory.createXMLStreamReader",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a factory made inline, which cannot have been hardened"
+        },
+        {
+          "call": "XMLInputFactory.newFactory.createXMLEventReader",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a factory made inline, which cannot have been hardened"
+        },
+        {
           "call": "println",
           "vuln_class": "xss",
           "cwe": "CWE-79",
