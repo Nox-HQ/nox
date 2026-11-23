@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 291,
+  "version": 295,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1110,8 +1110,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-binary-size-and-parse-time-budget-measured-and": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "PR #1156 merged as 0d831fd: docs/benchmarks/2026-11-23-treesitter-budget records per-language module sizes, throughput and checks/KiB over 44,857 RealVuln files; the parse budget is now counted work (2,000 + 64 checks/KiB), not wall-clock time."
+      ],
+      "started_at": "2026-11-23T09:58:06.111503+01:00",
+      "completed_at": "2026-11-23T09:58:09.407792+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-commit-the-realvuln-harness": {
@@ -1267,9 +1273,15 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-parameter-sql-flows-reachable-from-a-route-are": {
-      "status": "pending",
+      "status": "done",
       "path": "",
-      "elapsed_minutes": 0
+      "owner": "ai-agent",
+      "evidence": [
+        "PR #1157 merged as b34d25b: raiseRouteReachableParameterFlows raises source_kind=parameter findings with entry_kind=route from low to medium (original_confidence, confidence_basis=route_reachable, route in message, fingerprint unchanged). 203 RealVuln repos: 15 of 64 raised; rescan of 26 repos identical otherwise. Tests falsified per guard."
+      ],
+      "started_at": "2026-11-23T09:07:22.224813+01:00",
+      "completed_at": "2026-11-23T09:58:06.079454+01:00",
+      "elapsed_minutes": 50
     },
     "task-most-accurate-deterministic-scanner-python-front-end-producing-taint-units-from-the": {
       "status": "done",
@@ -1354,5 +1366,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-11-23T04:00:58.880408+01:00"
+  "updated_at": "2026-11-23T09:58:09.407792+01:00"
 }
