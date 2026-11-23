@@ -94,6 +94,16 @@ Rules for the implementation:
 3. **Bounded.** A parse runs under a deadline and a memory limit. A trap,
    timeout or error tree is recorded as a limitation of that file, never a
    failed scan, and the file falls back to the current recognizer.
+
+   *Amended 2026-11-23:* the bound that decides a file is work, not time. The
+   guest counts tree-sitter's progress checks (one per 100 parser operations)
+   and stops a parse over 2,000 plus 64 per KiB, a count that depends only on
+   the grammar and the source; it also stops a parse once every version of it
+   is recovering from an error, since that tree is not used. A wall-clock
+   deadline decided it first, and under heavy load a normal file missed it and
+   the scan's findings changed, which broke determinism. The deadline remains
+   only as a backstop for a runtime defect (1 minute plus 1 minute per MiB).
+   Measurements: [docs/benchmarks/2026-11-23-treesitter-budget](../benchmarks/2026-11-23-treesitter-budget/README.md).
 4. **Behind the existing boundary.** Extraction produces `taint.Unit`s today;
    the tree-sitter front end produces the same units, so the engine,
    summaries and analyzers are unchanged. Each language moves over only after

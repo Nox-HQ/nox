@@ -22,14 +22,18 @@
 //
 // The module imports nothing a parse needs: no clock, no file, no network.
 // The tree-sitter timeout and logging, the only runtime features that would,
-// are never set.
+// are never set. A parse is bounded by work instead of time: tree-sitter
+// calls the progress callback once per 100 parser operations, a count that
+// depends only on the grammar and the source, so the same file stops at the
+// same point on any machine under any load.
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <tree_sitter/api.h>
 
-#define NOX_ABI 1
+#define NOX_ABI 2
 #define NOX_RECORD_WORDS 6
 
 #define NOX_NAMED 1u
@@ -133,10 +137,58 @@ static int grow(uint32_t need) {
 #define NOX_E_LANGUAGE -1 // no such language, or the runtime rejects its ABI
 #define NOX_E_PARSE -2    // the parser returned no tree
 #define NOX_E_MEMORY -3   // the record array could not grow
+#define NOX_E_BUDGET -4   // the parse used up its progress checks
+#define NOX_E_ERROR -5    // every parse version entered error recovery
+
+// checks counts the progress checks of the current or last parse; limit is
+// that parse's budget, 0 for none. stop_at_error ends a parse once every
+// version of it is recovering from an error: the tree it would return holds
+// an ERROR node, error recovery is where a parse spends the most work per
+// operation (random bytes take ten times as long per check as source), and a
+// host that does not trust an error tree has no use for the rest. erred says
+// the last parse stopped there.
+static uint32_t checks, limit, stop_at_error, erred;
+
+// nox_checks is the number of progress checks (one per 100 parser
+// operations) the last nox_parse made.
+EXPORT(nox_checks) uint32_t nox_checks(void) { return checks; }
+
+static bool on_progress(TSParseState *state) {
+  checks++;
+  if (stop_at_error && state->has_error) {
+    erred = 1;
+    return true;
+  }
+  return limit != 0 && checks > limit;
+}
+
+typedef struct {
+  const char *src;
+  uint32_t len;
+} source;
+
+static const char *read_source(void *payload, uint32_t byte, TSPoint point, uint32_t *n) {
+  (void)point;
+  const source *s = payload;
+  if (byte >= s->len) {
+    *n = 0;
+    return "";
+  }
+  *n = s->len - byte;
+  return s->src + byte;
+}
 
 // nox_parse parses len bytes at src as language lang and returns the number
-// of records written to nox_result(), or a negative NOX_E_* code.
-EXPORT(nox_parse) int32_t nox_parse(uint32_t lang, const char *src, uint32_t len) {
+// of records written to nox_result(), or a negative NOX_E_* code. A parse
+// that needs more than max_checks progress checks stops with NOX_E_BUDGET;
+// max_checks 0 sets no bound. With stop_at_error set, a parse that cannot
+// avoid an error tree stops with NOX_E_ERROR.
+EXPORT(nox_parse) int32_t nox_parse(uint32_t lang, const char *src, uint32_t len, uint32_t max_checks,
+                                    uint32_t stop_on_error) {
+  checks = 0;
+  erred = 0;
+  limit = max_checks;
+  stop_at_error = stop_on_error;
   const TSLanguage *l = language(lang);
   if (!l) {
     return NOX_E_LANGUAGE;
@@ -146,10 +198,16 @@ EXPORT(nox_parse) int32_t nox_parse(uint32_t lang, const char *src, uint32_t len
     ts_parser_delete(parser);
     return NOX_E_LANGUAGE;
   }
-  TSTree *tree = ts_parser_parse_string(parser, 0, src, len);
+  source in = {src, len};
+  TSTree *tree = ts_parser_parse_with_options(parser, 0,
+                                              (TSInput){&in, read_source, TSInputEncodingUTF8, 0},
+                                              (TSParseOptions){0, on_progress});
   ts_parser_delete(parser);
   if (!tree) {
-    return NOX_E_PARSE;
+    if (erred) {
+      return NOX_E_ERROR;
+    }
+    return limit != 0 && checks > limit ? NOX_E_BUDGET : NOX_E_PARSE;
   }
 
   TSTreeCursor cursor = ts_tree_cursor_new(ts_tree_root_node(tree));
