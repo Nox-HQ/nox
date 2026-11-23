@@ -1192,6 +1192,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	recordObservations(reasons, allFindings)
 	recordCapabilityCoverage(coverage, allFindings)
 	recordCallGraphCoverage(coverage, allFindings, target, sourceGraph, graphRoutes)
+	raiseRouteReachableParameterFlows(allFindings)
 	raiseDependencyReachability(allFindings, sourceGraph)
 	competenceProfiles := assignCompetenceProfiles(coverage, allFindings)
 	recordAnalysisLimitations(allFindings, target, reasons)

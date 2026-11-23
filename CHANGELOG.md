@@ -160,6 +160,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A query built from a function's parameter is raised from low to medium
+  confidence when the call graph finds that function on a path from an HTTP
+  route handler: a request does arrive there, though the file does not show
+  the parameter carrying it. The finding records `original_confidence`,
+  `confidence_basis: route_reachable` and the route, and its message names
+  the route; the fingerprint does not move. A function no route reaches, or
+  one reached only from a test or `main`, stays low. On the 203 RealVuln
+  repositories 15 of 64 such findings are reached from a route.
 - An interprocedural taint finding (a source in one function reaching a sink
   in another) is reported at the sink, inside the helper, instead of at the
   call site, with the call path as evidence (ADR 0007). Its fingerprint
