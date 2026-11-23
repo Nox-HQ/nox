@@ -260,6 +260,96 @@ Not changed, deliberately: the Dockerfile hygiene rules IAC-121..124 report 860
 unmatched findings and match no label. RealVuln does not label that class; that is
 not evidence against the rules.
 
+## M2 gate, 2026-11-23
+
+nox at `b22b660` (after #1149–#1158: tree-sitter front ends for Python, JS/TS and
+Java, cross-file summaries, injected-service resolution, the work-counted parse
+budget, route-reachable parameter SQL), the same offline default configuration,
+all 203 repositories rescanned with a build of that commit. Held-out labels were
+not read between the M1 gate and this one.
+
+**The M2 targets are not met.** The milestone asks for injection recall of at least
+45% and an overall F3 of at least 20, on both splits:
+
+| | target | dev | held-out | M1 gate dev / held-out |
+|---|---:|---:|---:|---:|
+| F3 | ≥ 20 | **17.0** | **12.8** | 15.4 / 11.5 |
+| injection recall | ≥ 45% | **37.0%** | **27.8%** | 30.7% / 22.4% |
+
+All 203 repositories: F3 14.1 → 15.5.
+
+| nox at `b22b660` | precision | recall | F3 |
+|---|---:|---:|---:|
+| dev, Python | 0.295 | 0.225 | 23.1 |
+| dev, JS/TS | 0.216 | 0.239 | 23.6 |
+| dev, Java | 0.065 | 0.092 | 8.8 |
+| held-out, Python | 0.375 | 0.213 | 22.2 |
+| held-out, JS/TS | 0.098 | 0.149 | 14.2 |
+| held-out, Java | 0.031 | 0.075 | 6.6 |
+
+Against RealVuln's published Semgrep runs, on the repositories Semgrep was run on,
+same matcher:
+
+| Python + JS/TS | nox at M1 | nox at M2 | Semgrep |
+|---|---:|---:|---:|
+| dev (97 repos) | 22.0 | **23.4** | 10.7 |
+| held-out (43 repos) | 15.9 | **17.5** | 8.7 |
+
+The held-out gain (+1.3 F3, +5.4 points of injection recall) tracks the dev gain
+(+1.6, +6.3), so the M2 work generalises; it is smaller than M1's. Java is still
+the weakest language on both splits, and held-out JS/TS is still well below dev.
+
+Recall by class, dev / held-out: injection 37.0% / 27.8%, crypto/secrets/config
+31.2% / 32.0%, authentication/session 4.2% / 2.6%, information exposure 3.0% /
+0.4%; authorization, business logic and mass assignment 0 on both, as at M1. Those
+are the M3 classes.
+
+**What changed on dev, by rule** (M1 gate → M2 gate): the taint rules gained 55
+matched findings and 129 unmatched. SQL (TAINT-001) +9 matched / +11 unmatched,
+command (TAINT-002) +12 / +2, path (TAINT-004) +15 / +41, code (TAINT-005) +6 / +1,
+TAINT-006 +9 / +4, redirect (TAINT-007) +2 / 0, XSS (TAINT-003) +2 / +70. No
+other rule among the 40 most frequent moved.
+
+**The new unmatched XSS findings, read.** 85 unmatched TAINT-003 findings on dev
+are new by location; 21 are in files that already had one (moved by the
+location change of #1154 or by multi-line statements), 64 are in files that had
+none. 26 of those 64 are the lessons of an XSS training application,
+`out.write(htmlOutput)` after `htmlOutput += "..." + searchTerm`, with
+`searchTerm` read from `request.getParameter`. These are real reflected XSS, and
+the benchmark labels no XSS in that repository; the Java front end (#1153) now
+reads the statement that spans lines. 8 are Fastify `reply.status(201).send({
+message })`, an object serialized as JSON, which is not an HTML sink; that is a
+known false-positive class and the next XSS precision fix. The rest are mixed,
+among them a Handlebars `compile` of user-authored text, a real template
+injection reported under the XSS rule.
+
+**Rule-diff corpus** (26 repositories, v1.70.0 against `b22b660`, run locally
+because the CI job's path filter skipped #1156 and #1157): 5 rules changed, every
+drop accounted for in `scripts/rule-deltas.json` (DATA-001 20 → 14, #1147
+seed-data narrowing; TAINT-004 4 → 3, #1154 location merge). The increases, read:
+command-line arguments and environment variables reaching `os.path.join` in a
+project's own CLI tools (certbot, five flows through helper chains the cross-file
+pass now follows; the class existed at v1.70.0), a value deserialized from a
+credentials file reaching `open` (anthropic-sdk-python), and a request body passed
+to an LLM's `messages.create` (hackathon-starter, TAINT-AI-001), which is real.
+
+**OWASP Benchmark** (same scorers, same scan roots; see
+[the OWASP document](../2026-09-28-owasp/README.md#m2-gate-2026-11-23)): Java
+47.9 → **56.3**, Python 56.1 → **52.8**. The Python loss is the Python tree-sitter
+front end (#1151): the same binary with that front end switched off
+(`NOX_TAINT_TREESITTER=javascript,java`) scores 56.1 again, category for category.
+That front end passed its development-split A/B, so the idioms it loses are not
+in that split. Per the plan the benchmark is not read case by case; the
+follow-up is a differential of the two Python segmenters on development-split
+files, to find the statement shapes they disagree on.
+
+**Decided at this gate.** M2's engine work is done and measured; its targets are
+not reached, and the shortfall is not in the engine the milestone built. Recall
+is bounded by sinks the catalog does not recognise (455 of 822 dev injection
+misses at the last count) and by Java, whose F3 is a third to a half of the
+other languages' on both splits. Those, the Python front-end regression and the Fastify
+XSS class are the next work, before M3's new classes.
+
 ## Measured and rejected: dropping through-call flows
 
 Most of the unmatched findings the framework sources added (#1140) are a

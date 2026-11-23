@@ -1,6 +1,6 @@
 {
   "project_id": "nox",
-  "version": 295,
+  "version": 297,
   "task_states": {
     "task-1": {
       "status": "verified",
@@ -1236,8 +1236,14 @@
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-m2-gate": {
-      "status": "pending",
+      "status": "done",
       "path": "",
+      "owner": "ai-agent",
+      "evidence": [
+        "M2 gate measured and published (branch docs/m2-gate): nox at b22b660, all 203 RealVuln repos rescanned. Dev F3 15.4 -\u003e 17.0, held-out 11.5 -\u003e 12.8; injection recall 37.0% / 27.8%. Targets (F3 \u003e= 20, injection \u003e= 45%) NOT met. OWASP Java 47.9 -\u003e 56.3, Python 56.1 -\u003e 52.8 (attributed to the Python tree front end #1151). Rule-diff vs v1.70.0: 5 rules changed, every drop in the ledger."
+      ],
+      "started_at": "2026-11-23T11:04:26.459614+01:00",
+      "completed_at": "2026-11-23T11:04:30.527914+01:00",
       "elapsed_minutes": 0
     },
     "task-most-accurate-deterministic-scanner-m3-gate": {
@@ -1366,5 +1372,5 @@
       "elapsed_minutes": 0
     }
   },
-  "updated_at": "2026-11-23T09:58:09.407792+01:00"
+  "updated_at": "2026-11-23T11:04:30.527915+01:00"
 }
