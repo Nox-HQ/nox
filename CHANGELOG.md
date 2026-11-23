@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Java XXE sinks (TAINT-010, CWE-611). The JDK's DOM, SAX and StAX parsers
+  resolve external entities unless their factory is hardened, so a parse is
+  reported when its document is untrusted and its parser comes from a
+  `DocumentBuilderFactory`, `SAXParserFactory`, `XMLInputFactory` or
+  `XMLReaderFactory` made in the same file with no hardening switch named:
+  `disallow-doctype-decl`, the external-entity features,
+  `FEATURE_SECURE_PROCESSING`, `ACCESS_EXTERNAL_DTD`, `SUPPORT_DTD` or
+  `IS_SUPPORTING_EXTERNAL_ENTITIES`. A switch set to its vulnerable value does
+  not count as hardening. A parser passed in from elsewhere is not reported.
+  A SAX handler or system ID after the document is not judged.
 - Java template and expression injection sinks. Templates (TAINT-003,
   CWE-1336): FreeMarker `new Template(name, source, cfg)`, Velocity
   `Velocity.evaluate` and `VelocityEngine.evaluate`, Handlebars.java
