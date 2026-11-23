@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Java template and expression injection sinks. Templates (TAINT-003,
+  CWE-1336): FreeMarker `new Template(name, source, cfg)`, Velocity
+  `Velocity.evaluate` and `VelocityEngine.evaluate`, Handlebars.java
+  `compileInline`. Expression languages (TAINT-005, CWE-94): Spring SpEL
+  `parseExpression`, OGNL `Ognl.getValue`/`setValue`/`parseExpression`, MVEL
+  `eval`/`executeExpression`/`compileExpression`. Each is a sink on the
+  template or expression only: a context, model or variable map holds data
+  and is never parsed. Generic names are bound by declared type -- a SpEL
+  parser (an `ExpressionParser` only in a file importing
+  org.springframework.expression), a `VelocityEngine`, a `Handlebars` -- and
+  an unqualified `Template` is FreeMarker's only in a file importing it.
+  RealVuln development split: +40 labelled findings, none lost; Java F3
+  9.5 -> 11.4, overall 17.3 -> 18.1.
 - Java SSRF sinks for the HTTP clients services actually use: Spring
   RestClient and WebClient (`.get().uri(url)` and the other methods), Spring
   RestTemplate (`getForEntity`, `postForObject`, ... and

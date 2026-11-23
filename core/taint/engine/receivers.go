@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"regexp"
 	"strings"
 )
@@ -93,6 +94,21 @@ var (
 	// and `command` alone names far too many methods to be a sink.
 	javaProcessBuilderDecl = regexp.MustCompile(`(?:^|[^\w.])(?:java\s*\.\s*lang\s*\.\s*)?ProcessBuilder\s+([A-Za-z_]\w*)\s*=`)
 	javaProcessBuilderVar  = regexp.MustCompile(`(?:^|[^\w.])(?:var|final\s+var)\s+([A-Za-z_]\w*)\s*=\s*new\s+(?:java\s*\.\s*lang\s*\.\s*)?ProcessBuilder\s*\(`)
+
+	// Expression and template engines. `parseExpression`, `evaluate` and
+	// `compileInline` are names many APIs use, so only a call on a local of
+	// the engine's type is a sink. A Spring parser is declared as its
+	// interface (`ExpressionParser parser = new SpelExpressionParser()`), a
+	// name any expression library could use, so that declaration counts only
+	// in a file that imports Spring's expression package.
+	javaSpelDecl           = regexp.MustCompile(`(?:^|[^\w.])(?:org\s*\.\s*springframework\s*\.\s*expression\s*\.\s*(?:spel\s*\.\s*standard\s*\.\s*)?)?(Spel)?ExpressionParser\s+([A-Za-z_]\w*)\s*=`)
+	javaSpelVar            = regexp.MustCompile(`(?:^|[^\w.])(?:var|final\s+var)\s+([A-Za-z_]\w*)\s*=\s*new\s+(?:org\s*\.\s*springframework\s*\.\s*expression\s*\.\s*spel\s*\.\s*standard\s*\.\s*)?SpelExpressionParser\s*\(`)
+	javaVelocityEngineDecl = regexp.MustCompile(`(?:^|[^\w.])(?:org\s*\.\s*apache\s*\.\s*velocity\s*\.\s*app\s*\.\s*)?VelocityEngine\s+([A-Za-z_]\w*)\s*=`)
+	javaHandlebarsDecl     = regexp.MustCompile(`(?:^|[^\w.])(?:com\s*\.\s*github\s*\.\s*jknack\s*\.\s*handlebars\s*\.\s*)?Handlebars\s+([A-Za-z_]\w*)\s*=`)
+	// FreeMarker's template class is `Template`, which is also what a mail,
+	// report or CMS model calls its own class. Written unqualified it is
+	// FreeMarker's only in a file that imports it.
+	javaFreemarkerImport = regexp.MustCompile(`(?m)^\s*import\s+freemarker\s*\.\s*template\s*\.\s*(?:Template|\*)\s*;`)
 )
 
 // javaReceiverBindings maps each local declared as an XPath or an LDAP
@@ -109,6 +125,24 @@ func javaReceiverBindings(content []byte) map[string]string {
 		for _, m := range re.FindAllSubmatch(content, -1) {
 			out[string(m[1])] = "process_builder"
 		}
+	}
+	springExpr := bytes.Contains(content, []byte("org.springframework.expression"))
+	for _, m := range javaSpelDecl.FindAllSubmatch(content, -1) {
+		if len(m[1]) > 0 || springExpr {
+			out[string(m[2])] = "spel_parser"
+		}
+	}
+	for _, m := range javaSpelVar.FindAllSubmatch(content, -1) {
+		out[string(m[1])] = "spel_parser"
+	}
+	for _, m := range javaVelocityEngineDecl.FindAllSubmatch(content, -1) {
+		out[string(m[1])] = "velocity_engine"
+	}
+	for _, m := range javaHandlebarsDecl.FindAllSubmatch(content, -1) {
+		out[string(m[1])] = "handlebars"
+	}
+	if javaFreemarkerImport.Match(content) {
+		out["Template"] = "freemarker.template.Template"
 	}
 	return out
 }

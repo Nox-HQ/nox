@@ -4103,6 +4103,104 @@
           "note": "ScriptEngine.eval(script) — matched on the method suffix"
         },
         {
+          "call": "spel_parser.parseExpression",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "Spring Expression Language: `parseExpression(expr)` parses arg 0, and `getValue` on the result runs it, with access to types and methods (T(java.lang.Runtime)). The local is bound by its declared type, in a file that imports org.springframework.expression (receivers.go); the variables of the evaluation context are data."
+        },
+        {
+          "call": "SpelExpressionParser.parseExpression",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "Spring Expression Language: `parseExpression(expr)` parses arg 0, and `getValue` on the result runs it, with access to types and methods (T(java.lang.Runtime)). The local is bound by its declared type, in a file that imports org.springframework.expression (receivers.go); the variables of the evaluation context are data."
+        },
+        {
+          "call": "spel_parser.parseRaw",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "Spring Expression Language: `parseExpression(expr)` parses arg 0, and `getValue` on the result runs it, with access to types and methods (T(java.lang.Runtime)). The local is bound by its declared type, in a file that imports org.springframework.expression (receivers.go); the variables of the evaluation context are data."
+        },
+        {
+          "call": "Ognl.getValue",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "OGNL: the expression is arg 0; the context and root after it are data the expression reads."
+        },
+        {
+          "call": "Ognl.setValue",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "OGNL: the expression is arg 0; the context and root after it are data the expression reads."
+        },
+        {
+          "call": "Ognl.parseExpression",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "OGNL: the expression is arg 0; the context and root after it are data the expression reads."
+        },
+        {
+          "call": "MVEL.eval",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "MVEL: the expression is arg 0; the variable map after it is data."
+        },
+        {
+          "call": "MVEL.evalToString",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "MVEL: the expression is arg 0; the variable map after it is data."
+        },
+        {
+          "call": "MVEL.executeExpression",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "MVEL: the expression is arg 0; the variable map after it is data."
+        },
+        {
+          "call": "MVEL.compileExpression",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "MVEL: the expression is arg 0; the variable map after it is data."
+        },
+        {
+          "call": "Velocity.evaluate",
+          "vuln_class": "ssti",
+          "cwe": "CWE-1336",
+          "rule_id": "TAINT-003",
+          "note": "Velocity `evaluate(context, writer, logTag, template)`: the template string is arg 3; the context holds data."
+        },
+        {
+          "call": "velocity_engine.evaluate",
+          "vuln_class": "ssti",
+          "cwe": "CWE-1336",
+          "rule_id": "TAINT-003",
+          "note": "VelocityEngine `evaluate(context, writer, logTag, template)`: the template string is arg 3. The local is bound by its declared type (receivers.go)."
+        },
+        {
+          "call": "freemarker.template.Template",
+          "vuln_class": "ssti",
+          "cwe": "CWE-1336",
+          "rule_id": "TAINT-003",
+          "note": "FreeMarker `new Template(name, source | reader, cfg)`: the template source is arg 1; the data model passed to process() is not parsed. A bare `Template` resolves here only in a file importing freemarker.template (receivers.go)."
+        },
+        {
+          "call": "handlebars.compileInline",
+          "vuln_class": "ssti",
+          "cwe": "CWE-1336",
+          "rule_id": "TAINT-003",
+          "note": "Handlebars.java `compileInline(template)`: the template is arg 0; the context passed to apply() is data. The local is bound by its declared type (receivers.go)."
+        },
+        {
           "call": "println",
           "vuln_class": "xss",
           "cwe": "CWE-79",
