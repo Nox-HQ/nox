@@ -80,22 +80,22 @@ misses to convert). We do not.
 - [x] Sinks by class from the dev-split misses: XSS (12% recall), SSRF (15%), path traversal (26%), command injection (24%), open redirect (29%)
 - [x] Crypto and config recall: hard-coded credentials (37%), weak randomness, cookie flags, CORS, TLS verification off, debug mode, JWT verification off — from the dev-split misses
 - [x] Noise: DATA-001 in seed data, fixtures and migrations; vendored and committed dependency trees (node_modules, site-packages) treated as third-party; IaC-121–124 and IAC-225 sampled and narrowed per "do not remove rules"
-- [ ] Interprocedural finding location: report at the sink inside the helper with the call path as evidence — **moved to M2** (decided 2026-11-22): the fingerprint change is made once, with cross-file summaries; on the current engine it could recover at most 8 dev labels
+- [x] Interprocedural finding location: report at the sink inside the helper with the call path as evidence — **moved to M2** (decided 2026-11-22): the fingerprint change is made once, with cross-file summaries; on the current engine it could recover at most 8 dev labels — done in #1154
 - [x] M1 gate: score dev and held-out, read the new unmatched findings, publish the result in the benchmark doc
 
 ### M2 — tree-sitter and cross-file taint
 
-- [ ] Tree-sitter WebAssembly build: official runtime plus pinned Python, JavaScript, TypeScript, TSX and Java grammars, reproducible, SHA-pinned, flat tree export (ADR 0006)
-- [ ] wazero host in core: bounded parse, trap and timeout recorded as a file limitation, fallback to the line recognizer
-- [ ] Python front end producing taint.Units from the tree; A/B against the recognizer on dev, rule-diff corpus and precision suites; switch when no worse
-- [ ] JS/TS front end, same gate
-- [ ] Java front end, same gate (Kotlin follows)
-- [ ] Module index: per-language import and symbol resolution (Python modules, ESM and CommonJS, Java packages and Spring injection)
-- [ ] Cross-file summaries: function summaries keyed across the module, call resolution through the index, bounded fixpoint, deterministic order
+- [x] Tree-sitter WebAssembly build: official runtime plus pinned Python, JavaScript, TypeScript, TSX and Java grammars, reproducible, SHA-pinned, flat tree export (ADR 0006) — #1149
+- [x] wazero host in core: bounded parse, trap and timeout recorded as a file limitation, fallback to the line recognizer — #1150; the bound is counted work since #1156
+- [x] Python front end producing taint.Units from the tree; A/B against the recognizer on dev, rule-diff corpus and precision suites; switch when no worse — #1151
+- [x] JS/TS front end, same gate — #1152
+- [x] Java front end, same gate (Kotlin follows) — #1153
+- [x] Module index: per-language import and symbol resolution (Python modules, ESM and CommonJS, Java packages and Spring injection) — #1154, Spring injection #1155
+- [x] Cross-file summaries: function summaries keyed across the module, call resolution through the index, bounded fixpoint, deterministic order — #1154 (ADR 0007)
 - [x] Route entry points as sources across files: the route inventory feeds the taint engine, so a handler's parameters are sources wherever the handler is defined — done as call resolution through declared receiver types (Spring and NestJS injection) and Java for-each headers; dev F3 16.5 -> 17.0
 - [x] Parameter SQL flows reachable from a route are raised from low to medium confidence; unreachable ones stay low — a scan stage after the call-graph stage (`core/param_sql_reach.go`); 15 of 64 on the RealVuln repos
 - [x] Binary size and parse-time budget measured and recorded per language — docs/benchmarks/2026-11-23-treesitter-budget; the budget is now counted work, not time, so a parse no longer depends on machine load
-- [ ] M2 gate: dev and held-out, OWASP Benchmark, rule-diff corpus, published
+- [x] M2 gate: dev and held-out, OWASP Benchmark, rule-diff corpus, published — targets **not met**: F3 17.0 / 12.8 (target 20), injection recall 37.0% / 27.8% (target 45%); OWASP Java 56.3, Python 52.8 (Python tree front-end regression); docs/benchmarks/2026-11-21-realvuln#m2-gate-2026-11-23
 
 ### M3 — remaining classes and languages
 

@@ -116,6 +116,31 @@ Per the deterministic-lead plan, this benchmark only reports and is not read
 case by case; the precision on real code is gated by RealVuln's development
 split.
 
+## M2 gate, 2026-11-23
+
+nox at `b22b660` (after the tree-sitter front ends #1151–#1153 and cross-file taint
+#1154–#1155), same scorers, same scan roots, same suite commits as 2026-11-21.
+
+| | 2026-11-21 | M2 gate |
+|---|---:|---:|
+| Python | 56.1 | **52.8** |
+| Java | 47.9 | **56.3** |
+
+**Java** rose in detection across the injection categories as cross-file and
+multi-line flows were followed: sqli 93% / 40%, cmdi 93% / 41%, pathtraver 85% /
+29%, ldapi 96% / 38%, xss 54% / 24% (TPR / FPR). False-positive rates rose with
+them; the averages net to +8.4.
+
+**Python** fell in seven categories, all on detection (xpathi 67% → 59%, ldapi
+62% → 38%, codeinj 60% → 50%, cmdi 69% → 62%, deserialization 61% → 56%, xss
+48% → 45%, pathtraver 43% → 40%), with false-positive rates slightly lower. The
+same binary with the Python tree-sitter front end off
+(`NOX_TAINT_TREESITTER=javascript,java`) reproduces 2026-11-21 exactly, so the
+loss is that front end's (#1151). It passed its development-split A/B on
+RealVuln, so these idioms are not in that split. This benchmark is not read case
+by case (plan rules); the cause is to be found by a differential of the two
+segmenters on development-split Python.
+
 ## Limits
 
 - The benchmarks are synthetic. A score here is evidence about a rule's
