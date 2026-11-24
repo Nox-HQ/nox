@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Java path traversal (TAINT-004): an uploaded file's name -- Spring
+  `MultipartFile.getOriginalFilename()`, Servlet `Part.getSubmittedFileName()`
+  -- is a request source, and `Files.readAttributes`, `getAttribute`, `list`,
+  `walk`, `find`, `newByteChannel`, `move`, `deleteIfExists`,
+  `createDirectories`, `createDirectory`, `createFile`, `size` and
+  `getLastModifiedTime` are sinks.
+
 - APPCFG-007: a secret setting in Spring `application*`/`bootstrap*`
   configuration or a Compose file falls back to a literal when its
   environment variable is unset (`password: ${DB_PASSWORD:...}`,
