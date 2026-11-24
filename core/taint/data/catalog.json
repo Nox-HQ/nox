@@ -4109,6 +4109,11 @@
           "call": "getSubmittedFileName",
           "kind": "http_body",
           "note": "Servlet Part.getSubmittedFileName(): the file name the client sent"
+        },
+        {
+          "call": "RequestBoundBodyObject",
+          "kind": "http_body",
+          "note": "sentinel: a handler parameter an object binding (@RequestBody, @ModelAttribute, @BeanParam, @Body) fills with an object or map type -- the whole request object, which mass assignment (TAINT-014) needs; see RequestBoundQuery"
         }
       ],
       "sinks": [
@@ -5119,6 +5124,34 @@
           "cwe": "CWE-22",
           "rule_id": "TAINT-004",
           "note": "java.nio.file.Files.getLastModifiedTime: reaches the filesystem at the given path"
+        },
+        {
+          "call": "org.springframework.beans.BeanUtils.copyProperties",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "the whole request object copied onto a bean: reads slot 0 (source); see mass_assignment.go"
+        },
+        {
+          "call": "org.apache.commons.beanutils.BeanUtils.copyProperties",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Apache Commons copyProperties(dest, orig): reads slot 1"
+        },
+        {
+          "call": "org.apache.commons.beanutils.PropertyUtils.copyProperties",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Apache Commons copyProperties(dest, orig): reads slot 1"
+        },
+        {
+          "call": "setPropertyValue",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "BeanWrapper.setPropertyValue(name, value) with a property name taken from the request mapping"
         }
       ],
       "sanitizers": [
@@ -6626,6 +6659,11 @@
           "call": "RequestBoundBody",
           "kind": "http_body",
           "note": "sentinel: a handler parameter bound from the request body or form by annotation (@RequestBody, @RequestPart, @ModelAttribute, @FormParam, @BeanParam, @Body, @RestForm); see RequestBoundQuery"
+        },
+        {
+          "call": "RequestBoundBodyObject",
+          "kind": "http_body",
+          "note": "sentinel: a handler parameter an object binding (@RequestBody, @ModelAttribute, @BeanParam, @Body) fills with an object or map type -- the whole request object, which mass assignment (TAINT-014) needs; see RequestBoundQuery"
         }
       ],
       "sinks": [
@@ -6804,6 +6842,34 @@
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
           "note": "response writer .println(taintedHtml) — reflected XSS"
+        },
+        {
+          "call": "org.springframework.beans.BeanUtils.copyProperties",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "the whole request object copied onto a bean: reads slot 0 (source); see mass_assignment.go"
+        },
+        {
+          "call": "org.apache.commons.beanutils.BeanUtils.copyProperties",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Apache Commons copyProperties(dest, orig): reads slot 1"
+        },
+        {
+          "call": "org.apache.commons.beanutils.PropertyUtils.copyProperties",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Apache Commons copyProperties(dest, orig): reads slot 1"
+        },
+        {
+          "call": "setPropertyValue",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "BeanWrapper.setPropertyValue(name, value) with a property name taken from the request mapping"
         }
       ],
       "sanitizers": [

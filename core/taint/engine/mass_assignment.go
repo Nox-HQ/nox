@@ -146,7 +146,18 @@ func isWholeSource(lang string, src taint.Source, expr string) bool {
 // keepsWhole reports whether an assignment's value is the tainted variable v
 // with every field kept.
 func keepsWhole(expr, v string) bool {
-	return v != "" && wholeExpr(expr) == v
+	if v == "" {
+		return false
+	}
+	return wholeExpr(expr) == v
+}
+
+// javaCopySlot is the argument a bean-copy call reads from: Spring's
+// copyProperties(source, target, ...), Apache Commons' (dest, orig).
+var javaCopySlot = map[string]int{
+	"org.springframework.beans.BeanUtils.copyProperties":        0,
+	"org.apache.commons.beanutils.BeanUtils.copyProperties":     1,
+	"org.apache.commons.beanutils.PropertyUtils.copyProperties": 1,
 }
 
 // massAssignSlots are the sinks whose first argument is the record written
@@ -164,6 +175,16 @@ func massAssignmentReaches(lang string, sink *taint.Sink, rawCall string, info t
 		// attribute. Names from a validated model dump are its declared
 		// fields.
 		return ti.whole && len(info.PositionalVars) > 1 && slices.Contains(info.PositionalVars[1], v)
+	}
+	if sink.Call == "setPropertyValue" {
+		// BeanWrapper.setPropertyValue(name, value): a property NAME from the
+		// request -- a map key, or one parameter -- sets whichever field the
+		// client picks.
+		return len(info.PositionalArgs) >= 2 && slices.Contains(info.PositionalVars[0], v)
+	}
+	if slot, ok := javaCopySlot[sink.Call]; ok {
+		return ti.whole && slot < len(info.PositionalArgs) &&
+			(inlineOperandName(slot) == v || usedWhole(info.PositionalArgs[slot], v))
 	}
 	if !ti.whole {
 		return false
@@ -252,4 +273,46 @@ func wholeBinding(lang string, st *taint.Statement, src taint.Source, tainted ma
 		return itemsOfWhole(lang, st.Expr, tainted)
 	}
 	return isWholeSource(lang, src, st.Expr)
+}
+
+// apacheBeanImport is an import of Apache Commons' bean utilities, whose
+// copyProperties takes (dest, orig) -- the reverse of Spring's.
+var apacheBeanImport = regexp.MustCompile(`(?m)^\s*import\s+org\.apache\.commons\.beanutils\.(BeanUtils|PropertyUtils|\*)\s*;`)
+
+// applyJavaBeanCopies records a bean copy written by its simple class name
+// under its qualified one, which decides the slot read from. Java imports are
+// not expanded into call chains, so `BeanUtils.copyProperties(a, b)` names no
+// library on its own: an Apache Commons import makes it Apache's, anything
+// else Spring's (42 of 44 imports across the RealVuln corpus).
+func applyJavaBeanCopies(drafts []unitDraft, content []byte) {
+	apache := map[string]bool{}
+	for _, m := range apacheBeanImport.FindAllSubmatch(content, -1) {
+		if c := string(m[1]); c == "*" {
+			apache["BeanUtils"], apache["PropertyUtils"] = true, true
+		} else {
+			apache[c] = true
+		}
+	}
+	for i := range drafts {
+		for j := range drafts[i].stmts {
+			st := &drafts[i].stmts[j]
+			for _, call := range st.calls {
+				class, ok := strings.CutSuffix(call, ".copyProperties")
+				if !ok || (class != "BeanUtils" && class != "PropertyUtils") {
+					continue
+				}
+				qualified := "org.springframework.beans.BeanUtils.copyProperties"
+				if apache[class] {
+					qualified = "org.apache.commons.beanutils." + call
+				} else if class == "PropertyUtils" {
+					continue // Spring has no PropertyUtils
+				}
+				st.calls = append(st.calls, qualified)
+				if info, ok := st.sinkArgs[call]; ok {
+					st.sinkArgs[qualified] = info
+				}
+				break
+			}
+		}
+	}
 }

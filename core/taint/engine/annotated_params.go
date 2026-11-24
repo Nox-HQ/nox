@@ -130,6 +130,9 @@ func requestBoundParams(inner string, split func(string) []string, nameOf func(s
 		if k == "" {
 			continue
 		}
+		if k == requestBoundBody && bindsWholeObject(anns, rest) {
+			k = requestBoundBodyObject
+		}
 		if name := nameOf(rest); isSimpleIdent(name) {
 			if out == nil {
 				out = map[string]string{}
@@ -152,4 +155,39 @@ func headerParamList(header string) string {
 		return ""
 	}
 	return header[open+1 : end]
+}
+
+// objectBindingAnnotations bind the whole body or form into one parameter,
+// as opposed to one named field (@RequestPart, @FormParam, @RestForm).
+var objectBindingAnnotations = []string{"RequestBody", "ModelAttribute", "BeanParam", "Body"}
+
+// scalarBodyTypes are parameter types an object binding fills with a value,
+// not an object whose fields the client chooses.
+var scalarBodyTypes = map[string]bool{
+	"String": true, "CharSequence": true, "byte[]": true, "int": true, "long": true,
+	"Integer": true, "Long": true, "boolean": true, "Boolean": true, "double": true,
+	"Double": true, "BigDecimal": true, "MultipartFile": true, "InputStream": true,
+	"Part": true, "Resource": true,
+}
+
+// bindsWholeObject reports whether an object-binding annotation fills an
+// object or map type: the parameter is then the whole request object
+// (mass_assignment.go), not one value from it.
+func bindsWholeObject(anns []string, rest string) bool {
+	if !slices.ContainsFunc(anns, func(a string) bool { return slices.Contains(objectBindingAnnotations, a) }) {
+		return false
+	}
+	fields := strings.Fields(strings.TrimPrefix(strings.TrimSpace(rest), "final "))
+	if len(fields) == 0 {
+		return false
+	}
+	typ := fields[0]
+	if i := strings.IndexByte(typ, '<'); i >= 0 {
+		typ = typ[:i]
+	}
+	if i := strings.LastIndexByte(typ, '.'); i >= 0 {
+		typ = typ[i+1:]
+	}
+	typ = strings.TrimSuffix(strings.TrimSuffix(typ, "?"), ":")
+	return !scalarBodyTypes[typ]
 }
