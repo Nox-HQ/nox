@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Open redirect sinks for Java (TAINT-007): a Spring MVC view name built as
+  `"redirect:" + value` (returned, assigned, or passed to `ModelAndView`),
+  `new RedirectView(url)`, JAX-RS `Response.seeOther`/`temporaryRedirect`,
+  Micronaut `HttpResponse.redirect`/`seeOther`/`temporaryRedirect`/
+  `permanentRedirect`. A fixed target, or a value after a fixed path on the
+  same site (`"redirect:/items/" + id`, `URI.create("/cohorts/" + id)`,
+  `sendRedirect("/items?id=" + id)`), is not reported; a protocol-relative
+  `"//"` prefix is.
+
 - APPCFG-007: a secret setting in Spring `application*`/`bootstrap*`
   configuration or a Compose file falls back to a literal when its
   environment variable is unset (`password: ${DB_PASSWORD:...}`,
