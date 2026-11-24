@@ -99,7 +99,7 @@ misses to convert). We do not.
 
 ### M2 follow-up — the gap to the M2 targets (decided 2026-11-23, before M3)
 
-Status 2026-11-24 (dev, main c876f1c + APPCFG-008): F3 17.0 -> 21.3 (target 20), injection recall 37.0% -> 51.2% (target 45%). Both M2 targets met on dev; held-out is scored at the gate.
+Gate 2026-11-24 (main 0cc6f49, all 203 rescanned): dev F3 17.0 -> 21.3, injection recall 37.0% -> 51.2% (targets 20 / 45%, met); held-out F3 12.8 -> 15.2, injection recall 27.8% -> 35.4% (not met). Held-out moved about half as far as dev; held-out JS/TS (15.4) and Java (11.2) are the gap. See docs/benchmarks/2026-11-21-realvuln/README.md#m2-gap-close-gate-2026-11-24. Decided: M2 closes on dev with the held-out shortfall recorded; M3 starts (maintainer, 2026-11-24).
 
 - [x] Python tree-reader regression on OWASP BenchmarkPython: tab-indented `match` statements lost their case structure; 52.8 -> 56.1
 - [x] Sinks the catalog does not recognise: the largest share of dev injection misses

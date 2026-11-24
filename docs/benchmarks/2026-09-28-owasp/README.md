@@ -150,6 +150,20 @@ tree reader read a match block, which the grammar starts on the header's row,
 as a one-line body and over-indented each `case`. Fixed with a test of its own
 (tabs and spaces); Python is back to **56.1**, every category as on 2026-11-21.
 
+## M2 gap-close gate, 2026-11-24
+
+nox at `0cc6f49`, same scorers and scan roots; BenchmarkPython at `f129148`,
+BenchmarkJava at `10dfcc5` (the local clone).
+
+| | M2 gate | now |
+|---|---:|---:|
+| Python | 52.8 → 56.1 (#1161) | **56.1** |
+| Java | 56.3 | **56.4** |
+
+Python is every category as on 2026-11-21. Java's change is path traversal
+(85% / 29% → 92% / 35%, TPR / FPR), from upload file names and the added
+`java.nio.file.Files` sinks (#1172); the other categories are as at the M2 gate.
+
 ## Limits
 
 - The benchmarks are synthetic. A score here is evidence about a rule's
