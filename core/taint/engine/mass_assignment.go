@@ -2,6 +2,7 @@ package engine
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/nox-hq/nox/core/taint"
@@ -27,6 +28,83 @@ var wholeObjectSources = map[string]map[string]bool{
 		"req.body": true, "request.body": true, "ctx.request.body": true,
 		"JSON.parse(event.body)": true,
 	},
+	"python": {
+		"request.json": true, "request.get_json()": true, "request.form": true,
+		"request.form.to_dict()": true, "request.POST": true, "request.POST.dict()": true,
+		"request.POST.copy()": true, "request.data": true, "request.json()": true,
+	},
+}
+
+// pyWholeJSON is the request body parsed as JSON: json.loads(request.body),
+// json.loads(request.body.decode("utf-8") or "{}"), request.get_json(force=True).
+var pyWholeJSON = regexp.MustCompile(`^(?:json\.loads\(\s*request\.(?:body|data|get_data\(\))\b|request\.get_json\()`)
+
+// kwargsSplatCall is the synthetic call recorded for a Python call that
+// passes **x: the mapping's keys become the callee's keyword arguments, so a
+// whole request mapping sets whatever fields the client named.
+const kwargsSplatCall = "kwargs_splat"
+
+// isWholeExpr reports whether an expression is the whole request object.
+func isWholeExpr(lang, expr string) bool {
+	e := wholeExpr(expr)
+	if lang == "python" {
+		e = strings.TrimSpace(strings.TrimPrefix(e, "**"))
+		if pyWholeJSON.MatchString(e) {
+			return true
+		}
+	}
+	return wholeObjectSources[lang][e]
+}
+
+// itemsOfWhole reports whether a loop binding iterates the keys or items of a
+// whole request mapping -- `for k, v in request.json.items()`, `for k in
+// data` with data whole -- so its names are the ones the client sent.
+func itemsOfWhole(lang, expr string, tainted map[string]taintInfo) bool {
+	if lang != "python" {
+		return false // a JavaScript destructured name is a field
+	}
+	e := wholeExpr(expr)
+	for _, s := range []string{".items()", ".keys()", ".iteritems()"} {
+		e = strings.TrimSuffix(e, s)
+	}
+	if isWholeExpr(lang, e) {
+		return true
+	}
+	ti, ok := tainted[e]
+	return ok && ti.whole
+}
+
+// applyKwargsSplats records the splat sink on every Python statement whose
+// call passes a **mapping, beside the call itself.
+func applyKwargsSplats(drafts []unitDraft) {
+	for i := range drafts {
+		for j := range drafts[i].stmts {
+			st := &drafts[i].stmts[j]
+			for _, call := range st.calls {
+				info, ok := st.sinkArgs[call]
+				if !ok || !splatsMapping(info) {
+					continue
+				}
+				st.calls = append(st.calls, kwargsSplatCall)
+				st.sinkArgs[kwargsSplatCall] = info
+				break
+			}
+		}
+	}
+}
+
+func splatsMapping(info sinkArgDraft) bool {
+	for _, a := range info.positionalArgs {
+		if strings.HasPrefix(strings.TrimSpace(a), "**") {
+			return true
+		}
+	}
+	for k := range info.keywordArgs {
+		if strings.HasPrefix(k, "**") {
+			return true
+		}
+	}
+	return false
 }
 
 var (
@@ -62,7 +140,7 @@ func isWholeSource(lang string, src taint.Source, expr string) bool {
 	if src.Call == requestBoundBodyObject {
 		return true
 	}
-	return wholeObjectSources[lang][wholeExpr(expr)]
+	return isWholeExpr(lang, expr)
 }
 
 // keepsWhole reports whether an assignment's value is the tainted variable v
@@ -79,7 +157,14 @@ var massAssignSlots = map[string]bool{"Object.assign": true, "merge": true}
 // massAssignmentReaches reports whether, at a mass-assignment sink, the
 // tainted variable v is whole, is passed whole (not one of its fields), and
 // is passed where data is written -- on a receiver that writes records.
-func massAssignmentReaches(sink *taint.Sink, rawCall string, info taint.SinkArgInfo, v string, ti taintInfo) bool {
+func massAssignmentReaches(lang string, sink *taint.Sink, rawCall string, info taint.SinkArgInfo, v string, ti taintInfo) bool {
+	if sink.Call == "setattr" {
+		// setattr(obj, name, value): the NAME drawn from a raw request
+		// mapping (whole: see itemsOfWhole) lets the client set any
+		// attribute. Names from a validated model dump are its declared
+		// fields.
+		return ti.whole && len(info.PositionalVars) > 1 && slices.Contains(info.PositionalVars[1], v)
+	}
 	if !ti.whole {
 		return false
 	}
@@ -88,7 +173,7 @@ func massAssignmentReaches(sink *taint.Sink, rawCall string, info taint.SinkArgI
 	switch {
 	case sink.Call == "Object.assign":
 		first = 1 // Object.assign(target, ...sources)
-	case !writesRecords(rawCall):
+	case lang == "javascript" && !writesRecords(rawCall):
 		return false // the application's own service or another object
 	case massAssignSlots[key] || massAssignSlots[sink.Call]:
 		first = 1
@@ -157,4 +242,14 @@ func writesRecords(rawCall string) bool {
 		return true // a model class: User.create, Deal.findByIdAndUpdate
 	}
 	return dataLayerReceiver.MatchString(recv)
+}
+
+// wholeBinding decides whole-ness for a statement bound from a source: a
+// field binding (destructuring, a loop target) is whole only as the keys of a
+// whole mapping; any other binding when its expression is the whole object.
+func wholeBinding(lang string, st *taint.Statement, src taint.Source, tainted map[string]taintInfo) bool {
+	if st.FieldBinding {
+		return itemsOfWhole(lang, st.Expr, tainted)
+	}
+	return isWholeSource(lang, src, st.Expr)
 }

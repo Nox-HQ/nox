@@ -766,6 +766,27 @@
           "cwe": "CWE-117",
           "rule_id": "TAINT-013",
           "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "update",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "dict.update / QuerySet.update / obj.__dict__.update with the whole request mapping (mass_assignment.go)"
+        },
+        {
+          "call": "kwargs_splat",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "a call passing the whole request mapping as **kwargs: Model(**data), objects.create(**data); recorded by mass_assignment.go"
+        },
+        {
+          "call": "setattr",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "setattr(obj, name, value) with an attribute name the client chose"
         }
       ],
       "sanitizers": [

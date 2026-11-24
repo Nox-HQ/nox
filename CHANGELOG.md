@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- TAINT-014 mass assignment for Python: the whole request mapping --
+  `request.get_json()`, `request.json`, `request.form`, `request.POST`,
+  `request.data`, `json.loads(request.body...)` -- merged with `.update()` or
+  `__dict__.update()`, or passed as `**kwargs` (`User(**data)`,
+  `objects.create(**data)`); and `setattr(obj, name, value)` with an attribute
+  name the client chose.
+
 - TAINT-014: mass assignment (CWE-915) in JavaScript and TypeScript. The whole
   request object -- `req.body`, a NestJS `@Body()` DTO, or a copy or spread of
   either -- written onto a record: `Object.assign(record, body)` (the source,
@@ -342,6 +349,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   precision 0.14 -> 0.21), held-out 11.2 -> 11.5.
 
 ### Fixed
+
+- Taint, Python: a `for` loop bound nothing, so a request value iterated
+  into a sink (`for f in request.args.getlist("f"): os.system(...)`) was
+  never tainted. Each target name is now bound from the iterated value.
 
 - Taint, JavaScript: a spread operand (`...x`) was skipped as the attribute
   after a dot, so a tainted value spread into an object literal or an

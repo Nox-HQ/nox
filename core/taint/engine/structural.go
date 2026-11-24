@@ -34,6 +34,10 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) (units []ta
 	// ordinary import idiom be recognised. Additions only; see imports.go.
 	applyImportAliases(drafts, importAliases(lang, content))
 	if lang == lexctx.LangPython {
+		// Mass assignment through **mapping: see mass_assignment.go.
+		applyKwargsSplats(drafts)
+	}
+	if lang == lexctx.LangPython {
 		// XXE: see xxe_python.go.
 		applyXXEParsers(drafts, pythonXXEParsers(content))
 	}
@@ -496,7 +500,7 @@ func (e *StructuralEngine) forwardPass(
 							", or the source cannot reach that class"))
 					continue
 				}
-				if sink.VulnClass == taint.VulnMassAssignment && !massAssignmentReaches(&sink, rawCall, info, v, ti) {
+				if sink.VulnClass == taint.VulnMassAssignment && !massAssignmentReaches(lang, &sink, rawCall, info, v, ti) {
 					continue // a field of the request, or the record written to
 				}
 				if inlineCleared[v][sink.VulnClass] {
@@ -614,7 +618,7 @@ func (e *StructuralEngine) forwardPass(
 				}
 			}
 			checked.admit(cleared, st.Assigns, st.Line, e.partialClasses(lang, st.Calls))
-			setTaint(taintInfo{src: src, srcLine: st.Line, cleared: cleared, whole: !st.FieldBinding && isWholeSource(lang, src, st.Expr)})
+			setTaint(taintInfo{src: src, srcLine: st.Line, cleared: cleared, whole: wholeBinding(lang, st, src, tainted)})
 			continue
 		}
 
@@ -650,7 +654,11 @@ func (e *StructuralEngine) forwardPass(
 				continue
 			}
 			c := cloneTaintInfo(ti)
-			c.whole = c.whole && !st.FieldBinding && keepsWhole(st.Expr, v)
+			if st.FieldBinding {
+				c.whole = itemsOfWhole(lang, st.Expr, tainted)
+			} else {
+				c.whole = c.whole && keepsWhole(st.Expr, v)
+			}
 			c.sqlBuilt = c.sqlBuilt || slices.Contains(st.SQLVars, v)
 			carried = &c
 			break
@@ -1190,7 +1198,7 @@ func (e *StructuralEngine) inlineSourceOperands(lang string, info taint.SinkArgI
 			name:   name,
 			slot:   slot,
 			vector: strings.HasPrefix(strings.TrimSpace(argText), "["),
-			info:   taintInfo{src: src, srcLine: srcLine, cleared: cleared, whole: wholeObjectSources[lang][wholeExpr(argText)]},
+			info:   taintInfo{src: src, srcLine: srcLine, cleared: cleared, whole: isWholeExpr(lang, argText)},
 		}
 	}
 	return out
