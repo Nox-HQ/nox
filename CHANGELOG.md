@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- TAINT-013: log injection (CWE-117, low severity, low confidence). A request
+  value reaches a call on an application logger -- a Java `Logger`/`Log` local
+  or field (SLF4J, Log4j, JUL, JBoss, Commons Logging) or the `log` a Lombok
+  logging annotation injects; NestJS `Logger`, winston, pino, bunyan, log4js
+  or `console.*`; Python `logging.*` or a `logging.getLogger` logger.
+  Placeholder arguments count: SLF4J and `logging` do not strip CR/LF. Not
+  reported after `Encode.forJava`, `StringEscapeUtils.escapeJava`,
+  `JSON.stringify`, `repr` or `json.dumps`. A call through `this.` now resolves
+  to the field it names, for every taint sink.
 - XSS-001: a template prints a value without HTML escaping (CWE-79, low
   confidence). Jinja, Django and Nunjucks `{{ x | safe }}` and outputs inside
   `{% autoescape false %}`; EJS `<%- x %>`; JSF, Facelets and Struts

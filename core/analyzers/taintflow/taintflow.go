@@ -84,9 +84,10 @@ func severityForClass(class taint.VulnClass) findings.Severity {
 	case taint.VulnCommandInjection, taint.VulnSQLInjection, taint.VulnCodeInjection,
 		taint.VulnUnsafeDeserialization, taint.VulnSSRF, taint.VulnPromptInjection:
 		return findings.SeverityHigh
-	case taint.VulnTrustBoundary:
+	case taint.VulnTrustBoundary, taint.VulnLogInjection:
 		// The value is not executed or interpreted where it lands; the risk
-		// is later code trusting what the session holds.
+		// is later code trusting what the session holds, or a reader trusting
+		// a log entry the input forged.
 		return findings.SeverityLow
 	case taint.VulnArgumentInjection:
 		// One argument of an argv exec, no shell: at worst read as an option.
@@ -277,6 +278,11 @@ func (a *Analyzer) toFinding(flow *taint.Flow) findings.Finding {
 	}
 	var msg string
 	confidence := findings.ConfidenceMedium
+	if sink.VulnClass == taint.VulnLogInjection {
+		// Logging request data is everywhere; whether the log format or its
+		// reader is affected by a line break is not established here.
+		confidence = findings.ConfidenceLow
+	}
 	switch {
 	case flow.Source.Kind == engine.SourceParameter:
 		// No source in the file says the value is untrusted: what is shown is

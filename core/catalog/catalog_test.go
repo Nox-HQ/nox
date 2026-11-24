@@ -141,8 +141,9 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1513 -> 1515 adds APPCFG-004/005 (cookie HttpOnly and Secure).
 	// 1515 -> 1516 adds APPCFG-006 (a signing key written in the source).
 	// 1516 -> 1517 adds XSS-001 (a template printing a value unescaped).
-	if got := len(cat); got != 1517 {
-		t.Errorf("Catalog() returned %d rules, want 1517", got)
+	// 1517 -> 1518 adds TAINT-013 (log injection, CWE-117).
+	if got := len(cat); got != 1518 {
+		t.Errorf("Catalog() returned %d rules, want 1518", got)
 	}
 }
 

@@ -105,7 +105,7 @@ misses to convert). We do not.
   - [ ] Log injection (CWE-117, 59 dev misses): no taint sink exists for it
   - [x] Java template injection (FreeMarker, Velocity, Handlebars) and expression injection (SpEL, OGNL, MVEL): dev +40 labels, none lost, Java F3 9.5 -> 11.4, injection recall 38.2% -> 41.4%. The 4 unmatched are real: 3 labelled CWE-917/95 where nox says CWE-94, 1 the evaluate step after a parse already reported. Not covered: Thymeleaf through a StringTemplateResolver, FreeMarker `getTemplate(name)`
   - [x] XXE, Java (DOM, SAX, StAX from a factory made in the file and never hardened) and Node (libxmljs `noent: true`, #1164): dev +8 labels, none lost, Java F3 11.4 -> 11.7, injection recall 41.4% -> 42.0%. The 1 unmatched is a real XXE on an HRIS message. Not covered: TransformerFactory, SchemaFactory/Validator, JAXB, dom4j, JDOM; Express upload bodies (`req.files`) are not sources; config-only labels with no untrusted document
-  - [ ] Template-file XSS (98)
+  - [x] Template-file XSS (XSS-001, #1166: Jinja/Django/Nunjucks `|safe` and autoescape off, EJS `<%- %>`, JSF/Struts `escape="false"`, JSP request expressions): dev +37 labels, none lost, F3 18.3 -> 19.0, injection recall 42.0% -> 44.9%. 36 of the unmatched are raw output of stored or reflected data beside a labelled line. Not covered: Thymeleaf `th:utext`, Vue `v-html`
 - [ ] Java recall: F3 a third to a half of the other languages'
 - [ ] Fastify `reply.send({ ... })` read as XSS: an object serialised as JSON
 
