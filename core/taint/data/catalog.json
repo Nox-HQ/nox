@@ -3968,6 +3968,16 @@
           "call": "RequestBoundBody",
           "kind": "http_body",
           "note": "sentinel: a handler parameter bound from the request body or form by annotation (@RequestBody, @RequestPart, @ModelAttribute, @FormParam, @BeanParam, @Body, @RestForm); see RequestBoundQuery"
+        },
+        {
+          "call": "getOriginalFilename",
+          "kind": "http_body",
+          "note": "Spring MultipartFile.getOriginalFilename(): the file name the client sent"
+        },
+        {
+          "call": "getSubmittedFileName",
+          "kind": "http_body",
+          "note": "Servlet Part.getSubmittedFileName(): the file name the client sent"
         }
       ],
       "sinks": [
@@ -4887,6 +4897,97 @@
           "cwe": "CWE-601",
           "rule_id": "TAINT-007",
           "note": "Micronaut HttpResponse.permanentRedirect(URI)"
+        },
+        {
+          "call": "Files.readAttributes",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.readAttributes: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.getAttribute",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.getAttribute: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.list",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.list: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.walk",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.walk: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.find",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.find: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.newByteChannel",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.newByteChannel: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.move",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.move: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.deleteIfExists",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.deleteIfExists: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.createDirectories",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.createDirectories: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.createDirectory",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.createDirectory: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.createFile",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.createFile: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.size",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.size: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.getLastModifiedTime",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.getLastModifiedTime: reaches the filesystem at the given path"
         }
       ],
       "sanitizers": [
