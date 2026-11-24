@@ -83,3 +83,22 @@ func TestSpreadOperandIsRead(t *testing.T) {
 		t.Errorf("a spread request value reached no command sink")
 	}
 }
+
+// An object key with the variable's name is a property name, not the value.
+func TestUsedWholeSkipsObjectKeys(t *testing.T) {
+	for _, c := range []struct {
+		arg  string
+		want bool
+	}{
+		{"{ data: { reason: data.reason, status: s } }", false},
+		{"{ data: data }", true},
+		{"{ where: { id }, data }", true},
+		{"cond ? data : fallback", true},
+		{"{ ...data }", true},
+		{"data.reason", false},
+	} {
+		if got := usedWhole(c.arg, "data"); got != c.want {
+			t.Errorf("usedWhole(%q) = %v, want %v", c.arg, got, c.want)
+		}
+	}
+}

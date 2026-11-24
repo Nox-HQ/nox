@@ -123,6 +123,10 @@ func usedWhole(arg, v string) bool {
 		if strings.HasPrefix(next, ".") || strings.HasPrefix(next, "[") || strings.HasPrefix(next, "?.") || strings.HasPrefix(next, "(") {
 			continue // a field, an index or a call on it
 		}
+		prev := strings.TrimRight(arg[:at], " \t")
+		if strings.HasPrefix(next, ":") && (strings.HasSuffix(prev, "{") || strings.HasSuffix(prev, ",")) {
+			continue // an object key named like the variable
+		}
 		return true
 	}
 	return false
