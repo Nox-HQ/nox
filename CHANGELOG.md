@@ -320,6 +320,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Taint, Java: a try-with-resources header (`try (ObjectInputStream in =
+  new ObjectInputStream(...)) {`) was skipped as a control keyword, so its
+  resources were never bound and a request value read through one reached
+  no sink -- deserialization, file and stream reads, connections. Each
+  resource declaration is now an assignment.
+
 - Taint: a local helper whose parameter reaches more than one sink reported
   only the first one in its summary to each caller. A helper that logged its
   argument and then passed it to a shell or an HTTP client hid the command

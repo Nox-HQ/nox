@@ -120,6 +120,11 @@ func extractJava(lines []logicalLine) []unitDraft {
 			if inner, ok := javaForEachStatement(ll); ok {
 				javaStatement(cur, jb, inner, branchMaybe)
 			}
+			// `try (T x = expr; U y = expr2) {` declares its resources: each is
+			// an assignment that always runs before the block.
+			for _, res := range javaTryResources(ll) {
+				javaStatement(cur, jb, res, branchTaken)
+			}
 			if h, ok := parseJavaHeader(ll); ok {
 				st := jb.header(h, depthHere)
 				switch {
@@ -457,6 +462,51 @@ func javaRequestBound(header string) map[string]string {
 // holds the collection's values, and a call in the header (a service lookup
 // whose results the body uses) is a call the method makes. A classic
 // `for (init; cond; step)` header carries none here.
+// javaTryResources returns the resource declarations of a try-with-resources
+// header -- `try (InputStream in = open(x); var r = new Reader(in)) {` -- each
+// as its own logical line, at its own offsets, with the rest of the header
+// blanked. A resource that names an existing variable (`try (in) {`) declares
+// nothing and is skipped.
+func javaTryResources(ll logicalLine) []logicalLine {
+	code := ll.code
+	lead := len(code) - len(strings.TrimLeft(code, " \t}"))
+	rest := code[lead:]
+	if !strings.HasPrefix(rest, "try") {
+		return nil
+	}
+	open := strings.IndexByte(rest, '(')
+	if open < 0 || strings.TrimSpace(rest[len("try"):open]) != "" {
+		return nil
+	}
+	open += lead
+	closing := matchParen(code, open)
+	if closing < 0 {
+		return nil
+	}
+	var out []logicalLine
+	from := open + 1
+	for from < closing {
+		end := closing
+		if semi := topLevelKeyword(code[from:closing], ";"); semi >= 0 {
+			end = from + semi
+		}
+		if topLevelKeyword(code[from:end], "=") >= 0 {
+			out = append(out, logicalLine{line: ll.line, code: keepRange(code, from, end), raw: keepRange(ll.raw, from, min(end, len(ll.raw)))})
+		}
+		from = end + 1
+	}
+	return out
+}
+
+// keepRange returns s with every byte outside [from, to) blanked, so offsets
+// into the result are offsets into s.
+func keepRange(s string, from, to int) string {
+	if from >= len(s) || from >= to {
+		return strings.Repeat(" ", len(s))
+	}
+	return strings.Repeat(" ", from) + s[from:to] + strings.Repeat(" ", len(s)-to)
+}
+
 func javaForEachStatement(ll logicalLine) (logicalLine, bool) {
 	code := ll.code
 	lead := len(code) - len(strings.TrimLeft(code, " \t}"))
