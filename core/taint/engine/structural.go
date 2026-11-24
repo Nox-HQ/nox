@@ -687,7 +687,16 @@ func (e *StructuralEngine) interprocSinkFlows(lang string, unit *taint.Unit, st 
 				continue
 			}
 			for _, op := range e.argOperands(lang, info, argIdx, tainted, st.Line) {
+				// One flow per sink the parameter reaches: a helper that
+				// logs its argument and then runs it in a shell is two
+				// defects, and stopping at the first sink in the summary
+				// hid the second.
+				reached := map[argSinkAt]bool{}
 				for _, as := range sinks {
+					at := argSinkAt{file: as.file, rule: as.sink.RuleID, line: as.line}
+					if reached[at] {
+						continue
+					}
 					if op.ti.cleared[as.sink.VulnClass] || op.ti.src.Excludes(as.sink.VulnClass) {
 						continue // caller already sanitized for this class, or the source's value cannot reach it
 					}
@@ -729,12 +738,19 @@ func (e *StructuralEngine) interprocSinkFlows(lang string, unit *taint.Unit, st 
 						// caller's to report.
 						ThroughCall: op.ti.throughCall,
 					})
-					break // one flow per (arg, helper) is enough
+					reached[at] = true
 				}
 			}
 		}
 	}
 	return out
+}
+
+// argSinkAt is one sink a helper's parameter reaches: where it is and which
+// rule it is.
+type argSinkAt struct {
+	file, rule string
+	line       int
 }
 
 // slotSanitizes reports whether, in one argument's code, the variable v is

@@ -33,6 +33,8 @@ func TestLogInjectionSinks(t *testing.T) {
 			"class A {\n  private final Toast toast = new Toast();\n  void h(HttpServletRequest request) {\n    toast.info(request.getParameter(\"u\"));\n  }\n}\n", false},
 		{"a value encoded for the log", "A.java", lexctx.LangJava,
 			"class A {\n  private static final Logger log = LoggerFactory.getLogger(A.class);\n  void h(HttpServletRequest request) {\n    String u = Encode.forJava(request.getParameter(\"u\"));\n    log.info(\"user \" + u);\n  }\n}\n", false},
+		{"a system property", "A.java", lexctx.LangJava,
+			"class A {\n  private static final Logger log = LoggerFactory.getLogger(A.class);\n  void h() {\n    String fqcn = System.getProperty(\"logger.fqcn\");\n    log.error(\"cannot load \" + fqcn);\n  }\n}\n", false},
 		// JavaScript and TypeScript
 		{"console.log of a request value", "routes/session.js", lexctx.LangJavaScript,
 			"app.post('/login', (req, res) => {\n  const userName = req.body.userName;\n  console.log(\"Error: attempt to login with invalid user: \", userName);\n});\n", true},
@@ -44,6 +46,10 @@ func TestLogInjectionSinks(t *testing.T) {
 			"app.get('/s', (req, res) => {\n  console.log(\"query \" + JSON.stringify(req.query.q));\n});\n", false},
 		{"log on something that is not a logger", "routes/s.js", lexctx.LangJavaScript,
 			"const audit = makeAudit();\napp.get('/s', (req, res) => {\n  audit.log(req.query.q);\n});\n", false},
+		{"a command-line argument", "cli.js", lexctx.LangJavaScript,
+			"const host = process.argv[2];\nconsole.log(\"connecting to \" + host);\n", false},
+		{"an environment variable", "main.ts", lexctx.LangJavaScript,
+			"const port = process.env.PORT || 3000;\nconsole.log(`running on http://localhost:${port}`);\n", false},
 		// Python
 		{"logging.warning of a request value", "views.py", lexctx.LangPython,
 			"import logging\nfrom flask import request\n\ndef v():\n    user = request.args.get('user')\n    logging.warning(f\"login {user}\")\n", true},
@@ -55,6 +61,21 @@ func TestLogInjectionSinks(t *testing.T) {
 	for _, c := range cases {
 		if got := slices.Contains(analyzeRuleIDs(t, c.path, c.lang, c.src), "TAINT-013"); got != c.want {
 			t.Errorf("%s: TAINT-013 reported=%v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// A helper whose parameter reaches two different sinks is two defects. The
+// caller's flow was cut at the first sink in the summary, so a log call
+// placed before a shell call hid the command injection.
+func TestHelperWithTwoSinksReportsBoth(t *testing.T) {
+	src := "const cp = require('child_process');\n" +
+		"function run(user) {\n  console.log('running for ' + user);\n  cp.exec('ls ' + user);\n}\n" +
+		"app.get('/r', (req, res) => {\n  run(req.query.u);\n});\n"
+	got := analyzeRuleIDs(t, "routes/r.js", lexctx.LangJavaScript, src)
+	for _, want := range []string{"TAINT-002", "TAINT-013"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("rules %v, want %s among them", got, want)
 		}
 	}
 }
