@@ -105,7 +105,7 @@ func extractJavaScript(lines []logicalLine) []unitDraft {
 		// openDepth) land in the new unit.
 		if isHeader {
 			u := &unitDraft{funcName: name, params: params, headerLine: ll.line,
-				requestBound: nestRequestBound(ll.code)}
+				requestBound: nestRequestBound(ll.code, ll.raw)}
 			if serverFile && len(stack) == 1 && strings.HasPrefix(trimmed, "export ") {
 				serverActionParams(u)
 			}

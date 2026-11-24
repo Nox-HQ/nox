@@ -144,8 +144,9 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1517 -> 1518 adds TAINT-013 (log injection, CWE-117).
 	// 1518 -> 1519 adds APPCFG-007 (a secret setting with a literal default).
 	// 1519 -> 1520 adds APPCFG-008 (Spring Security CSRF protection switched off).
-	if got := len(cat); got != 1520 {
-		t.Errorf("Catalog() returned %d rules, want 1520", got)
+	// 1520 -> 1521 adds TAINT-014 (mass assignment, CWE-915).
+	if got := len(cat); got != 1521 {
+		t.Errorf("Catalog() returned %d rules, want 1521", got)
 	}
 }
 
