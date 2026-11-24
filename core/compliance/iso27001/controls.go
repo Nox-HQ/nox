@@ -123,6 +123,7 @@ var controls = []controlDef{
 			{kind: fromFindings, label: "Secret scanning of the working tree", scope: "secrets", prefixes: []string{"SEC-"}, anywhere: true},
 			{kind: fromFindings, label: "Literal credentials in infrastructure and CI configuration", scope: "iac", ids: literalCredentialIaC, additive: true},
 			{kind: fromFindings, label: "Literal credentials in AI and MCP configuration", scope: "ai", ids: literalCredentialAI, additive: true},
+			{kind: fromFindings, label: "Literal credential defaults in application configuration", scope: "code", ids: []string{"APPCFG-007"}, additive: true},
 		},
 		limits: []string{
 			"A clean secret scan shows no recognizable credential was found in the scanned files; it does not show credentials are generated, stored, rotated or revoked well.",

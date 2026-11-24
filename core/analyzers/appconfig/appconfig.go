@@ -83,8 +83,9 @@ func (r rule) conf() findings.Confidence {
 	return r.confidence
 }
 
-// allRules is every rule the analyzer reports: settings, then cookie flags.
-var allRules = append(append(append([]rule{}, builtin...), cookieRules...), signingKeyRules...)
+// allRules is every rule the analyzer reports: settings, cookie flags,
+// signing keys, secret fallbacks in configuration.
+var allRules = append(append(append(append([]rule{}, builtin...), cookieRules...), signingKeyRules...), secretFallbackRules...)
 
 var (
 	py   = []lexctx.Lang{lexctx.LangPython}
@@ -222,7 +223,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if err != nil {
 			continue
 		}
-		found := scanCookieConfig(art.Path, content)
+		found := append(scanCookieConfig(art.Path, content), scanSecretFallback(art.Path, content)...)
 		if ok {
 			found = ScanFile(art.Path, lang, content)
 		}
