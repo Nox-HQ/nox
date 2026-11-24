@@ -99,14 +99,22 @@ misses to convert). We do not.
 
 ### M2 follow-up — the gap to the M2 targets (decided 2026-11-23, before M3)
 
+Status 2026-11-24 (dev, main c876f1c + APPCFG-008): F3 17.0 -> 21.3 (target 20), injection recall 37.0% -> 51.2% (target 45%). Both M2 targets met on dev; held-out is scored at the gate.
+
 - [x] Python tree-reader regression on OWASP BenchmarkPython: tab-indented `match` statements lost their case structure; 52.8 -> 56.1
-- [ ] Sinks the catalog does not recognise: the largest share of dev injection misses
+- [x] Sinks the catalog does not recognise: the largest share of dev injection misses
   - [x] Java SSRF clients (RestClient/WebClient, RestTemplate, java.net.http, JAX-RS, Micronaut, jsoup, Apache): dev +15 labels, Java F3 8.8 -> 9.5. Follow-up: a value appended after a fixed host (`"http://internal/x/" + id`, a base-URL client's `uri("/api/" + id)`) is path, not SSRF; most of the 34 new unmatched findings are that shape
   - [x] Log injection (TAINT-013, #1168: request values reaching an application logger in Java, JS/TS and Python; CR/LF encoders neutralise; env/argv/system properties are not sources): dev +42 labels, none lost, F3 19.0 -> 19.5, injection recall 44.9% -> 47.8%. The unmatched are request data concatenated into log calls, CWE-117 as defined; 409 are debug/trace. Same PR: a caller's flow into a helper no longer stops at the helper's first sink (+1 label, 52 hidden findings surfaced). Follow-ups: Java `.execute` matches executors as SQL; argv/env as sources in CLI tools
   - [x] Java template injection (FreeMarker, Velocity, Handlebars) and expression injection (SpEL, OGNL, MVEL): dev +40 labels, none lost, Java F3 9.5 -> 11.4, injection recall 38.2% -> 41.4%. The 4 unmatched are real: 3 labelled CWE-917/95 where nox says CWE-94, 1 the evaluate step after a parse already reported. Not covered: Thymeleaf through a StringTemplateResolver, FreeMarker `getTemplate(name)`
   - [x] XXE, Java (DOM, SAX, StAX from a factory made in the file and never hardened) and Node (libxmljs `noent: true`, #1164): dev +8 labels, none lost, Java F3 11.4 -> 11.7, injection recall 41.4% -> 42.0%. The 1 unmatched is a real XXE on an HRIS message. Not covered: TransformerFactory, SchemaFactory/Validator, JAXB, dom4j, JDOM; Express upload bodies (`req.files`) are not sources; config-only labels with no untrusted document
   - [x] Template-file XSS (XSS-001, #1166: Jinja/Django/Nunjucks `|safe` and autoescape off, EJS `<%- %>`, JSF/Struts `escape="false"`, JSP request expressions): dev +37 labels, none lost, F3 18.3 -> 19.0, injection recall 42.0% -> 44.9%. 36 of the unmatched are raw output of stored or reflected data beside a labelled line. Not covered: Thymeleaf `th:utext`, Vue `v-html`
-- [ ] Java recall: F3 a third to a half of the other languages'
+- [ ] Java recall: F3 a third to a half of the other languages'. 2026-11-24: Java dev F3 11.9 -> 16.5 (JS/TS 25.2, Python 25.1):
+  - [x] Secret settings with a literal default in Spring/Compose config (APPCFG-007, #1169): +41 labels
+  - [x] try-with-resources headers bound (#1170): +18 labels, deserialization and SQL behind a resource
+  - [x] Open redirect sinks: Spring `"redirect:" + url`, RedirectView, JAX-RS, Micronaut; fixed-path targets excluded (#1171): +12
+  - [x] Upload file names as sources, more `Files` sinks (#1172): +13
+  - [x] Spring Security CSRF switched off or exempted (APPCFG-008): +14. Stateless token APIs stay reported at medium confidence; excluding `STATELESS` chains would drop labelled JWT apps
+  - [ ] Remaining: authorization and business logic (M3), TransformerFactory/SchemaFactory XXE, Java `.execute` on executors read as SQL, `Files.copy(content, fixedPath)` read as path traversal
 - [ ] Fastify `reply.send({ ... })` read as XSS: an object serialised as JSON
 
 ### M3 — remaining classes and languages
