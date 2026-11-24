@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- APPCFG-007: a secret setting in Spring `application*`/`bootstrap*`
+  configuration or a Compose file falls back to a literal when its
+  environment variable is unset (`password: ${DB_PASSWORD:...}`,
+  `JWT_SECRET: ${JWT_SECRET:-...}`; CWE-798, medium). Not reported without a
+  default, with an empty one, with Compose's `:?`, with a default that is
+  another placeholder, or for a setting about a secret (a TTL, a header, a
+  key-store type). The value is never put in the finding. Mapped to ISO 27001
+  A.5.17.
+
 - TAINT-013: log injection (CWE-117, low severity, low confidence). A request
   value reaches a call on an application logger -- a Java `Logger`/`Log` local
   or field (SLF4J, Log4j, JUL, JBoss, Commons Logging) or the `log` a Lombok
