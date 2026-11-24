@@ -340,7 +340,7 @@ func ThirdPartyDirs() []string {
 func ThirdPartyDropRulePatterns() []string {
 	return []string{
 		"AI-*", "MCP-*", "AGENT-*", "IAC-*", "TAINT-*", "SLOP-*", "VARIANT-*",
-		"CRYPTO-*", "APPCFG-*", "HARDEN-*", "DATA-001",
+		"CRYPTO-*", "APPCFG-*", "HARDEN-*", "XSS-*", "DATA-001",
 	}
 }
 

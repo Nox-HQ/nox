@@ -278,7 +278,7 @@ var controls = []controlDef{
 		id: "A.8.28", title: "Secure coding", theme: "Technological",
 		sources: []source{
 			{kind: fromFindings, label: "Static analysis of application code", scope: "code",
-				prefixes: []string{"TAINT-", "VARIANT-", "MEMSAFE-", "HARDEN-"}, subjectFromSource: true},
+				prefixes: []string{"TAINT-", "VARIANT-", "MEMSAFE-", "HARDEN-", "XSS-"}, subjectFromSource: true},
 			{kind: fromFindings, label: "Authorization, authentication and webhook checks", scope: "code", ids: []string{"AUTHZ-001", "AUTHN-001", "WEBHOOK-001"}, additive: true},
 			{kind: fromFindings, label: "Agents that run model-supplied SQL", scope: "ai", ids: []string{"AI-AGENT-009"}, additive: true},
 			{kind: fromLeads, label: "Authorization and authentication leads"},

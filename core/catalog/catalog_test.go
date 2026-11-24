@@ -140,8 +140,9 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// JWT read without its signature verified).
 	// 1513 -> 1515 adds APPCFG-004/005 (cookie HttpOnly and Secure).
 	// 1515 -> 1516 adds APPCFG-006 (a signing key written in the source).
-	if got := len(cat); got != 1516 {
-		t.Errorf("Catalog() returned %d rules, want 1516", got)
+	// 1516 -> 1517 adds XSS-001 (a template printing a value unescaped).
+	if got := len(cat); got != 1517 {
+		t.Errorf("Catalog() returned %d rules, want 1517", got)
 	}
 }
 
