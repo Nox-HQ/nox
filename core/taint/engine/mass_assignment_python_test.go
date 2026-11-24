@@ -23,7 +23,9 @@ func TestMassAssignmentPython(t *testing.T) {
 		{"ORM create from the form inline", django + "def v(request):\n    Profile.objects.create(**request.POST.dict())\n", true},
 		{"object dict updated", flask + "def v():\n    current_user.__dict__.update(request.json)\n", true},
 		{"setattr with request names", flask + "def v():\n    for key, value in request.json.items():\n        setattr(user, key, value)\n", true},
+		{"setattr over a parsed body", django + "def v(request):\n    data = json.loads(request.body)\n    for k, v in data.items():\n        setattr(obj, k, v)\n", true},
 		// Not mass assignment.
+		{"setattr over a validated model dump", "from fastapi import APIRouter\n\n@router.put(\"/x\")\ndef upd(payload: LeaseIn):\n    data = payload.model_dump(exclude_unset=True)\n    for field, value in data.items():\n        setattr(lease, field, value)\n", false},
 		{"a field read by name", flask + "def v():\n    data = request.get_json()\n    user = User(name=data['name'])\n", false},
 		{"a dict of chosen fields", django + "def v(request):\n    payload = json.loads(request.body)\n    workset.update({'name': payload['name']})\n", false},
 		{"setattr with a fixed name", flask + "def v():\n    name = request.json['name']\n    setattr(user, 'name', name)\n", false},

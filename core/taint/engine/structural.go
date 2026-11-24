@@ -618,7 +618,7 @@ func (e *StructuralEngine) forwardPass(
 				}
 			}
 			checked.admit(cleared, st.Assigns, st.Line, e.partialClasses(lang, st.Calls))
-			setTaint(taintInfo{src: src, srcLine: st.Line, cleared: cleared, whole: !st.FieldBinding && isWholeSource(lang, src, st.Expr)})
+			setTaint(taintInfo{src: src, srcLine: st.Line, cleared: cleared, whole: wholeBinding(lang, st, src, tainted)})
 			continue
 		}
 
@@ -654,7 +654,11 @@ func (e *StructuralEngine) forwardPass(
 				continue
 			}
 			c := cloneTaintInfo(ti)
-			c.whole = c.whole && !st.FieldBinding && keepsWhole(st.Expr, v)
+			if st.FieldBinding {
+				c.whole = itemsOfWhole(lang, st.Expr, tainted)
+			} else {
+				c.whole = c.whole && keepsWhole(st.Expr, v)
+			}
 			c.sqlBuilt = c.sqlBuilt || slices.Contains(st.SQLVars, v)
 			carried = &c
 			break

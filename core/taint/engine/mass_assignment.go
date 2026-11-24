@@ -56,6 +56,24 @@ func isWholeExpr(lang, expr string) bool {
 	return wholeObjectSources[lang][e]
 }
 
+// itemsOfWhole reports whether a loop binding iterates the keys or items of a
+// whole request mapping -- `for k, v in request.json.items()`, `for k in
+// data` with data whole -- so its names are the ones the client sent.
+func itemsOfWhole(lang, expr string, tainted map[string]taintInfo) bool {
+	if lang != "python" {
+		return false // a JavaScript destructured name is a field
+	}
+	e := wholeExpr(expr)
+	for _, s := range []string{".items()", ".keys()", ".iteritems()"} {
+		e = strings.TrimSuffix(e, s)
+	}
+	if isWholeExpr(lang, e) {
+		return true
+	}
+	ti, ok := tainted[e]
+	return ok && ti.whole
+}
+
 // applyKwargsSplats records the splat sink on every Python statement whose
 // call passes a **mapping, beside the call itself.
 func applyKwargsSplats(drafts []unitDraft) {
@@ -141,9 +159,11 @@ var massAssignSlots = map[string]bool{"Object.assign": true, "merge": true}
 // is passed where data is written -- on a receiver that writes records.
 func massAssignmentReaches(lang string, sink *taint.Sink, rawCall string, info taint.SinkArgInfo, v string, ti taintInfo) bool {
 	if sink.Call == "setattr" {
-		// setattr(obj, name, value): the client choosing the NAME is the
-		// assignment of any attribute; it need not be the whole object.
-		return len(info.PositionalVars) > 1 && slices.Contains(info.PositionalVars[1], v)
+		// setattr(obj, name, value): the NAME drawn from a raw request
+		// mapping (whole: see itemsOfWhole) lets the client set any
+		// attribute. Names from a validated model dump are its declared
+		// fields.
+		return ti.whole && len(info.PositionalVars) > 1 && slices.Contains(info.PositionalVars[1], v)
 	}
 	if !ti.whole {
 		return false
@@ -222,4 +242,14 @@ func writesRecords(rawCall string) bool {
 		return true // a model class: User.create, Deal.findByIdAndUpdate
 	}
 	return dataLayerReceiver.MatchString(recv)
+}
+
+// wholeBinding decides whole-ness for a statement bound from a source: a
+// field binding (destructuring, a loop target) is whole only as the keys of a
+// whole mapping; any other binding when its expression is the whole object.
+func wholeBinding(lang string, st *taint.Statement, src taint.Source, tainted map[string]taintInfo) bool {
+	if st.FieldBinding {
+		return itemsOfWhole(lang, st.Expr, tainted)
+	}
+	return isWholeSource(lang, src, st.Expr)
 }
