@@ -350,6 +350,78 @@ misses at the last count) and by Java, whose F3 is a third to a half of the
 other languages' on both splits. Those, the Python front-end regression and the Fastify
 XSS class are the next work, before M3's new classes.
 
+## M2 gap-close gate, 2026-11-24
+
+nox at `0cc6f49` (after #1159–#1173: the Python tree-reader fix, Java SSRF,
+template/expression injection and XXE sinks, libxmljs XXE, template-file XSS
+XSS-001, log injection TAINT-013, every sink a helper reaches, secret settings
+with a literal default APPCFG-007, Java try-with-resources, Java open redirect
+sinks, upload file names as sources, Spring CSRF switched off APPCFG-008), the
+same offline default configuration, all 203 repositories rescanned with a build
+of that commit. Held-out labels were not read between the M2 gate and this one;
+the M2 gate's results reproduce exactly under the same scorer (17.0 / 12.8).
+
+**The M2 targets are met on dev and not on held-out:**
+
+| | target | dev | held-out | M2 gate dev / held-out |
+|---|---:|---:|---:|---:|
+| F3 | ≥ 20 | **21.3** | **15.2** | 17.0 / 12.8 |
+| injection recall | ≥ 45% | **51.2%** | **35.4%** | 37.0% / 27.8% |
+
+All 203 repositories: F3 15.5 → 19.2.
+
+| nox at `0cc6f49` | precision | recall | F3 |
+|---|---:|---:|---:|
+| dev, Python | 0.306 | 0.246 | 25.1 |
+| dev, JS/TS | 0.210 | 0.258 | 25.2 |
+| dev, Java | 0.091 | 0.182 | 16.5 |
+| held-out, Python | 0.368 | 0.218 | 22.7 |
+| held-out, JS/TS | 0.101 | 0.163 | 15.4 |
+| held-out, Java | 0.049 | 0.130 | 11.2 |
+
+Against RealVuln's published Semgrep runs, on the repositories Semgrep was run
+on, same matcher (Semgrep's figures and repository counts reproduce):
+
+| Python + JS/TS | nox at M1 | nox at M2 | nox now | Semgrep |
+|---|---:|---:|---:|---:|
+| dev (97 repos) | 22.0 | 23.4 | **25.2** | 10.7 |
+| held-out (43 repos) | 15.9 | 17.5 | **18.4** | 8.7 |
+
+**Generalisation.** Dev gained 4.3 F3 and 14.2 points of injection recall;
+held-out gained 2.4 and 7.6, about half. Java generalised best (held-out 6.6 →
+11.2, dev 8.8 → 16.5). Held-out JS/TS moved least (14.2 → 15.4 against dev 23.6
+→ 25.2) and is again the weakest held-out cell after Java. By rule on held-out:
+XXE (TAINT-010) +17 matched / +1 unmatched, the secret-default rule APPCFG-007
++13 / +54, log injection +10 / +103, SSRF +7 / +11, XSS +6 / +4, CSRF
+APPCFG-008 +5 / +7, open redirect +3 / +4; template-file XSS matched nothing on
+held-out (+36 / +36 on dev). Log injection's held-out precision (10 of 113) is
+well below its dev precision (42 of 855); both are request data written to a
+log, so the difference is the labels' density, not a different finding.
+
+Recall by class, dev / held-out: injection 51.2% / 35.4%, crypto/secrets/config
+34.9% / 35.0%, authentication/session 6.8% / 4.4%, information exposure 4.5% /
+0.9%; authorization, business logic and mass assignment 0 on both. Those are
+the M3 classes.
+
+**Rule-diff corpus** (26 repositories, run by CI on every PR): 8 rules changed
+against v1.70.0, each read on #1168 and unchanged since: the new log-injection
+rule (hackathon-starter 0 → 22, aws-cloudformation-templates 0 → 1); certbot
++1 command / +5 path flows through helper chains, from command-line arguments
+and environment variables in its release tools, exposed when a helper's
+second sink stopped being cut; the drops accounted for in
+`scripts/rule-deltas.json` (#1147, #1154).
+
+**OWASP Benchmark** (same scorers and scan roots; see
+[the OWASP document](../2026-09-28-owasp/README.md#m2-gap-close-gate-2026-11-24)):
+Python **56.1** (the tree-reader regression fixed in #1161), Java 56.3 →
+**56.4**.
+
+**Decided at this gate:** for the maintainer. The dev targets are met; the
+held-out ones are not, and held-out moved about half as far as dev. Either the
+milestone closes on dev with the held-out shortfall recorded, and M3 starts; or
+the held-out JS/TS and Java gaps are worked on first, from dev examples of the
+same shapes, without reading held-out findings.
+
 ## Measured and rejected: dropping through-call flows
 
 Most of the unmatched findings the framework sources added (#1140) are a
