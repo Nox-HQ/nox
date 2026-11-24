@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- TAINT-014 mass assignment for Java: a request-bound object (`@RequestBody`,
+  `@ModelAttribute`, `@BeanParam`, `@Body` of an object or map type) copied
+  onto a bean with `BeanUtils.copyProperties` -- Spring's source slot, or
+  Apache Commons' `orig` slot, chosen by the file's import -- and
+  `BeanWrapper.setPropertyValue` with a property name from the request.
+
 - TAINT-014 mass assignment for Python: the whole request mapping --
   `request.get_json()`, `request.json`, `request.form`, `request.POST`,
   `request.data`, `json.loads(request.body...)` -- merged with `.update()` or

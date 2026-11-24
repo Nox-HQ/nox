@@ -42,6 +42,8 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) (units []ta
 		applyXXEParsers(drafts, pythonXXEParsers(content))
 	}
 	if lang == lexctx.LangJava {
+		// Bean copies named by their import: see mass_assignment.go.
+		applyJavaBeanCopies(drafts, content)
 		// Spring MVC "redirect:" view names: see redirect_java.go.
 		applySpringRedirectViews(drafts, content)
 	}
