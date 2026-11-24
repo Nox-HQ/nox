@@ -32,6 +32,8 @@ func TestJavaRedirectSinks(t *testing.T) {
 		{"servlet redirect to a fixed path", "", "    response.sendRedirect(\"/items?id=\" + url);\n", false},
 		{"servlet redirect to the value", "", "    response.sendRedirect(url);\n", true},
 		{"protocol-relative literal", "", "    response.sendRedirect(\"//\" + url);\n", true},
+		{"a fixed-path redirect in one branch, the value in another", "",
+			"    if (locked) {\n      response.sendRedirect(\"/login\" + q);\n    } else if (ok) {\n      response.sendRedirect(url);\n    }\n", true},
 		{"not a Spring file", "", "    return \"redirect:\" + url;\n", false},
 	}
 	for _, c := range cases {
