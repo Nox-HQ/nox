@@ -85,7 +85,7 @@ func (r rule) conf() findings.Confidence {
 
 // allRules is every rule the analyzer reports: settings, cookie flags,
 // signing keys, secret fallbacks in configuration.
-var allRules = append(append(append(append([]rule{}, builtin...), cookieRules...), signingKeyRules...), secretFallbackRules...)
+var allRules = append(append(append(append(append([]rule{}, builtin...), cookieRules...), signingKeyRules...), secretFallbackRules...), csrfRules...)
 
 var (
 	py   = []lexctx.Lang{lexctx.LangPython}
@@ -202,7 +202,7 @@ var langByExt = map[string]lexctx.Lang{
 var configExt = map[string]bool{".properties": true, ".yml": true, ".yaml": true, ".xml": true}
 
 // triggers is a cheap prefilter: a file that names none of these cannot match.
-var triggers = [][]byte{[]byte("debug"), []byte("DEBUG"), []byte("rigin"), []byte("CORS"), []byte("cors"), []byte("decode"), []byte("parse"), []byte("Unverified"), []byte("none"), []byte("ookie"), []byte("ession("), []byte("httpOnly"), []byte("httponly"), []byte("HttpOnly"), []byte("SESSION_COOKIE"), []byte("ecret"), []byte("ECRET"), []byte("sign("), []byte("verify("), []byte("encode("), []byte("HMAC"), []byte("SigningKey"), []byte("signWith"), []byte("cookieParser(")}
+var triggers = [][]byte{[]byte("csrf"), []byte("debug"), []byte("DEBUG"), []byte("rigin"), []byte("CORS"), []byte("cors"), []byte("decode"), []byte("parse"), []byte("Unverified"), []byte("none"), []byte("ookie"), []byte("ession("), []byte("httpOnly"), []byte("httponly"), []byte("HttpOnly"), []byte("SESSION_COOKIE"), []byte("ecret"), []byte("ECRET"), []byte("sign("), []byte("verify("), []byte("encode("), []byte("HMAC"), []byte("SigningKey"), []byte("signWith"), []byte("cookieParser(")}
 
 // ScanArtifacts reports the settings across the discovered source files.
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {

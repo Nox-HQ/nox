@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- APPCFG-008: Spring Security configuration switches CSRF protection off
+  (`csrf().disable()`, `csrf(c -> c.disable())`,
+  `csrf(AbstractHttpConfigurer::disable)`, `CsrfSpec::disable`) or exempts
+  routes from it (`ignoringRequestMatchers`, `ignoringAntMatchers`).
+  CWE-352, medium severity, medium confidence: an API authenticated only by
+  bearer tokens is not exposed, and the finding says so.
+
 - Java path traversal (TAINT-004): an uploaded file's name -- Spring
   `MultipartFile.getOriginalFilename()`, Servlet `Part.getSubmittedFileName()`
   -- is a request source, and `Files.readAttributes`, `getAttribute`, `list`,
