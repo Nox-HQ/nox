@@ -34,6 +34,10 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) (units []ta
 	// ordinary import idiom be recognised. Additions only; see imports.go.
 	applyImportAliases(drafts, importAliases(lang, content))
 	if lang == lexctx.LangPython {
+		// Mass assignment through **mapping: see mass_assignment.go.
+		applyKwargsSplats(drafts)
+	}
+	if lang == lexctx.LangPython {
 		// XXE: see xxe_python.go.
 		applyXXEParsers(drafts, pythonXXEParsers(content))
 	}
@@ -496,7 +500,7 @@ func (e *StructuralEngine) forwardPass(
 							", or the source cannot reach that class"))
 					continue
 				}
-				if sink.VulnClass == taint.VulnMassAssignment && !massAssignmentReaches(&sink, rawCall, info, v, ti) {
+				if sink.VulnClass == taint.VulnMassAssignment && !massAssignmentReaches(lang, &sink, rawCall, info, v, ti) {
 					continue // a field of the request, or the record written to
 				}
 				if inlineCleared[v][sink.VulnClass] {
@@ -1190,7 +1194,7 @@ func (e *StructuralEngine) inlineSourceOperands(lang string, info taint.SinkArgI
 			name:   name,
 			slot:   slot,
 			vector: strings.HasPrefix(strings.TrimSpace(argText), "["),
-			info:   taintInfo{src: src, srcLine: srcLine, cleared: cleared, whole: wholeObjectSources[lang][wholeExpr(argText)]},
+			info:   taintInfo{src: src, srcLine: srcLine, cleared: cleared, whole: isWholeExpr(lang, argText)},
 		}
 	}
 	return out
