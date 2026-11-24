@@ -27,6 +27,11 @@ func TestJavaRedirectSinks(t *testing.T) {
 		{"a fixed redirect", spring, "    return \"redirect:/home\";\n", false},
 		{"a fixed redirect beside a tainted read", spring, "    log(url);\n    return \"redirect:/home\";\n", false},
 		{"a fixed path with a value after it", spring, "    return \"redirect:/items/\" + url;\n", false},
+		{"Micronaut redirect to a fixed path", "import io.micronaut.http.HttpResponse;\n", "    return HttpResponse.seeOther(URI.create(\"/cohorts/\" + url));\n", false},
+		{"Micronaut redirect built on a fixed path", "import io.micronaut.http.HttpResponse;\n", "    return HttpResponse.seeOther(UriBuilder.of(\"/password/reset\").queryParam(\"t\", url).build());\n", false},
+		{"servlet redirect to a fixed path", "", "    response.sendRedirect(\"/items?id=\" + url);\n", false},
+		{"servlet redirect to the value", "", "    response.sendRedirect(url);\n", true},
+		{"protocol-relative literal", "", "    response.sendRedirect(\"//\" + url);\n", true},
 		{"not a Spring file", "", "    return \"redirect:\" + url;\n", false},
 	}
 	for _, c := range cases {
