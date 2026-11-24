@@ -4831,6 +4831,62 @@
           "cwe": "CWE-117",
           "rule_id": "TAINT-013",
           "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "spring_mvc.redirect_view",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "Spring MVC view name \"redirect:\" + value, returned or passed to ModelAndView; recorded by redirect_java.go"
+        },
+        {
+          "call": "RedirectView",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "Spring new RedirectView(url)"
+        },
+        {
+          "call": "Response.seeOther",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "JAX-RS Response.seeOther(URI)"
+        },
+        {
+          "call": "Response.temporaryRedirect",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "JAX-RS Response.temporaryRedirect(URI)"
+        },
+        {
+          "call": "HttpResponse.redirect",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "Micronaut HttpResponse.redirect(URI)"
+        },
+        {
+          "call": "HttpResponse.seeOther",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "Micronaut HttpResponse.seeOther(URI)"
+        },
+        {
+          "call": "HttpResponse.temporaryRedirect",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "Micronaut HttpResponse.temporaryRedirect(URI)"
+        },
+        {
+          "call": "HttpResponse.permanentRedirect",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "Micronaut HttpResponse.permanentRedirect(URI)"
         }
       ],
       "sanitizers": [

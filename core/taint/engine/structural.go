@@ -37,6 +37,10 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) (units []ta
 		// XXE: see xxe_python.go.
 		applyXXEParsers(drafts, pythonXXEParsers(content))
 	}
+	if lang == lexctx.LangJava {
+		// Spring MVC "redirect:" view names: see redirect_java.go.
+		applySpringRedirectViews(drafts, content)
+	}
 	if lang == lexctx.LangJavaScript {
 		// XXE through libxmljs's noent option: see xxe_libxmljs.go.
 		applyLibxmljsNoent(drafts, content)
