@@ -416,11 +416,11 @@ second sink stopped being cut; the drops accounted for in
 Python **56.1** (the tree-reader regression fixed in #1161), Java 56.3 →
 **56.4**.
 
-**Decided at this gate:** for the maintainer. The dev targets are met; the
-held-out ones are not, and held-out moved about half as far as dev. Either the
-milestone closes on dev with the held-out shortfall recorded, and M3 starts; or
-the held-out JS/TS and Java gaps are worked on first, from dev examples of the
-same shapes, without reading held-out findings.
+**Decided at this gate** (maintainer, 2026-11-24): M2 closes on dev, with the
+held-out shortfall recorded here, and M3 starts. The M3 classes (authorization,
+business logic, mass assignment, authentication settings, information exposure)
+are zero or near it on both splits and cap both. Held-out stays unread until the
+M3 gate; held-out JS/TS and Java are the cells to watch there.
 
 ## Measured and rejected: dropping through-call flows
 
