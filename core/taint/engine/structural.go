@@ -495,7 +495,7 @@ func (e *StructuralEngine) forwardPass(
 							", or the source cannot reach that class"))
 					continue
 				}
-				if sink.VulnClass == taint.VulnMassAssignment && !massAssignmentReaches(&sink, info, v, ti) {
+				if sink.VulnClass == taint.VulnMassAssignment && !massAssignmentReaches(&sink, rawCall, info, v, ti) {
 					continue // a field of the request, or the record written to
 				}
 				if inlineCleared[v][sink.VulnClass] {

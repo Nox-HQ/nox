@@ -77,25 +77,80 @@ func keepsWhole(expr, v string) bool {
 var massAssignSlots = map[string]bool{"Object.assign": true, "merge": true}
 
 // massAssignmentReaches reports whether, at a mass-assignment sink, the
-// tainted variable v is whole and passed where data is written.
-func massAssignmentReaches(sink *taint.Sink, info taint.SinkArgInfo, v string, ti taintInfo) bool {
+// tainted variable v is whole, is passed whole (not one of its fields), and
+// is passed where data is written -- on a receiver that writes records.
+func massAssignmentReaches(sink *taint.Sink, rawCall string, info taint.SinkArgInfo, v string, ti taintInfo) bool {
 	if !ti.whole {
 		return false
 	}
-	if !massAssignSlots[canonicalSuffix(sink.Call)] && !massAssignSlots[sink.Call] {
-		return true
+	key := canonicalSuffix(sink.Call)
+	first := 0
+	switch {
+	case sink.Call == "Object.assign":
+		first = 1 // Object.assign(target, ...sources)
+	case !writesRecords(rawCall):
+		return false // the application's own service or another object
+	case massAssignSlots[key] || massAssignSlots[sink.Call]:
+		first = 1
 	}
-	for slot := 1; slot < len(info.PositionalVars); slot++ {
-		for _, pv := range info.PositionalVars[slot] {
-			if pv == v {
-				return true
-			}
-		}
-	}
-	for slot := 1; slot < len(info.PositionalArgs); slot++ {
-		if inlineOperandName(slot) == v {
+	for slot := first; slot < len(info.PositionalArgs); slot++ {
+		if inlineOperandName(slot) == v || usedWhole(info.PositionalArgs[slot], v) {
 			return true
 		}
 	}
 	return false
+}
+
+// usedWhole reports whether the argument text passes v itself -- bare or
+// spread -- rather than reading from it: `dto` and `...dto` are whole,
+// `dto.name`, `dto["name"]` and `dto()` are not.
+func usedWhole(arg, v string) bool {
+	for i := 0; i+len(v) <= len(arg); {
+		j := strings.Index(arg[i:], v)
+		if j < 0 {
+			return false
+		}
+		at := i + j
+		end := at + len(v)
+		i = end
+		if at > 0 && isIdentPart(arg[at-1]) || end < len(arg) && isIdentPart(arg[end]) {
+			continue // part of a longer name
+		}
+		if at > 0 && arg[at-1] == '.' && (at < 3 || arg[at-3:at] != "...") {
+			continue // an attribute of something else
+		}
+		next := strings.TrimLeft(arg[end:], " \t")
+		if strings.HasPrefix(next, ".") || strings.HasPrefix(next, "[") || strings.HasPrefix(next, "?.") || strings.HasPrefix(next, "(") {
+			continue // a field, an index or a call on it
+		}
+		return true
+	}
+	return false
+}
+
+// dataLayerReceiver names what writes records: a model class (User.create),
+// a repository or model object, Prisma, a query builder or entity manager.
+var dataLayerReceiver = regexp.MustCompile(`(?i)(?:repo|repository|model|collection)$|^(?:db|knex|em|manager|entitymanager|datasource|tx|trx)$`)
+
+// writesRecords reports whether a create/update/save call is made on the data
+// layer rather than on the application's own service: `this.dealsService.update`
+// hands the DTO on, and the service's own write is judged where it happens.
+func writesRecords(rawCall string) bool {
+	segs := strings.Split(rawCall, ".")
+	if len(segs) < 2 {
+		return false
+	}
+	for _, s := range segs[:len(segs)-1] {
+		if s == "prisma" {
+			return true
+		}
+	}
+	recv := segs[len(segs)-2]
+	if recv == "" {
+		return false
+	}
+	if recv[0] >= 'A' && recv[0] <= 'Z' {
+		return true // a model class: User.create, Deal.findByIdAndUpdate
+	}
+	return dataLayerReceiver.MatchString(recv)
 }
