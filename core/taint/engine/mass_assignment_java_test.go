@@ -22,6 +22,7 @@ func TestMassAssignmentJava(t *testing.T) {
 		{"Apache Commons copy reads its second argument", "  @PostMapping(\"/p\")\n  public String save(@ModelAttribute ProfileForm form) {\n    org.apache.commons.beanutils.BeanUtils.copyProperties(employee, form);\n    return \"ok\";\n  }\n", true},
 		{"a property named by a request parameter", "  @PostMapping(\"/p\")\n  public void upd(@RequestParam String field, @RequestParam String v) {\n    w.setPropertyValue(field, v);\n  }\n", true},
 		// Not mass assignment.
+		{"a one-argument setter named setPropertyValue", "  @PostMapping(\"/p\")\n  public void upd(@RequestParam String v) {\n    info.setPropertyValue(v);\n  }\n", false},
 		{"a request value under a fixed property name", "  @PostMapping(\"/p\")\n  public void upd(@RequestParam String field, @RequestParam String v) {\n    w.setPropertyValue(\"name\", v + field);\n  }\n", false},
 		{"Apache Commons copy INTO the form", "  @PostMapping(\"/p\")\n  public String save(@ModelAttribute ProfileForm form) {\n    org.apache.commons.beanutils.BeanUtils.copyProperties(form, employee);\n    return \"ok\";\n  }\n", false},
 		{"Spring copy INTO the form", "  @PostMapping(\"/p\")\n  public String save(@ModelAttribute ProfileForm form) {\n    BeanUtils.copyProperties(employee, form);\n    return \"ok\";\n  }\n", false},

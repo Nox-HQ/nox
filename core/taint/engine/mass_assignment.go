@@ -180,7 +180,7 @@ func massAssignmentReaches(lang string, sink *taint.Sink, rawCall string, info t
 		// BeanWrapper.setPropertyValue(name, value): a property NAME from the
 		// request -- a map key, or one parameter -- sets whichever field the
 		// client picks.
-		return len(info.PositionalVars) > 0 && slices.Contains(info.PositionalVars[0], v)
+		return len(info.PositionalArgs) >= 2 && slices.Contains(info.PositionalVars[0], v)
 	}
 	if slot, ok := javaCopySlot[sink.Call]; ok {
 		return ti.whole && slot < len(info.PositionalArgs) &&
