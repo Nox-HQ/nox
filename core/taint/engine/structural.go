@@ -116,16 +116,17 @@ func copyKeywordArgs(m map[string]string) map[string]string {
 // taint.Statement, copying the argument-shape evidence into taint.SinkArgInfo.
 func toStatement(d *stmtDraft) taint.Statement {
 	st := taint.Statement{
-		Line:        d.line,
-		Assigns:     d.assigns,
-		Conditional: d.conditional,
-		Calls:       append([]string(nil), d.calls...),
-		Reads:       append([]string(nil), d.reads...),
-		Chains:      append([]string(nil), d.chains...),
-		Returns:     append([]string(nil), d.returns...),
-		IsReturn:    d.isReturn,
-		Expr:        d.expr,
-		SQLVars:     append([]string(nil), d.sqlVars...),
+		Line:         d.line,
+		Assigns:      d.assigns,
+		Conditional:  d.conditional,
+		Calls:        append([]string(nil), d.calls...),
+		Reads:        append([]string(nil), d.reads...),
+		Chains:       append([]string(nil), d.chains...),
+		Returns:      append([]string(nil), d.returns...),
+		IsReturn:     d.isReturn,
+		FieldBinding: d.fieldBinding,
+		Expr:         d.expr,
+		SQLVars:      append([]string(nil), d.sqlVars...),
 	}
 	if len(d.sinkArgs) > 0 {
 		st.SinkArgs = make(map[string]taint.SinkArgInfo, len(d.sinkArgs))
@@ -613,7 +614,7 @@ func (e *StructuralEngine) forwardPass(
 				}
 			}
 			checked.admit(cleared, st.Assigns, st.Line, e.partialClasses(lang, st.Calls))
-			setTaint(taintInfo{src: src, srcLine: st.Line, cleared: cleared, whole: isWholeSource(lang, src, st.Expr)})
+			setTaint(taintInfo{src: src, srcLine: st.Line, cleared: cleared, whole: !st.FieldBinding && isWholeSource(lang, src, st.Expr)})
 			continue
 		}
 
@@ -649,7 +650,7 @@ func (e *StructuralEngine) forwardPass(
 				continue
 			}
 			c := cloneTaintInfo(ti)
-			c.whole = c.whole && keepsWhole(st.Expr, v)
+			c.whole = c.whole && !st.FieldBinding && keepsWhole(st.Expr, v)
 			c.sqlBuilt = c.sqlBuilt || slices.Contains(st.SQLVars, v)
 			carried = &c
 			break
