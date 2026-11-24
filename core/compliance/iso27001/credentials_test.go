@@ -57,7 +57,7 @@ func TestAdditiveCredentialSourceNeedsItsScope(t *testing.T) {
 // bears on. The prefix-matched ones are listed so a rename cannot orphan them.
 func TestRecentRulesLandOnTheirControls(t *testing.T) {
 	cases := []struct{ rule, control string }{
-		{"IAC-502", "A.5.17"}, {"IAC-503", "A.5.17"},
+		{"IAC-502", "A.5.17"}, {"IAC-503", "A.5.17"}, {"APPCFG-007", "A.5.17"},
 		{"IAC-504", "A.5.23"}, {"IAC-504", "A.8.9"}, {"IAC-504", "A.8.12"},
 		{"IAC-302", "A.5.23"}, {"IAC-302", "A.8.9"},
 		{"IAC-028", "A.5.23"}, {"IAC-028", "A.8.9"},

@@ -142,8 +142,9 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1515 -> 1516 adds APPCFG-006 (a signing key written in the source).
 	// 1516 -> 1517 adds XSS-001 (a template printing a value unescaped).
 	// 1517 -> 1518 adds TAINT-013 (log injection, CWE-117).
-	if got := len(cat); got != 1518 {
-		t.Errorf("Catalog() returned %d rules, want 1518", got)
+	// 1518 -> 1519 adds APPCFG-007 (a secret setting with a literal default).
+	if got := len(cat); got != 1519 {
+		t.Errorf("Catalog() returned %d rules, want 1519", got)
 	}
 }
 
