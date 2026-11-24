@@ -27,7 +27,7 @@ var nestRequestDecorators = map[string]string{
 // nestRequestBound returns the request-bound parameters of a JavaScript or
 // TypeScript method header: `run(@Body("cmd") cmd: string, @Req() req)` gives
 // cmd -> RequestBoundBody. Nil when the header carries no such decorator.
-func nestRequestBound(header string) map[string]string {
+func nestRequestBound(header, raw string) map[string]string {
 	if !strings.Contains(header, "@") {
 		return nil
 	}
@@ -48,7 +48,11 @@ func nestRequestBound(header string) map[string]string {
 		if kind == "" {
 			continue
 		}
-		if name := tsParamName(rest); isSimpleIdent(name) {
+		name := tsParamName(rest)
+		if kind == requestBoundBody && nestWholeBody(raw, name) {
+			kind = requestBoundBodyObject // the whole body, not one field
+		}
+		if isSimpleIdent(name) {
 			if out == nil {
 				out = map[string]string{}
 			}
@@ -168,4 +172,16 @@ func serverActionParams(u *unitDraft) {
 			u.requestBound[p] = requestBoundBody
 		}
 	}
+}
+
+// nestWholeBody reports whether the raw header binds parameter name with a
+// bare @Body(): the whole request body. The code view blanks string literals,
+// so `@Body('name')` reads as `@Body(      )` there; only the raw text tells
+// the two apart.
+func nestWholeBody(raw, name string) bool {
+	if !isSimpleIdent(name) {
+		return false
+	}
+	re := regexp.MustCompile(`@Body\s*\(\s*\)\s*(?:(?:public|private|protected|readonly)\s+)*` + regexp.QuoteMeta(name) + `\b`)
+	return re.MatchString(raw)
 }

@@ -128,8 +128,8 @@ func freeIdentifiers(lang langKind, code string) []string {
 		// not a free variable (the receiver at the head of a chain is still
 		// recorded, which is harmless — a module name like `os` is never tainted,
 		// and a real receiver like `q` in `q.strip()` correctly counts as a read).
-		if start > 0 && code[start-1] == '.' {
-			continue
+		if start > 0 && code[start-1] == '.' && (start < 3 || code[start-3:start] != "...") {
+			continue // an attribute after a dot; `...x` is a spread, a read of x
 		}
 		if isReservedIn(lang, name) {
 			continue

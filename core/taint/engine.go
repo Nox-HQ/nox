@@ -50,6 +50,10 @@ type Statement struct {
 	// constant or nothing (whose Returns is empty). The summary pass needs
 	// every return to decide that a function is a getter of a source.
 	IsReturn bool
+	// FieldBinding marks an assignment that binds part of the value, not the
+	// value: a name destructured from it (`const { a } = x`). Taint flows as
+	// for any assignment; the bound name is never the whole object.
+	FieldBinding bool
 	// Expr is the code view (string literals blanked) of the expression this
 	// statement assigns to Assigns, or "" when the substrate does not carry it.
 	// The StructuralEngine scans it like a sink argument: a sanitizer wrapping

@@ -70,6 +70,8 @@ type stmtDraft struct {
 	// statement. Empty for non-return statements. The interprocedural summary
 	// pass uses it to decide whether a parameter reaches the function's return.
 	returns []string
+	// fieldBinding: see taint.Statement.FieldBinding.
+	fieldBinding bool
 	// isReturn marks a return statement; see taint.Statement.IsReturn.
 	isReturn bool
 }

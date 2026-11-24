@@ -1199,6 +1199,11 @@
           "call": "RequestBoundBody",
           "kind": "http_body",
           "note": "sentinel: a handler parameter the framework binds from the request -- NestJS @Body/@Query/@Param/@Headers/@Ip/@HostParam/@UploadedFile(s); seeded at function entry by core/taint/engine/framework_params.go"
+        },
+        {
+          "call": "RequestBoundBodyObject",
+          "kind": "http_body",
+          "note": "a handler parameter bound to the whole request body (NestJS @Body() with no field name); see framework_params.go"
         }
       ],
       "sinks": [
@@ -1959,6 +1964,111 @@
           "cwe": "CWE-117",
           "rule_id": "TAINT-013",
           "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "Object.assign",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Object.assign(record, wholeRequestObject): every field the client sent lands on the record; judged on the sources, not the target"
+        },
+        {
+          "call": "create",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Mongoose/Sequelize/TypeORM/Prisma create: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "insert",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "TypeORM/Knex insert: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "insertMany",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Mongoose insertMany: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "update",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Sequelize instance.update / TypeORM repository.update / Prisma update: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "updateOne",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Mongoose updateOne: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "updateMany",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Mongoose updateMany: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "findByIdAndUpdate",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Mongoose findByIdAndUpdate: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "findOneAndUpdate",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Mongoose findOneAndUpdate: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "replaceOne",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Mongoose replaceOne: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "save",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "TypeORM repository.save: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "merge",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "TypeORM repository.merge(entity, ...sources): a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "upsert",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Sequelize/Prisma upsert: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "build",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Sequelize build: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "bulkCreate",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Sequelize bulkCreate: a mass-assignment sink only for a whole request object (mass_assignment.go)"
         }
       ],
       "sanitizers": [

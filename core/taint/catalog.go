@@ -61,6 +61,9 @@ const (
 	// VulnLogInjection is a tainted value written to an application log,
 	// where CR/LF in it can forge or split entries.
 	VulnLogInjection VulnClass = "log_injection" // CWE-117
+	// VulnMassAssignment is the whole request object written onto a stored
+	// record, so the client sets fields the application never offered.
+	VulnMassAssignment VulnClass = "mass_assignment" // CWE-915
 )
 
 // vulnClasses is every class above, in a fixed order. It is the one list: a
@@ -73,7 +76,7 @@ var vulnClasses = []VulnClass{
 	VulnSSTI, VulnPathTraversal, VulnSSRF, VulnUnsafeDeserialization,
 	VulnPromptInjection, VulnOpenRedirect, VulnXPathInjection, VulnLDAPInjection,
 	VulnXXE,
-	VulnTrustBoundary, VulnArgumentInjection, VulnLogInjection,
+	VulnTrustBoundary, VulnArgumentInjection, VulnLogInjection, VulnMassAssignment,
 }
 
 // AllVulnClasses returns every vulnerability class, in a fixed order.

@@ -591,6 +591,7 @@ var needsByClass = map[string]string{
 	"trust_boundary":         "A decision from you: where this input is validated before it is trusted, and what it is checked against.",
 	"argument_injection":     "A change to the call: put a literal \"--\" before the value so the program reads it as an operand, or validate that it does not start with \"-\".",
 	"log_injection":          "A change to the log call: strip or encode CR and LF in the value, or use a structured (JSON) log format that escapes them.",
+	"mass_assignment":        "A change to the write: copy only the fields the caller may set (an allowlist or a DTO with exactly those fields), never the whole request object.",
 }
 
 func ruleIDs(ff []findings.Finding, fps []string) []string {

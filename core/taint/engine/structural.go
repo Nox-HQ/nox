@@ -116,16 +116,17 @@ func copyKeywordArgs(m map[string]string) map[string]string {
 // taint.Statement, copying the argument-shape evidence into taint.SinkArgInfo.
 func toStatement(d *stmtDraft) taint.Statement {
 	st := taint.Statement{
-		Line:        d.line,
-		Assigns:     d.assigns,
-		Conditional: d.conditional,
-		Calls:       append([]string(nil), d.calls...),
-		Reads:       append([]string(nil), d.reads...),
-		Chains:      append([]string(nil), d.chains...),
-		Returns:     append([]string(nil), d.returns...),
-		IsReturn:    d.isReturn,
-		Expr:        d.expr,
-		SQLVars:     append([]string(nil), d.sqlVars...),
+		Line:         d.line,
+		Assigns:      d.assigns,
+		Conditional:  d.conditional,
+		Calls:        append([]string(nil), d.calls...),
+		Reads:        append([]string(nil), d.reads...),
+		Chains:       append([]string(nil), d.chains...),
+		Returns:      append([]string(nil), d.returns...),
+		IsReturn:     d.isReturn,
+		FieldBinding: d.fieldBinding,
+		Expr:         d.expr,
+		SQLVars:      append([]string(nil), d.sqlVars...),
 	}
 	if len(d.sinkArgs) > 0 {
 		st.SinkArgs = make(map[string]taint.SinkArgInfo, len(d.sinkArgs))
@@ -239,6 +240,9 @@ type taintInfo struct {
 	sqlBuilt bool
 	// throughCall: see taint.Flow.ThroughCall.
 	throughCall bool
+	// whole: the value is the whole request object, every field the client
+	// sent (mass_assignment.go).
+	whole bool
 }
 
 // passResult is the output of a forward pass: the flows found, the final taint
@@ -492,6 +496,9 @@ func (e *StructuralEngine) forwardPass(
 							", or the source cannot reach that class"))
 					continue
 				}
+				if sink.VulnClass == taint.VulnMassAssignment && !massAssignmentReaches(&sink, rawCall, info, v, ti) {
+					continue // a field of the request, or the record written to
+				}
 				if inlineCleared[v][sink.VulnClass] {
 					suppressed = append(suppressed, suppression(lang, unit, st, &sink, rawCall, sourceVar,
 						"a sanitizer wrapping the value at the call cleared it for "+
@@ -607,7 +614,7 @@ func (e *StructuralEngine) forwardPass(
 				}
 			}
 			checked.admit(cleared, st.Assigns, st.Line, e.partialClasses(lang, st.Calls))
-			setTaint(taintInfo{src: src, srcLine: st.Line, cleared: cleared})
+			setTaint(taintInfo{src: src, srcLine: st.Line, cleared: cleared, whole: !st.FieldBinding && isWholeSource(lang, src, st.Expr)})
 			continue
 		}
 
@@ -638,12 +645,15 @@ func (e *StructuralEngine) forwardPass(
 		// most-recently-introduced source and its cleared set.
 		var carried *taintInfo
 		for _, v := range sortedReads(st.Reads) {
-			if ti, ok := tainted[v]; ok {
-				c := cloneTaintInfo(ti)
-				c.sqlBuilt = c.sqlBuilt || slices.Contains(st.SQLVars, v)
-				carried = &c
-				break
+			ti, ok := tainted[v]
+			if !ok {
+				continue
 			}
+			c := cloneTaintInfo(ti)
+			c.whole = c.whole && !st.FieldBinding && keepsWhole(st.Expr, v)
+			c.sqlBuilt = c.sqlBuilt || slices.Contains(st.SQLVars, v)
+			carried = &c
+			break
 		}
 		if carried == nil {
 			// LHS reassigned from untainted data: it becomes clean.
@@ -663,7 +673,7 @@ func (e *StructuralEngine) forwardPass(
 		}
 		checked.admit(cleared, st.Assigns, st.Line, e.partialClasses(lang, st.Calls))
 		setTaint(taintInfo{src: carried.src, srcLine: carried.srcLine, srcFile: carried.srcFile, cleared: cleared, via: carried.via,
-			sqlBuilt: carried.sqlBuilt, throughCall: carried.throughCall || !handsOn(st.Calls)})
+			sqlBuilt: carried.sqlBuilt, throughCall: carried.throughCall || !handsOn(st.Calls), whole: carried.whole})
 	}
 
 	return passResult{flows: flows, suppressed: suppressed, state: tainted, returned: returned}
@@ -700,6 +710,9 @@ func (e *StructuralEngine) interprocSinkFlows(lang string, unit *taint.Unit, st 
 					at := argSinkAt{file: as.file, rule: as.sink.RuleID, line: as.line}
 					if reached[at] {
 						continue
+					}
+					if as.sink.VulnClass == taint.VulnMassAssignment && !op.ti.whole {
+						continue // the caller passes a field, not the whole request object
 					}
 					if op.ti.cleared[as.sink.VulnClass] || op.ti.src.Excludes(as.sink.VulnClass) {
 						continue // caller already sanitized for this class, or the source's value cannot reach it
@@ -910,7 +923,7 @@ func cloneTaintInfo(ti taintInfo) taintInfo {
 	for k, v := range ti.cleared {
 		cleared[k] = v
 	}
-	return taintInfo{src: ti.src, srcLine: ti.srcLine, srcFile: ti.srcFile, cleared: cleared, via: append([]string(nil), ti.via...), sqlBuilt: ti.sqlBuilt, throughCall: ti.throughCall}
+	return taintInfo{src: ti.src, srcLine: ti.srcLine, srcFile: ti.srcFile, cleared: cleared, via: append([]string(nil), ti.via...), sqlBuilt: ti.sqlBuilt, throughCall: ti.throughCall, whole: ti.whole}
 }
 
 // otherFile is file when it is not the reporting file, else empty: a flow
@@ -1177,7 +1190,7 @@ func (e *StructuralEngine) inlineSourceOperands(lang string, info taint.SinkArgI
 			name:   name,
 			slot:   slot,
 			vector: strings.HasPrefix(strings.TrimSpace(argText), "["),
-			info:   taintInfo{src: src, srcLine: srcLine, cleared: cleared},
+			info:   taintInfo{src: src, srcLine: srcLine, cleared: cleared, whole: wholeObjectSources[lang][wholeExpr(argText)]},
 		}
 	}
 	return out

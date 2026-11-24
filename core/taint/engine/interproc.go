@@ -360,6 +360,10 @@ func (e *StructuralEngine) summarize(lang string, u *taint.Unit, summaries map[s
 				srcLine: 0,
 				cleared: map[taint.VulnClass]bool{},
 				via:     nil,
+				// The parameter is whatever the caller passes; whether that is
+				// the whole request object is decided at the call
+				// (interprocSinkFlows), so the summary keeps the sink.
+				whole: true,
 			},
 		}
 		res := e.forwardPass(lang, u, seed, summaries)

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- TAINT-014: mass assignment (CWE-915) in JavaScript and TypeScript. The whole
+  request object -- `req.body`, a NestJS `@Body()` DTO, or a copy or spread of
+  either -- written onto a record: `Object.assign(record, body)` (the source,
+  not the target), Mongoose/Sequelize/TypeORM/Prisma `create`, `update`,
+  `updateOne`, `findByIdAndUpdate`, `save`, `merge`, `upsert`. A field read
+  from the request and written by name, `@Body('name')`, or a body narrowed
+  by a helper (`pick(body, [...])`) is not reported. The taint engine marks
+  values that are the whole request object for this.
+
 - APPCFG-008: Spring Security configuration switches CSRF protection off
   (`csrf().disable()`, `csrf(c -> c.disable())`,
   `csrf(AbstractHttpConfigurer::disable)`, `CsrfSpec::disable`) or exempts
@@ -333,6 +342,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   precision 0.14 -> 0.21), held-out 11.2 -> 11.5.
 
 ### Fixed
+
+- Taint, JavaScript: a spread operand (`...x`) was skipped as the attribute
+  after a dot, so a tainted value spread into an object literal or an
+  argument list reached no sink in any class.
 
 - Taint, Java: a try-with-resources header (`try (ObjectInputStream in =
   new ObjectInputStream(...)) {`) was skipped as a control keyword, so its
