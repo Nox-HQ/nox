@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- TAINT-013: log injection (CWE-117, low severity, low confidence). A request
+  value reaches a call on an application logger -- a Java `Logger`/`Log` local
+  or field (SLF4J, Log4j, JUL, JBoss, Commons Logging) or the `log` a Lombok
+  logging annotation injects; NestJS `Logger`, winston, pino, bunyan, log4js
+  or `console.*`; Python `logging.*` or a `logging.getLogger` logger.
+  Placeholder arguments count: SLF4J and `logging` do not strip CR/LF. Not
+  reported after `Encode.forJava`, `StringEscapeUtils.escapeJava`,
+  `JSON.stringify`, `repr` or `json.dumps`, nor from environment variables,
+  system properties or command-line arguments, which an operator sets. A call
+  through `this.` now resolves to the field it names, for every taint sink.
 - XSS-001: a template prints a value without HTML escaping (CWE-79, low
   confidence). Jinja, Django and Nunjucks `{{ x | safe }}` and outputs inside
   `{% autoescape false %}`; EJS `<%- x %>`; JSF, Facelets and Struts
@@ -291,6 +301,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   precision 0.14 -> 0.21), held-out 11.2 -> 11.5.
 
 ### Fixed
+
+- Taint: a local helper whose parameter reaches more than one sink reported
+  only the first one in its summary to each caller. A helper that logged its
+  argument and then passed it to a shell or an HTTP client hid the command
+  injection or SSRF behind the log line. Every distinct sink is now reported.
 
 - A Python `match` statement indented with tabs lost its case bodies' branch
   structure. The grammar starts a match statement's block on the header's

@@ -375,6 +375,11 @@ func expandChain(chain string, t aliasTable) string {
 		return ""
 	}
 	head, rest, _ := strings.Cut(chain, t.sep)
+	// A field read through `this` is the field: `this.logger.log` is a call on
+	// whatever `logger` was bound to.
+	if head == "this" && rest != "" {
+		return expandChain(rest, t)
+	}
 	qualified, ok := t.names[head]
 	if !ok {
 		return ""

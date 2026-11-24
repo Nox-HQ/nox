@@ -74,23 +74,38 @@
         },
         {
           "call": "sys.argv",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "argparse.ArgumentParser",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "os.environ",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "os.getenv",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "os.environ.get",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "input",
@@ -625,6 +640,132 @@
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
           "note": "http.server BaseHTTPRequestHandler: self.wfile.write(body) is the response body"
+        },
+        {
+          "call": "logging.debug",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.info",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.warning",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.warn",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.error",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.critical",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.exception",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.log",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.fatal",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "app_logger.debug",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.info",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.warning",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.warn",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.error",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.critical",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.exception",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.log",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.fatal",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
         }
       ],
       "sanitizers": [
@@ -768,6 +909,20 @@
             "ldap_injection"
           ],
           "note": "ldap3.utils.dn.escape_rdn"
+        },
+        {
+          "call": "repr",
+          "neutralizes": [
+            "log_injection"
+          ],
+          "note": "escapes CR/LF"
+        },
+        {
+          "call": "json.dumps",
+          "neutralizes": [
+            "log_injection"
+          ],
+          "note": "escapes CR/LF"
         }
       ],
       "checks": [
@@ -870,11 +1025,17 @@
         },
         {
           "call": "process.argv",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "process.env",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "fs.readFile",
@@ -1700,6 +1861,104 @@
           "vuln_class": "xss",
           "cwe": "CWE-79",
           "rule_id": "TAINT-003"
+        },
+        {
+          "call": "console.log",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "console output reaches the process log"
+        },
+        {
+          "call": "console.info",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "console output reaches the process log"
+        },
+        {
+          "call": "console.warn",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "console output reaches the process log"
+        },
+        {
+          "call": "console.error",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "console output reaches the process log"
+        },
+        {
+          "call": "console.debug",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "console output reaches the process log"
+        },
+        {
+          "call": "console.trace",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "console output reaches the process log"
+        },
+        {
+          "call": "app_logger.log",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.info",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.warn",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.error",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.debug",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.trace",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.verbose",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.fatal",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
         }
       ],
       "sanitizers": [
@@ -1828,6 +2087,13 @@
           "neutralizes": [
             "xss"
           ]
+        },
+        {
+          "call": "JSON.stringify",
+          "neutralizes": [
+            "log_injection"
+          ],
+          "note": "escapes CR/LF as \\\\r \\\\n"
         }
       ],
       "checks": [
@@ -1896,7 +2162,10 @@
         },
         {
           "call": "os.Args",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "r.URL.Path",
@@ -2554,11 +2823,17 @@
         },
         {
           "call": "ENV",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "ARGV",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "gets",
@@ -3667,11 +3942,17 @@
         },
         {
           "call": "System.getenv",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "System.getProperty",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "RequestBoundQuery",
@@ -4417,6 +4698,139 @@
           "cwe": "CWE-78",
           "rule_id": "TAINT-002",
           "note": "ProcessBuilder.command(...) sets the program and arguments of a builder declared ProcessBuilder (see receivers.go); started by .start()"
+        },
+        {
+          "call": "app_logger.trace",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.debug",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.info",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.warn",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.error",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.fatal",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.log",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.tracef",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.debugf",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.infof",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.warnf",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.errorf",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.fatalf",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.warning",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.severe",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.fine",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.finer",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.finest",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.config",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
         }
       ],
       "sanitizers": [
@@ -4508,6 +4922,34 @@
           ],
           "requires_guard": true,
           "note": "Path.normalize() canonicalizes; must be paired with a startsWith allow-base check"
+        },
+        {
+          "call": "Encode.forJava",
+          "neutralizes": [
+            "log_injection"
+          ],
+          "note": "OWASP Encoder: escapes CR/LF"
+        },
+        {
+          "call": "encodeForJava",
+          "neutralizes": [
+            "log_injection"
+          ],
+          "note": "OWASP Encoder"
+        },
+        {
+          "call": "StringEscapeUtils.escapeJava",
+          "neutralizes": [
+            "log_injection"
+          ],
+          "note": "Commons Text/Lang: escapes CR/LF"
+        },
+        {
+          "call": "encodeForLog",
+          "neutralizes": [
+            "log_injection"
+          ],
+          "note": "project log encoders"
         }
       ],
       "checks": [
@@ -4525,19 +4967,31 @@
       "sources": [
         {
           "call": "env.args",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "std.env.args",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "env.var",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "std.env.var",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "web.Query",
@@ -5858,11 +6312,17 @@
         },
         {
           "call": "System.getenv",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "System.getProperty",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "RequestBoundQuery",
@@ -6164,11 +6624,17 @@
       "sources": [
         {
           "call": "ENV",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "ARGV",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "STDIN",
@@ -6331,11 +6797,17 @@
       "sources": [
         {
           "call": "CommandLine.arguments",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "ProcessInfo.processInfo.environment",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "URLComponents.queryItems",
@@ -6707,11 +7179,17 @@
       "sources": [
         {
           "call": "Platform.environment",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "args",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "request.uri.queryParameters",
@@ -7010,7 +7488,10 @@
         {
           "call": "argv",
           "kind": "argv",
-          "note": "the C main(argc, argv) command-line vector"
+          "note": "the C main(argc, argv) command-line vector",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "text",
@@ -7354,22 +7835,34 @@
         {
           "call": "args",
           "kind": "argv",
-          "note": "$args automatic variable (script/function argument array)"
+          "note": "$args automatic variable (script/function argument array)",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "PSScriptParameter",
           "kind": "argv",
-          "note": "sentinel: a read of a top-level script param() parameter, bound from the untrusted command line. The extractor promotes this chain onto any statement that reads a script parameter (names are arbitrary, so the catalog keys the sentinel, not each name); function parameters are NOT promoted"
+          "note": "sentinel: a read of a top-level script param() parameter, bound from the untrusted command line. The extractor promotes this chain onto any statement that reads a script parameter (names are arbitrary, so the catalog keys the sentinel, not each name); function parameters are NOT promoted",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "MyInvocation",
           "kind": "argv",
-          "note": "$MyInvocation.* carries bound parameters / the invocation line"
+          "note": "$MyInvocation.* carries bound parameters / the invocation line",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "env",
           "kind": "env",
-          "note": "$env:NAME provider access, shaped to a bare `env` read"
+          "note": "$env:NAME provider access, shaped to a bare `env` read",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "Read_Host",
@@ -7591,51 +8084,87 @@
       "sources": [
         {
           "call": "$1",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$2",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$3",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$4",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$5",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$6",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$7",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$8",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$9",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$@",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$*",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$#",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "read",
@@ -7770,12 +8299,18 @@
         {
           "call": "arg",
           "kind": "argv",
-          "note": "the global `arg` table holds the CLI arguments; `arg[1]`, `arg[2]`, ... are attacker-controlled"
+          "note": "the global `arg` table holds the CLI arguments; `arg[1]`, `arg[2]`, ... are attacker-controlled",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "os.getenv",
           "kind": "env",
-          "note": "process environment variable, attacker-influenceable"
+          "note": "process environment variable, attacker-influenceable",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "io.read",
@@ -7947,12 +8482,18 @@
         {
           "call": "System.get_env",
           "kind": "env",
-          "note": "process environment variable (attacker-influenced in many deployments)"
+          "note": "process environment variable (attacker-influenced in many deployments)",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "System.argv",
           "kind": "argv",
-          "note": "command-line arguments"
+          "note": "command-line arguments",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "IO.read",
@@ -8174,16 +8715,25 @@
         {
           "call": "System/getenv",
           "kind": "env",
-          "note": "process environment variable"
+          "note": "process environment variable",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "getenv",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "*command-line-args*",
           "kind": "argv",
-          "note": "command-line arguments seq"
+          "note": "command-line arguments seq",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "read-line",
@@ -8397,11 +8947,17 @@
         },
         {
           "call": "System.getenv",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "System.getProperty",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "args",
