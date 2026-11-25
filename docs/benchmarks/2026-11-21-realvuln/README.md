@@ -422,6 +422,109 @@ business logic, mass assignment, authentication settings, information exposure)
 are zero or near it on both splits and cap both. Held-out stays unread until the
 M3 gate; held-out JS/TS and Java are the cells to watch there.
 
+## M3 gate, 2026-11-25
+
+nox at `b68bccf`, the same offline default configuration, all 203 repositories
+rescanned with a build of that commit. That build was made after #1175–#1184:
+- mass assignment TAINT-014 and prototype pollution PROTO-001;
+- login, OTP and reset routes without attempt limiting AUTHN-002, and sign-up
+  and reset-request routes without throttling AUTHN-003;
+- CSRF switched off in Django and Flask (APPCFG-008), and CSRF on
+  session-cookie POST routes AUTHN-004;
+- exception detail in responses ERRLEAK-001 and sensitive data in logs
+  LOGLEAK-001;
+- debug-mode configuration (APPCFG-001).
+
+Held-out labels were not read between the M2 gap-close gate and this one. The
+development split reproduces finding for finding the scan each PR was measured
+on.
+
+**The M3 F3 target is met on dev and not on held-out:**
+
+| | target | dev | held-out | M2 gap-close dev / held-out |
+|---|---:|---:|---:|---:|
+| F3 | ≥ 25 | **26.9** | **20.0** | 21.3 / 15.2 |
+
+All 203 repositories: F3 19.2 → 24.6.
+
+| nox at `b68bccf` | precision | recall | F3 |
+|---|---:|---:|---:|
+| dev, Python | 0.367 | 0.376 | 37.5 |
+| dev, JS/TS | 0.202 | 0.314 | 29.8 |
+| dev, Java | 0.096 | 0.213 | 18.9 |
+| held-out, Python | 0.434 | 0.312 | 32.1 |
+| held-out, JS/TS | 0.132 | 0.228 | 21.2 |
+| held-out, Java | 0.053 | 0.152 | 12.8 |
+
+Against RealVuln's published Semgrep runs, on the repositories Semgrep was run
+on, same matcher (Semgrep's figures and repository counts reproduce):
+
+| Python + JS/TS | nox at M1 | nox at M2 | M2 gap-close | nox now | Semgrep |
+|---|---:|---:|---:|---:|---:|
+| dev (97 repos) | 22.0 | 23.4 | 25.2 | **33.3** | 10.7 |
+| held-out (43 repos) | 15.9 | 17.5 | 18.4 | **25.8** | 8.7 |
+
+**Generalisation.** Dev gained 5.6 F3 and held-out gained 4.8, about 85% as
+far. At the M2 gap-close gate held-out had gained half as far as dev. The
+classes this milestone added carry over:
+
+| recall by class | dev, M2 gap-close → now | held-out, M2 gap-close → now |
+|---|---:|---:|
+| authentication/session | 6.8% → 24.3% | 4.4% → 20.1% |
+| information exposure | 4.5% → 40.3% | 0.9% → 31.2% |
+| mass assignment | 0 → 28.9% | 0 → 23.2% |
+| injection | 51.2% → 51.3% | 35.4% → 35.4% |
+| crypto/secrets/config | 34.9% → 37.3% | 35.0% → 35.9% |
+| authorization | 0 → 0.2% | 0 → 0 |
+| business logic | 0 → 0 | 0 → 0 |
+
+The rules added or extended since the M2 gap-close gate, matched / unmatched
+findings:
+
+| rule | dev | held-out |
+|---|---:|---:|
+| ERRLEAK-001 exception detail in the response | 72 / 347 | 56 / 147 |
+| AUTHN-002 credential routes without attempt limiting | 54 / 128 | 27 / 19 |
+| LOGLEAK-001 sensitive data in logs | 78 / 143 | 15 / 25 |
+| AUTHN-003 issuing routes without throttling | 18 / 106 | 14 / 32 |
+| TAINT-014 mass assignment | 36 / 88 | 13 / 2 |
+| APPCFG-008 CSRF switched off (Django/Flask added) | 24 / 36 | 5 / 7 |
+| APPCFG-001 debug mode (all patterns) | 37 / 15 | 4 / 5 |
+| PROTO-001 prototype pollution | 11 / 11 | 3 / 0 |
+| AUTHN-004 CSRF on session POST routes | 10 / 18 | 2 / 1 |
+
+Every one of them matches labels on held-out. Every one's held-out precision
+is at or above its dev precision except APPCFG-001's (4 of 9 against 37 of 52). The unmatched findings were read on
+dev when each rule was built (each PR records them); most are real instances
+the labels leave out. Injection is flat on both splits: M3 added no injection
+sinks. Held-out Java (12.8) remains the weakest cell and moved least (11.2 →
+12.8). Authorization and business logic are still at zero; nox states neither
+precisely yet.
+
+**Rule-diff corpus** (26 repositories, CI on every PR, read on each): the new
+rules fire in four corpus repositories, each finding read on its PR.
+- LOGLEAK-001: a DigitalOcean inventory script's `--env` prints an API token
+  by design (ansible-for-devops, 2), and an ACME key authorization, a public
+  value, in certbot's debug logs (2, a known false positive).
+- ERRLEAK-001: an untyped catch around a Groq API call answering 500 with
+  `error.message` (hackathon-starter, 1, real).
+
+No new drops: the only lower counts are the two already accounted for in
+`scripts/rule-deltas.json` (#1147, #1154).
+
+**OWASP Benchmark** (same scorers and scan roots; see
+[the OWASP document](../2026-09-28-owasp/README.md#m3-gate-2026-11-25)): Python
+56.1 → **62.9**, Java **56.4**, against Semgrep `p/default`'s 10.7 and 34.9.
+
+**Open at this gate.**
+- **F3:** the held-out F3 is 5 short of the target.
+- **OWASP baseline:** the target is "above the best deterministic tool
+  published", and which published baseline that is has not been recorded. The
+  comparison in the OWASP document is Semgrep `p/default`, which nox clears on
+  both suites.
+- **Tree-sitter:** M3's other half, the remaining languages on tree-sitter, has
+  not started.
+
 ## Measured and rejected: dropping through-call flows
 
 Most of the unmatched findings the framework sources added (#1140) are a
