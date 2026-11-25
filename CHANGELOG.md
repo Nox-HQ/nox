@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- LOGLEAK-001 sensitive data written to a log (CWE-532), new analyzer
+  covering JavaScript/TypeScript, Python and Java.
+  - **Log calls read:** `console.*`, a logger's level methods
+    (pino/winston/NestJS, Python `logging`, SLF4J/Log4j/JUL/JBoss),
+    `print`, `System.out`.
+  - **Reported when given:** a credential's value (password, token, secret,
+    API key, cookie, card, national id or account number, by name); an
+    Authorization, Cookie or API-key header; a request's whole body or
+    header set, directly or through a local name assigned from it; a
+    sign-in, sign-up or reset form object.
+  - **Configuration:** a Django settings module that is not a development
+    one with the console or file e-mail backend (every password-reset link
+    goes to the log); a sqlite `set_trace_callback(print)` or logger.
+  - **Not reported:** a credential's name in the message text; names about
+    the credential (`tokenType`, `passwordLength`, `tokenId`); a value only
+    measured, tested or passed through another call (`token.length`,
+    `isExpired(token)`, `mask(token)`); one field of a request body; browser
+    code.
+
 - ERRLEAK-001 exception detail in the HTTP response (CWE-209), new analyzer
   covering JavaScript/TypeScript, Python and Java. Inside an exception
   handler, the caught exception's detail is written into the response.

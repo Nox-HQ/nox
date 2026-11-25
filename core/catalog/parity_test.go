@@ -19,6 +19,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/fileperms"
 	"github.com/nox-hq/nox/core/analyzers/hardening"
 	"github.com/nox-hq/nox/core/analyzers/iac"
+	"github.com/nox-hq/nox/core/analyzers/logleak"
 	"github.com/nox-hq/nox/core/analyzers/memsafe"
 	"github.com/nox-hq/nox/core/analyzers/protopollution"
 	"github.com/nox-hq/nox/core/analyzers/provenance"
@@ -74,6 +75,7 @@ func analyzerRuleSets(t *testing.T) map[string]*rules.RuleSet {
 		"memsafe":        memsafe.NewAnalyzer().Rules(),
 		"protopollution": protopollution.NewAnalyzer().Rules(),
 		"errleak":        errleak.NewAnalyzer().Rules(),
+		"logleak":        logleak.NewAnalyzer().Rules(),
 		"taintflow":      taintflow.NewAnalyzer().Rules(),
 		"weakcrypto":     weakcrypto.NewAnalyzer().Rules(),
 	}

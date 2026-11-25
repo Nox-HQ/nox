@@ -153,8 +153,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// Express application with no CSRF protection, CWE-352).
 	// 1525 -> 1526 adds ERRLEAK-001 (exception detail written into the HTTP
 	// response, CWE-209).
-	if got := len(cat); got != 1526 {
-		t.Errorf("Catalog() returned %d rules, want 1526", got)
+	// 1526 -> 1527 adds LOGLEAK-001 (sensitive data written to a log,
+	// CWE-532).
+	if got := len(cat); got != 1527 {
+		t.Errorf("Catalog() returned %d rules, want 1527", got)
 	}
 }
 
