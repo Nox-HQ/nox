@@ -61,6 +61,7 @@ var familyRules = []familyRule{
 	{"PERM-", RuleFamily{"file-permissions", "File Permissions"}},
 	{"MEMSAFE-", RuleFamily{"memory-safety", "Memory Safety"}},
 	{"PROTO-", RuleFamily{"prototype-pollution", "Prototype Pollution"}},
+	{"ERRLEAK-", RuleFamily{"error-disclosure", "Error Disclosure"}},
 	{"AUTHZ-", RuleFamily{"authorization", "Authorization"}},
 	{"AUTHN-", RuleFamily{"authentication", "Authentication"}},
 	{"WEBHOOK-", RuleFamily{"webhook-verification", "Webhook Verification"}},

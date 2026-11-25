@@ -164,7 +164,7 @@ make build
 
 ## What Nox Detects
 
-Nox ships with **1525 built-in rules** across five analyzer suites:
+Nox ships with **1526 built-in rules** across five analyzer suites:
 
 ### Secrets (884 rules)
 
@@ -285,6 +285,7 @@ function are not reported — nox parses Go with `go/ast`, not `go/types`. See
 | AUTHN-002 | A login, OTP or token-consuming password-reset route, or Spring Security form login / HTTP Basic, with no rate limit, throttle or lockout visible in the application (CWE-307) |
 | AUTHN-003 | A registration, forgot-password or one-time-code issuing route with no throttle visible in the application (CWE-770) |
 | AUTHN-004 | A POST route authenticated by the session cookie in a Flask or Express application with no CSRF library, token check or SameSite session cookie (CWE-352) |
+| ERRLEAK-001 | A caught exception's stack trace, object or traceback -- or the message of an exception of a generic type -- written into the HTTP response, in JavaScript/TypeScript, Python and Java (CWE-209) |
 
 ## Configuration
 

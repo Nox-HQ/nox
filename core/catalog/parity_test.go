@@ -15,6 +15,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/authz"
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
+	"github.com/nox-hq/nox/core/analyzers/errleak"
 	"github.com/nox-hq/nox/core/analyzers/fileperms"
 	"github.com/nox-hq/nox/core/analyzers/hardening"
 	"github.com/nox-hq/nox/core/analyzers/iac"
@@ -72,6 +73,7 @@ func analyzerRuleSets(t *testing.T) map[string]*rules.RuleSet {
 		"templates":      templates.NewAnalyzer().Rules(),
 		"memsafe":        memsafe.NewAnalyzer().Rules(),
 		"protopollution": protopollution.NewAnalyzer().Rules(),
+		"errleak":        errleak.NewAnalyzer().Rules(),
 		"taintflow":      taintflow.NewAnalyzer().Rules(),
 		"weakcrypto":     weakcrypto.NewAnalyzer().Rules(),
 	}

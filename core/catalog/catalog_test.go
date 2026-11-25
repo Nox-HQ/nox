@@ -151,8 +151,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// with no throttling, CWE-770).
 	// 1524 -> 1525 adds AUTHN-004 (a session-authenticated POST in a Flask or
 	// Express application with no CSRF protection, CWE-352).
-	if got := len(cat); got != 1525 {
-		t.Errorf("Catalog() returned %d rules, want 1525", got)
+	// 1525 -> 1526 adds ERRLEAK-001 (exception detail written into the HTTP
+	// response, CWE-209).
+	if got := len(cat); got != 1526 {
+		t.Errorf("Catalog() returned %d rules, want 1526", got)
 	}
 }
 

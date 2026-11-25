@@ -141,7 +141,7 @@ A full scan covers every concern in one pass. `--only` and `--skip` (or
 | Scope | What runs | Rule IDs |
 |-------|-----------|----------|
 | `secrets` | secret detection | `SEC-*` |
-| `code` | taint flow, agent flow, CVE variants, weak crypto, hardening, template output, memory safety, prototype pollution | `TAINT-*`, `AGENTFLOW-*`, `VARIANT-*`, `CRYPTO-*`, `HARDEN-*`, `XSS-*`, `MEMSAFE-*`, `PROTO-*` |
+| `code` | taint flow, agent flow, CVE variants, weak crypto, hardening, template output, memory safety, prototype pollution, error disclosure | `TAINT-*`, `AGENTFLOW-*`, `VARIANT-*`, `CRYPTO-*`, `HARDEN-*`, `XSS-*`, `MEMSAFE-*`, `PROTO-*`, `ERRLEAK-*` |
 | `deps` | lockfiles, vulnerability lookups (NOX Intelligence, verified against OSV.dev), licences, SBOM | `VULN-*`, `CONT-*`, `LIC-*` |
 | `iac` | infrastructure-as-code and file permissions | `IAC-*`, `PERM-*` |
 | `ai` | AI and MCP rules, the AI inventory | `AI-*`, `MCP-*` |
