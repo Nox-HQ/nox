@@ -202,7 +202,7 @@ var langByExt = map[string]lexctx.Lang{
 var configExt = map[string]bool{".properties": true, ".yml": true, ".yaml": true, ".xml": true}
 
 // triggers is a cheap prefilter: a file that names none of these cannot match.
-var triggers = [][]byte{[]byte("csrf"), []byte("debug"), []byte("DEBUG"), []byte("rigin"), []byte("CORS"), []byte("cors"), []byte("decode"), []byte("parse"), []byte("Unverified"), []byte("none"), []byte("ookie"), []byte("ession("), []byte("httpOnly"), []byte("httponly"), []byte("HttpOnly"), []byte("SESSION_COOKIE"), []byte("ecret"), []byte("ECRET"), []byte("sign("), []byte("verify("), []byte("encode("), []byte("HMAC"), []byte("SigningKey"), []byte("signWith"), []byte("cookieParser(")}
+var triggers = [][]byte{[]byte("csrf"), []byte("CSRF"), []byte("MIDDLEWARE"), []byte("debug"), []byte("DEBUG"), []byte("rigin"), []byte("CORS"), []byte("cors"), []byte("decode"), []byte("parse"), []byte("Unverified"), []byte("none"), []byte("ookie"), []byte("ession("), []byte("httpOnly"), []byte("httponly"), []byte("HttpOnly"), []byte("SESSION_COOKIE"), []byte("ecret"), []byte("ECRET"), []byte("sign("), []byte("verify("), []byte("encode("), []byte("HMAC"), []byte("SigningKey"), []byte("signWith"), []byte("cookieParser(")}
 
 // ScanArtifacts reports the settings across the discovered source files.
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
@@ -283,7 +283,7 @@ func ScanFile(path string, lang lexctx.Lang, content []byte) []findings.Finding 
 	if masked == nil {
 		masked = lexctx.MaskNonCode(lang, content)
 	}
-	for _, f := range scanCookies(path, lang, content, masked) {
+	for _, f := range append(scanCookies(path, lang, content, masked), append(scanDjangoCSRF(path, lang, content), scanCSRFExempt(path, lang, content)...)...) {
 		key := f.RuleID + ":" + strconv.Itoa(f.Location.StartLine)
 		if !seen[key] {
 			seen[key] = true
