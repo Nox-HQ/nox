@@ -224,8 +224,7 @@ const (
 
 // classify reports how args expose any of vars, and what, given the
 // language's patterns. A name's exposure is capped by what it carries.
-func classify(args string, vars map[string]int, pats []exposurePattern) (int, string) {
-	best, what := exNone, ""
+func classify(args string, vars map[string]int, pats []exposurePattern) (best int, what string) {
 	for v, limit := range vars {
 		for _, p := range pats {
 			c := min(p.class, limit)
