@@ -164,6 +164,36 @@ Python is every category as on 2026-11-21. Java's change is path traversal
 (85% / 29% → 92% / 35%, TPR / FPR), from upload file names and the added
 `java.nio.file.Files` sinks (#1172); the other categories are as at the M2 gate.
 
+## M3 gate, 2026-11-25
+
+nox at `b68bccf`, same scorers and scan roots, same suite commits as the M2
+gap-close gate (BenchmarkPython `f129148`, BenchmarkJava `10dfcc5`).
+
+| | M2 gap-close | M3 gate | Semgrep `p/default` |
+|---|---:|---:|---:|
+| Python | 56.1 | **62.9** | 10.7 |
+| Java | 56.4 | **56.4** | 34.9 |
+
+**Python** rose in eight categories, mostly on detection, with false-positive
+rates flat or slightly up (TPR / FPR, M2 gap-close → now):
+
+| category | M2 gap-close | now |
+|---|---|---|
+| ldapi | 62% / 0% | 88% / 0% |
+| redirect | 69% / 33% | 92% / 38% |
+| cmdi | 69% / 0% | 85% / 0% |
+| pathtraver | 43% / 14% | 57% / 16% |
+| deserialization | 61% / 3% | 72% / 3% |
+| xpathi | 67% / 24% | 76% / 27% |
+| xss | 48% / 9% | 55% / 9% |
+| codeinj | 60% / 30% | 70% / 39% |
+
+**Java's** average is unchanged.
+
+Per the plan this benchmark is scored and not read case by case, so which of
+#1175–#1184 moved Python is not attributed here. Finding it would take scoring
+builds between the two gates, not reading cases.
+
 ## Limits
 
 - The benchmarks are synthetic. A score here is evidence about a rule's
