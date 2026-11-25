@@ -146,8 +146,11 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1519 -> 1520 adds APPCFG-008 (Spring Security CSRF protection switched off).
 	// 1520 -> 1521 adds TAINT-014 (mass assignment, CWE-915).
 	// 1521 -> 1522 adds PROTO-001 (an unguarded recursive merge, CWE-1321).
-	if got := len(cat); got != 1522 {
-		t.Errorf("Catalog() returned %d rules, want 1522", got)
+	// 1522 -> 1524 adds AUTHN-002 (a credential check with no attempt
+	// limiting, CWE-307) and AUTHN-003 (account creation or a reset message
+	// with no throttling, CWE-770).
+	if got := len(cat); got != 1524 {
+		t.Errorf("Catalog() returned %d rules, want 1524", got)
 	}
 }
 

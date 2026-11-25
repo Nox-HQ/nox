@@ -78,6 +78,10 @@ type routeView struct {
 	// the same for every caller; the data lives behind the app's API routes.
 	spaShell  bool
 	framework string
+	// defFile and defLine locate the handler's definition when it is not at
+	// the registration (a Django view in views.py, routed from urls.py).
+	defFile string
+	defLine int
 }
 
 // ---- comment stripping ----

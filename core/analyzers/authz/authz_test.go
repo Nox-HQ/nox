@@ -136,8 +136,8 @@ func TestOptInByDefault(t *testing.T) {
 	for _, r := range rs {
 		optIn[r.ID] = r.OptIn
 	}
-	if len(rs) != 3 || !optIn[RuleID] || !optIn[AuthnRuleID] || optIn[WebhookRuleID] {
-		t.Fatalf("rule catalogue = %v, want opt-in %s and %s and default-on %s", optIn, RuleID, AuthnRuleID, WebhookRuleID)
+	if len(rs) != 5 || !optIn[RuleID] || !optIn[AuthnRuleID] || optIn[WebhookRuleID] || optIn[BruteForceRuleID] || optIn[UnthrottledIssueRuleID] {
+		t.Fatalf("rule catalogue = %v, want opt-in %s and %s and default-on %s, %s and %s", optIn, RuleID, AuthnRuleID, WebhookRuleID, BruteForceRuleID, UnthrottledIssueRuleID)
 	}
 }
 
