@@ -356,6 +356,20 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		},
 		Metadata: map[string]string{"cwe": "CWE-770"},
 	})
+	rs.Add(&rules.Rule{
+		ID:          CSRFRouteRuleID,
+		Version:     "1.0",
+		Description: "POST route reached with the session cookie in a Flask or Express application with no CSRF protection: no CSRF library or token check, and a session cookie not set SameSite (CWE-352)",
+		Severity:    findings.SeverityMedium,
+		Confidence:  findings.ConfidenceMedium,
+		Tags:        []string{"csrf", "session", "owasp-a01", "flask", "express"},
+		Remediation: "Add CSRF protection to the application: Flask-WTF CSRFProtect(app) (and {{ csrf_token() }} in forms, or the X-CSRFToken header from JavaScript), or csrf-csrf / lusca in Express with the token in every form and fetch. Set the session cookie SameSite=Lax at least (Flask SESSION_COOKIE_SAMESITE = \"Lax\", express-session cookie: { sameSite: \"lax\" }). To confirm before changing code: from a page on another origin, submit a form to the route while signed in; if it succeeds, the finding holds.",
+		References: []string{
+			"https://cwe.mitre.org/data/definitions/352.html",
+			"https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html",
+		},
+		Metadata: map[string]string{"cwe": "CWE-352"},
+	})
 	return rs
 }
 
@@ -389,6 +403,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		ix.reasoning = a.reasoning
 	}
 	rls, globalLimiter := false, false
+	var csrf csrfDefences
 	pyFiles, pyOrder := map[string]*pyFile{}, []string(nil)
 	compiled := &compiledReaders{}
 	var jvmFiles []*jvmFile
@@ -441,6 +456,11 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 		if !globalLimiter && globalLimiterRe.Match(raw) {
 			globalLimiter = true
+		}
+		if ext == ".py" {
+			csrf.read(true, withoutComments(lexctx.LangPython, raw))
+		} else if jsExt[ext] {
+			csrf.read(false, withoutComments(lexctx.LangJavaScript, raw))
 		}
 		p := filepath.ToSlash(art.Path)
 		if ext == ".java" || ext == ".kt" {
@@ -523,6 +543,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	}
 	for _, h := range bruteForceHits(views, globalLimiter) {
 		fs.Add(buildBruteForceFinding(h))
+	}
+	for _, h := range csrfRouteHits(views, csrf) {
+		fs.Add(buildCSRFRouteFinding(h))
 	}
 	if !globalLimiter {
 		for _, h := range springLogins(jvmFiles) {

@@ -123,7 +123,8 @@ Gate 2026-11-24 (main 0cc6f49, all 203 rescanned): dev F3 17.0 -> 21.3, injectio
 - [ ] Authentication and session settings: CSRF protection disabled, session cookie flags, login routes without a rate limit where the framework has a standard limiter
   - [x] Login, OTP and token-reset routes without attempt limiting (AUTHN-002, CWE-307) and sign-up/reset-request routes without throttling (AUTHN-003, CWE-770), #1179: dev F3 22.2 -> 23.5, authentication/session recall 36 -> 108 of 527. Same PR: front-end `api.post(...)` calls no longer enter the route table
   - [x] CSRF switched off in Django and Flask (APPCFG-008 extended): `@csrf_exempt` on a state-changing session view, `CsrfViewMiddleware` removed, DRF `enforce_csrf` no-op, Flask-WTF exemptions; CWE-352 labels 14 -> 24
-  - [ ] Remaining CSRF labels: Flask apps with session cookies and no CSRF library (about 15 POST routes), state-changing GET routes (about 8)
+  - [x] CSRF on session-cookie POST routes in Flask and Express apps with no CSRF protection (AUTHN-004): dev +10 CWE-352 labels, F3 23.5 -> 23.7 on its own; the 18 unmatched are unprotected session POSTs in deliberately vulnerable apps
+  - [ ] Remaining CSRF labels: state-changing GET routes (about 8)
 - [ ] Information exposure: stack traces and exception messages written to responses, debug endpoints enabled in production configuration
 - [ ] Remaining languages onto tree-sitter (C#, PHP, Ruby, Go via the same front end or kept on go/ast, Kotlin, Scala, Swift, Rust, C/C++, and the rest), each behind the same A/B gate
 - [ ] M3 gate: dev and held-out, OWASP Benchmark, published
