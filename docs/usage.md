@@ -1132,7 +1132,13 @@ scan:
     # auth middleware, decorator, dependency or check on the caller): a lead
     # by default, a finding when named here (CWE-306). WEBHOOK-001, a Stripe,
     # GitHub or Slack webhook payload accepted without signature
-    # verification, is not opt-in: it reports by default. SEC-951, the generic "credential-named key with a
+    # verification, is not opt-in: it reports by default. Nor are AUTHN-002, a
+    # login, OTP or token-consuming reset route with no rate limit, throttle or
+    # lockout visible on the route, its router, the application or the handler
+    # (CWE-307; Spring Security formLogin/httpBasic count as login routes), and
+    # AUTHN-003, a registration, forgot-password or code-issuing route with no
+    # throttle (CWE-770). A limit enforced in a gateway is not visible to
+    # either; waive with that reason. SEC-951, the generic "credential-named key with a
     # random-looking value" rule, runs by default at medium severity and low
     # confidence; `disable` above switches it off.
     enable: []   # e.g. [TAINT-011, AUTHZ-001, AUTHN-001]

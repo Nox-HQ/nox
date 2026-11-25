@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- AUTHN-002 credential check without attempt limiting (CWE-307): an
+  unauthenticated login, OTP/second-factor or token-consuming password-reset
+  route -- named so by the end of its path, or by a password comparison in
+  its handler -- with no rate limiter, throttle, lockout or CAPTCHA on the
+  route, its router, the application or the handler. Spring Security
+  `formLogin()` and `httpBasic()` are reported where configured unless the
+  repository counts attempts. A Django finding is reported at the view, where
+  the limiting decorator goes. Over every route reader nox has.
+
+- AUTHN-003 account creation or message issuance without throttling
+  (CWE-770): the same proposition over registration, forgot-password,
+  reset-request and one-time-code issuing routes.
+
 - PROTO-001 prototype pollution (CWE-1321), JavaScript and TypeScript: a
   recursive merge that loops over an object's keys and recurses into
   `target[key]` (or assigns its own recursion there) with no
@@ -363,6 +376,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   precision 0.14 -> 0.21), held-out 11.2 -> 11.5.
 
 ### Fixed
+
+- Route table: front-end code no longer registers routes. A file that
+  imports a UI framework or browser HTTP client (React, Vue, Angular, axios)
+  and no server framework, a client held by an object (`this.api.post`), and
+  an `axios.create()` instance are requests to a server, not routes; they
+  were entering the route table, AUTHN-001 and `nox model`. A route whose
+  only argument is an inline handler is an endpoint, not a guard registered
+  for a route served elsewhere: its 401 answer was read as authentication.
 
 - Taint, Python: a `for` loop bound nothing, so a request value iterated
   into a sink (`for f in request.args.getlist("f"): os.system(...)`) was

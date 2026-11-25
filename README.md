@@ -164,7 +164,7 @@ make build
 
 ## What Nox Detects
 
-Nox ships with **1522 built-in rules** across five analyzer suites:
+Nox ships with **1524 built-in rules** across five analyzer suites:
 
 ### Secrets (884 rules)
 
@@ -268,7 +268,6 @@ Detects personally identifiable information (PII) and sensitive data patterns in
 | Rule | Description |
 |------|-------------|
 | MEMSAFE-001 | Integer truncation reaching a `make()` size or a slice bound — a narrowed or sign-flipped length that wraps (CWE-190) |
-| PROTO-001 | A JavaScript/TypeScript recursive merge that walks into `target[key]` with no `__proto__`/`constructor` guard — prototype pollution (CWE-1321) |
 
 Deliberately much narrower than gosec's `G115`, which reports every narrowing
 conversion: measured across sixteen Go repositories, that produced 96 findings
@@ -277,6 +276,14 @@ suppresses masks, modulo, unsigned shifts, guarded values and length-derived
 values. Conversions whose operand type is not provable from the enclosing
 function are not reported — nox parses Go with `go/ast`, not `go/types`. See
 [`docs/design/go-integer-overflow.md`](docs/design/go-integer-overflow.md).
+
+### Application logic
+
+| Rule | Description |
+|------|-------------|
+| PROTO-001 | A JavaScript/TypeScript recursive merge that walks into `target[key]` with no `__proto__`/`constructor` guard — prototype pollution (CWE-1321) |
+| AUTHN-002 | A login, OTP or token-consuming password-reset route, or Spring Security form login / HTTP Basic, with no rate limit, throttle or lockout visible in the application (CWE-307) |
+| AUTHN-003 | A registration, forgot-password or one-time-code issuing route with no throttle visible in the application (CWE-770) |
 
 ## Configuration
 

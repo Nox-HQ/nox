@@ -446,7 +446,8 @@ func (d *djIndex) emitView(e djEntry, full string, out *[]Route, views *[]routeV
 		rt := Route{Method: m, Path: full, FilePath: e.file.path, Line: line, Authn: authn, Authz: authz, Reader: ReaderDjango}
 		*out = append(*out, rt)
 		*views = append(*views, routeView{route: rt, handler: d.handlerText(v), known: true, chain: v.decos + " " + v.bases,
-			guardUnseen: d.guard, declaredPublic: public, framework: "django"})
+			guardUnseen: d.guard, declaredPublic: public, framework: "django",
+			defFile: v.file.path, defLine: lineAt(v.file.lineStarts, v.off)})
 	}
 }
 

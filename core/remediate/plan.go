@@ -570,6 +570,12 @@ var needsByRule = map[string]string{
 	"AUTHN-001": "A call with no credentials. Request the route without a token or session; a 2xx answer with data " +
 		"means anyone can reach it. A static scan cannot see a gateway or middleware that authenticates before " +
 		"the application, so only that call settles it.",
+	"AUTHN-002": "Whether a proxy, gateway or WAF in front of this application already limits attempts on this route, " +
+		"and what limit fits it. Send 50 wrong passwords for one account in a minute: if every attempt is answered and " +
+		"none is refused or delayed, add a limiter and per-account lockout in the application.",
+	"AUTHN-003": "Whether a proxy, gateway or WAF in front of this application already throttles this route, and how " +
+		"many accounts or messages per client and per address are acceptable. Send 50 requests in a minute: if every " +
+		"one creates an account or sends a message, add a limit in the application.",
 }
 
 // needsByClass says what the code's owner has to decide, per taint class.
