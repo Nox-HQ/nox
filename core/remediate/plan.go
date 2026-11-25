@@ -573,6 +573,9 @@ var needsByRule = map[string]string{
 	"AUTHN-002": "Whether a proxy, gateway or WAF in front of this application already limits attempts on this route, " +
 		"and what limit fits it. Send 50 wrong passwords for one account in a minute: if every attempt is answered and " +
 		"none is refused or delayed, add a limiter and per-account lockout in the application.",
+	"AUTHN-004": "Which CSRF defence fits the application: a synchronizer token (Flask-WTF CSRFProtect, csrf-csrf) " +
+		"in every form and fetch, or SameSite=Lax on the session cookie if no flow needs a cross-site POST. Submit a form to the " +
+		"route from another origin while signed in: if it succeeds, add the defence.",
 	"AUTHN-003": "Whether a proxy, gateway or WAF in front of this application already throttles this route, and how " +
 		"many accounts or messages per client and per address are acceptable. Send 50 requests in a minute: if every " +
 		"one creates an account or sends a message, add a limit in the application.",

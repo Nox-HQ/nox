@@ -149,8 +149,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1522 -> 1524 adds AUTHN-002 (a credential check with no attempt
 	// limiting, CWE-307) and AUTHN-003 (account creation or a reset message
 	// with no throttling, CWE-770).
-	if got := len(cat); got != 1524 {
-		t.Errorf("Catalog() returned %d rules, want 1524", got)
+	// 1524 -> 1525 adds AUTHN-004 (a session-authenticated POST in a Flask or
+	// Express application with no CSRF protection, CWE-352).
+	if got := len(cat); got != 1525 {
+		t.Errorf("Catalog() returned %d rules, want 1525", got)
 	}
 }
 

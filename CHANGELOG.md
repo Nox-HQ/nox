@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repository counts attempts. A Django finding is reported at the view, where
   the limiting decorator goes. Over every route reader nox has.
 
+- AUTHN-004 CSRF on session routes (CWE-352), Flask and Express: a POST
+  authenticated by the session cookie -- Flask-Login, Flask's session,
+  express-session, cookie-session -- in an application with no CSRF library
+  or token check and a session cookie not set SameSite. Not reported:
+  - a handler that reads only a JSON body;
+  - PUT, PATCH and DELETE, which need a CORS preflight;
+  - token-authenticated routes;
+  - login and sign-up routes, which write the session rather than use it.
+
 - AUTHN-003 account creation or message issuance without throttling
   (CWE-770): the same proposition over registration, forgot-password,
   reset-request and one-time-code issuing routes.

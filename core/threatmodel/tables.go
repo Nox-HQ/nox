@@ -187,6 +187,7 @@ var strideByRule = map[string][]Category{
 	"AUTHN-001": {Spoofing, ElevationOfPrivilege},
 	"AUTHN-002": {Spoofing},
 	"AUTHN-003": {DenialOfService},
+	"AUTHN-004": {Spoofing, Tampering},
 	// A webhook payload nobody authenticated can be forged by anyone who can
 	// reach the URL.
 	"WEBHOOK-001": {Spoofing, Tampering},
