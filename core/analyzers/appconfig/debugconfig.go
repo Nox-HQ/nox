@@ -137,7 +137,7 @@ func lineAt(content []byte, off int) []byte {
 
 // yamlParentOffset returns the offset and indentation of the nearest line
 // above off indented less than indent, or -1 when there is none.
-func yamlParentOffset(content []byte, off, indent int) (int, int) {
+func yamlParentOffset(content []byte, off, indent int) (parentOff, parentIndent int) {
 	lineStart := bytes.LastIndexByte(content[:off], '\n') + 1
 	for lineStart > 0 {
 		prevEnd := lineStart - 1
