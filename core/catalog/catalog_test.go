@@ -145,8 +145,9 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// 1518 -> 1519 adds APPCFG-007 (a secret setting with a literal default).
 	// 1519 -> 1520 adds APPCFG-008 (Spring Security CSRF protection switched off).
 	// 1520 -> 1521 adds TAINT-014 (mass assignment, CWE-915).
-	if got := len(cat); got != 1521 {
-		t.Errorf("Catalog() returned %d rules, want 1521", got)
+	// 1521 -> 1522 adds PROTO-001 (an unguarded recursive merge, CWE-1321).
+	if got := len(cat); got != 1522 {
+		t.Errorf("Catalog() returned %d rules, want 1522", got)
 	}
 }
 

@@ -516,6 +516,7 @@ var needsByFamily = map[string]string{
 	"app-config":           "Which origins, keys and settings the deployment actually uses, which the source writes down only as a literal.",
 	"file-permissions":     "Which account should own and access this file.",
 	"memory-safety":        "The size or bound that is right for this buffer, which the code does not state.",
+	"prototype-pollution":  "Whether this merge ever receives parsed or request data, which its callers decide.",
 	"agentic-dataflow":     "Which data this agent step may receive from, and pass to, the next one, and who vouches for it.",
 	"taint-flow":           "Where this input is validated before it is used, and what it is checked against; the flow is real but the safe boundary depends on your feature.",
 	"cve-variants":         "Whether the library version you run has the vulnerable behaviour: check the advisory for the affected versions, then upgrade or confirm it does not apply.",

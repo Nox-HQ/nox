@@ -22,6 +22,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/hardening"
 	"github.com/nox-hq/nox/core/analyzers/iac"
 	"github.com/nox-hq/nox/core/analyzers/memsafe"
+	"github.com/nox-hq/nox/core/analyzers/protopollution"
 	"github.com/nox-hq/nox/core/analyzers/provenance"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
 	"github.com/nox-hq/nox/core/analyzers/slop"
@@ -80,6 +81,7 @@ func allRuleSets() []*rules.RuleSet {
 		hardening.NewAnalyzer().Rules(),
 		templates.NewAnalyzer().Rules(),
 		memsafe.NewAnalyzer().Rules(),
+		protopollution.NewAnalyzer().Rules(),
 		fileperms.NewAnalyzer().Rules(),
 	}
 }
