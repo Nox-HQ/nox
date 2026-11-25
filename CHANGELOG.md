@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ERRLEAK-001 exception detail in the HTTP response (CWE-209), new analyzer
+  covering JavaScript/TypeScript, Python and Java. Inside an exception
+  handler, the caught exception's detail is written into the response.
+  - **Handlers:** a catch block, promise `.catch`, a node-style callback,
+    Express error middleware, Python `except`, Flask/FastAPI error handlers,
+    Spring `@ExceptionHandler`.
+  - **Detail:** the stack trace, the whole object, a traceback, driver detail,
+    or the message of an exception of a generic type (`Exception`, database
+    and IO errors, an untyped JavaScript catch).
+  - **Responses:** Express/Fastify/Koa/Next.js, Flask/Django/FastAPI response
+    builders, Spring `ResponseEntity`, the servlet writer, model and flash
+    attributes, Struts action errors, `sendError`. A `return` counts in a view,
+    an error handler or a controller.
+  - **Aliases:** `msg = e.getMessage()`, `const err = error as Error`, and a
+    Flask `error = f"...{e}"` rendered after the block.
+  - **Not reported:** the message of a specific exception type; a message in
+    a JavaScript catch that tells error kinds apart; a message sent as a 4xx
+    from an untyped JavaScript catch (the application's own validation
+    errors); log calls.
+
 - AUTHN-002 credential check without attempt limiting (CWE-307): an
   unauthenticated login, OTP/second-factor or token-consuming password-reset
   route -- named so by the end of its path, or by a password comparison in

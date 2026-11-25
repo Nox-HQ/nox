@@ -18,6 +18,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/authz"
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
+	"github.com/nox-hq/nox/core/analyzers/errleak"
 	"github.com/nox-hq/nox/core/analyzers/fileperms"
 	"github.com/nox-hq/nox/core/analyzers/hardening"
 	"github.com/nox-hq/nox/core/analyzers/iac"
@@ -82,6 +83,7 @@ func allRuleSets() []*rules.RuleSet {
 		templates.NewAnalyzer().Rules(),
 		memsafe.NewAnalyzer().Rules(),
 		protopollution.NewAnalyzer().Rules(),
+		errleak.NewAnalyzer().Rules(),
 		fileperms.NewAnalyzer().Rules(),
 	}
 }
