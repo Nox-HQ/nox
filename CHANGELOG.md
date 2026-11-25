@@ -55,9 +55,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - APPCFG-008: Spring Security configuration switches CSRF protection off
   (`csrf().disable()`, `csrf(c -> c.disable())`,
   `csrf(AbstractHttpConfigurer::disable)`, `CsrfSpec::disable`) or exempts
-  routes from it (`ignoringRequestMatchers`, `ignoringAntMatchers`).
-  CWE-352, medium severity, medium confidence: an API authenticated only by
-  bearer tokens is not exposed, and the finding says so.
+  routes from it (`ignoringRequestMatchers`, `ignoringAntMatchers`), and
+  the Kotlin DSL `csrf { disable() }`. Django and Flask too:
+  - a settings module whose `MIDDLEWARE` keeps sessions but not
+    `CsrfViewMiddleware` (commented out or never listed);
+  - `csrf_exempt(view)` in a URL pattern;
+  - a Django REST framework `enforce_csrf` that does nothing;
+  - Flask-WTF `@csrf.exempt` and `WTF_CSRF_ENABLED = False`;
+  - `@csrf_exempt` on a view that changes state on a submitted request.
+  An exempt view is not reported when it serves only safe methods, only
+  reads, or authenticates by a header, an API key or a signature; there the
+  exemption is the fix. CWE-352, medium severity, medium confidence: an API
+  authenticated only by bearer tokens is not exposed, and the finding says
+  so.
 
 - Java path traversal (TAINT-004): an uploaded file's name -- Spring
   `MultipartFile.getOriginalFilename()`, Servlet `Part.getSubmittedFileName()`
