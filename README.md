@@ -164,7 +164,7 @@ make build
 
 ## What Nox Detects
 
-Nox ships with **1521 built-in rules** across five analyzer suites:
+Nox ships with **1522 built-in rules** across five analyzer suites:
 
 ### Secrets (884 rules)
 
@@ -268,6 +268,7 @@ Detects personally identifiable information (PII) and sensitive data patterns in
 | Rule | Description |
 |------|-------------|
 | MEMSAFE-001 | Integer truncation reaching a `make()` size or a slice bound — a narrowed or sign-flipped length that wraps (CWE-190) |
+| PROTO-001 | A JavaScript/TypeScript recursive merge that walks into `target[key]` with no `__proto__`/`constructor` guard — prototype pollution (CWE-1321) |
 
 Deliberately much narrower than gosec's `G115`, which reports every narrowing
 conversion: measured across sixteen Go repositories, that produced 96 findings

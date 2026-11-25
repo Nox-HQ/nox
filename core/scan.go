@@ -33,6 +33,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/hardening"
 	"github.com/nox-hq/nox/core/analyzers/iac"
 	"github.com/nox-hq/nox/core/analyzers/memsafe"
+	"github.com/nox-hq/nox/core/analyzers/protopollution"
 	"github.com/nox-hq/nox/core/analyzers/provenance"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
 	"github.com/nox-hq/nox/core/analyzers/slop"
@@ -749,6 +750,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	templatesAnalyzer := templates.NewAnalyzer()
 	appconfigAnalyzer := appconfig.NewAnalyzer()
 	memsafeAnalyzer := memsafe.NewAnalyzer()
+	protoAnalyzer := protopollution.NewAnalyzer()
 	variantsAnalyzer := variants.NewAnalyzer()
 	variantsAnalyzer.RecordReasoningTo(reasons)
 	// A signature database that fails to parse leaves every VARIANT-* rule
@@ -893,6 +895,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			addFindings(fs)
 			return nil
 		}},
+		{"protopollution", func(c context.Context) error {
+			fs, err := protoAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		}},
 		{"slop", func(c context.Context) error {
 			fs, err := slopAnalyzer.ScanArtifactsInContext(c, artifacts, tree)
 			if err != nil {
@@ -1026,6 +1036,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		{"templates", templatesAnalyzer.Rules()},
 		{"appconfig", appconfigAnalyzer.Rules()},
 		{"memsafe", memsafeAnalyzer.Rules()},
+		{"protopollution", protoAnalyzer.Rules()},
 		{"slop", slopAnalyzer.Rules()},
 		{"variants", variantsAnalyzer.Rules()},
 		{"taintflow", taintflowAnalyzer.Rules()},

@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- PROTO-001 prototype pollution (CWE-1321), JavaScript and TypeScript: a
+  recursive merge that loops over an object's keys and recurses into
+  `target[key]` (or assigns its own recursion there) with no
+  `__proto__`/`constructor`/`prototype` check. Reported at the recursive
+  call; a shallow copy, a recursion not keyed by the loop, or a body that
+  names the unsafe keys is not. `hasOwnProperty` is not a guard: a parsed
+  `"__proto__"` key is an own property.
+
 - TAINT-014 mass assignment for Java: a request-bound object (`@RequestBody`,
   `@ModelAttribute`, `@BeanParam`, `@Body` of an object or map type) copied
   onto a bean with `BeanUtils.copyProperties` -- Spring's source slot, or

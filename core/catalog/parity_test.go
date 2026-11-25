@@ -19,6 +19,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/hardening"
 	"github.com/nox-hq/nox/core/analyzers/iac"
 	"github.com/nox-hq/nox/core/analyzers/memsafe"
+	"github.com/nox-hq/nox/core/analyzers/protopollution"
 	"github.com/nox-hq/nox/core/analyzers/provenance"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
 	"github.com/nox-hq/nox/core/analyzers/slop"
@@ -65,13 +66,14 @@ func analyzerRuleSets(t *testing.T) map[string]*rules.RuleSet {
 		"appconfig":  appconfig.NewAnalyzer().Rules(),
 		// Publish rules, but are absent from Catalog() — see
 		// TestEveryShippedRuleReachesTheCatalog.
-		"agentflow":  agentflow.NewAnalyzer().Rules(),
-		"fileperms":  fileperms.NewAnalyzer().Rules(),
-		"hardening":  hardening.NewAnalyzer().Rules(),
-		"templates":  templates.NewAnalyzer().Rules(),
-		"memsafe":    memsafe.NewAnalyzer().Rules(),
-		"taintflow":  taintflow.NewAnalyzer().Rules(),
-		"weakcrypto": weakcrypto.NewAnalyzer().Rules(),
+		"agentflow":      agentflow.NewAnalyzer().Rules(),
+		"fileperms":      fileperms.NewAnalyzer().Rules(),
+		"hardening":      hardening.NewAnalyzer().Rules(),
+		"templates":      templates.NewAnalyzer().Rules(),
+		"memsafe":        memsafe.NewAnalyzer().Rules(),
+		"protopollution": protopollution.NewAnalyzer().Rules(),
+		"taintflow":      taintflow.NewAnalyzer().Rules(),
+		"weakcrypto":     weakcrypto.NewAnalyzer().Rules(),
 	}
 }
 

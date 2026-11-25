@@ -92,7 +92,7 @@ func (d Degradation) Blocks() bool { return !d.Advisory }
 // class we refuse to regress on". Inflating severities to make the first
 // question answer the second would misreport risk everywhere else severity is
 // read.
-var codeSecurityFamilies = regexp.MustCompile(`^(HARDEN|PERM|CRYPTO|MEMSAFE)-`)
+var codeSecurityFamilies = regexp.MustCompile(`^(HARDEN|PERM|CRYPTO|MEMSAFE|PROTO)-`)
 
 // CIGateResult is what the gate decided and why.
 type CIGateResult struct {
