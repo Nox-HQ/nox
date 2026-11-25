@@ -33,6 +33,7 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/flowunits"
 	"github.com/nox-hq/nox/core/analyzers/hardening"
 	"github.com/nox-hq/nox/core/analyzers/iac"
+	"github.com/nox-hq/nox/core/analyzers/logleak"
 	"github.com/nox-hq/nox/core/analyzers/memsafe"
 	"github.com/nox-hq/nox/core/analyzers/protopollution"
 	"github.com/nox-hq/nox/core/analyzers/provenance"
@@ -753,6 +754,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	memsafeAnalyzer := memsafe.NewAnalyzer()
 	protoAnalyzer := protopollution.NewAnalyzer()
 	errleakAnalyzer := errleak.NewAnalyzer()
+	logleakAnalyzer := logleak.NewAnalyzer()
 	variantsAnalyzer := variants.NewAnalyzer()
 	variantsAnalyzer.RecordReasoningTo(reasons)
 	// A signature database that fails to parse leaves every VARIANT-* rule
@@ -913,6 +915,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			addFindings(fs)
 			return nil
 		}},
+		{"logleak", func(c context.Context) error {
+			fs, err := logleakAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		}},
 		{"slop", func(c context.Context) error {
 			fs, err := slopAnalyzer.ScanArtifactsInContext(c, artifacts, tree)
 			if err != nil {
@@ -1048,6 +1058,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		{"memsafe", memsafeAnalyzer.Rules()},
 		{"protopollution", protoAnalyzer.Rules()},
 		{"errleak", errleakAnalyzer.Rules()},
+		{"logleak", logleakAnalyzer.Rules()},
 		{"slop", slopAnalyzer.Rules()},
 		{"variants", variantsAnalyzer.Rules()},
 		{"taintflow", taintflowAnalyzer.Rules()},

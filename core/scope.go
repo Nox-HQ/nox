@@ -57,6 +57,7 @@ var analyzerScope = map[string]struct {
 	"memsafe":        {ScopeCode, []string{"MEMSAFE-*"}},
 	"protopollution": {ScopeCode, []string{"PROTO-*"}},
 	"errleak":        {ScopeCode, []string{"ERRLEAK-*"}},
+	"logleak":        {ScopeCode, []string{"LOGLEAK-*"}},
 	"deps":           {ScopeDeps, []string{"VULN-*", "CONT-*", "LIC-*"}},
 	"iac":            {ScopeIaC, []string{"IAC-*"}},
 	"fileperms":      {ScopeIaC, []string{"PERM-*"}},
