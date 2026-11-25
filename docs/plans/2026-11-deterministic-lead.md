@@ -127,7 +127,7 @@ Gate 2026-11-24 (main 0cc6f49, all 203 rescanned): dev F3 17.0 -> 21.3, injectio
   - [ ] Remaining CSRF labels: state-changing GET routes (about 8)
 - [ ] Information exposure: stack traces and exception messages written to responses, debug endpoints enabled in production configuration
   - [x] Exception detail written into the HTTP response (ERRLEAK-001, CWE-209), JS/TS, Python, Java, #1182: dev F3 23.7 -> 25.1, information-exposure recall 18 -> 69 of 402
-  - [x] Sensitive data written to logs (LOGLEAK-001, CWE-532): credentials, Authorization/cookie headers and whole request bodies in log calls, Django console mail backend, sqlite trace callbacks; CWE-532 labels 8 -> 80 of 137
+  - [x] Sensitive data written to logs (LOGLEAK-001, CWE-532): credentials, Authorization/cookie headers and whole request bodies in log calls, Django console mail backend, sqlite trace callbacks: dev F3 25.1 -> 26.4, CWE-532 labels 8 -> 80 of 137, information-exposure recall 69 -> 139 of 402
   - [ ] Debug endpoints and debug mode in production configuration (CWE-215)
 - [ ] Remaining languages onto tree-sitter (C#, PHP, Ruby, Go via the same front end or kept on go/ast, Kotlin, Scala, Swift, Rust, C/C++, and the rest), each behind the same A/B gate
 - [ ] M3 gate: dev and held-out, OWASP Benchmark, published
