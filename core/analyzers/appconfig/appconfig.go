@@ -98,7 +98,7 @@ var builtin = []rule{
 	{
 		id: RuleDebugMode, cwe: "CWE-215", severity: findings.SeverityMedium,
 		message:     "Web framework debug mode is enabled in source",
-		description: "Web framework debug mode enabled in source (Flask app.run(debug=True), app.debug = True, DEBUG config, Django settings DEBUG = True, FastAPI(debug=True))",
+		description: "Web framework debug mode enabled in source (Flask app.run(debug=True), app.debug = True, DEBUG config, Django settings DEBUG = True or read from the environment with a default that turns it on, FastAPI(debug=True)); Spring stack traces in error responses, every actuator endpoint exposed, the H2 console, JSF Development stage",
 		remediation: "Debug mode serves stack traces, local variables and, in Flask/Werkzeug, an interactive debugger that runs code. Read it from the environment and default to off: `debug=os.environ.get(\"FLASK_DEBUG\") == \"1\"`, Django `DEBUG = env.bool(\"DEBUG\", False)`.",
 		tags:        []string{"debug", "configuration", "owasp-a05"},
 		patterns: []pattern{
@@ -106,8 +106,17 @@ var builtin = []rule{
 			{langs: py, need: ".debug", re: regexp.MustCompile(`(?m)^\s*[A-Za-z_]\w*\.debug\s*=\s*True\b`)},
 			{langs: py, need: "DEBUG", re: regexp.MustCompile(`\.config\s*\[\s*['"]DEBUG['"]\s*\]\s*=\s*True\b`)},
 			{langs: py, need: "DEBUG", re: regexp.MustCompile(`\.config\.update\s*\([^)\n]*\bDEBUG\s*=\s*True\b`)},
+			// Tornado: Application(..., debug=True) or a settings dict holding
+			// "debug": True. The dict form starts at the "{" or "," before the
+			// key, since a match must start in code.
+			{langs: py, need: "debug", near: "tornado", re: regexp.MustCompile(`\bApplication\s*\([^)\n]*\bdebug\s*=\s*True\b`)},
+			{langs: py, need: "debug", near: "tornado", re: regexp.MustCompile(`[{,]\s*["']debug["']\s*:\s*True\b`)},
 			{langs: py, need: "FastAPI", re: regexp.MustCompile(`\bFastAPI\s*\([^)\n]*\bdebug\s*=\s*True\b`)},
 			{langs: py, need: "DEBUG", re: regexp.MustCompile(`(?m)^DEBUG\s*=\s*True\b`), fileOK: isDjangoSettings},
+			// Read from the environment, but on when the variable is unset:
+			// os.environ.get("DJANGO_DEBUG", "1") == "1", env_bool("DEBUG", True),
+			// config("DEBUG", default=True, cast=bool).
+			{langs: py, need: "DEBUG", re: regexp.MustCompile(`(?m)^DEBUG\s*=[^\n#]*\b(?:os\s*\.\s*environ\s*\.\s*get|os\s*\.\s*getenv|getenv|env\s*\.\s*bool|env|_?env_bool|config)\s*\(\s*["'][A-Za-z_]\w*["']\s*,\s*(?:default\s*=\s*)?(?:True\b|1\b|["'](?:1|[Tt]rue|TRUE|[Yy]es|YES|[Oo]n|ON)["'])`), fileOK: isDjangoSettings},
 		},
 	},
 	{
@@ -224,6 +233,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			continue
 		}
 		found := append(scanCookieConfig(art.Path, content), scanSecretFallback(art.Path, content)...)
+		found = append(found, scanDebugConfig(art.Path, content)...)
 		if ok {
 			found = ScanFile(art.Path, lang, content)
 		}
