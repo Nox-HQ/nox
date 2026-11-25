@@ -106,6 +106,7 @@ func TestPython(t *testing.T) {
 		// Not reported.
 		{"a keyword argument name", "logger.info('reset sent', password_reset_requested=True)\n", nil},
 		{"the length", "logger.info('len %d', len(password))\n", nil},
+		{"a parser's token", "LOGGER.debug('search_token: %s', search_token)\n", nil},
 		{"a None test", "logger.info('token set: %s', token is not None)\n", nil},
 		{"a hashed password", "logger.info('hash %s', hash_password(password))\n", nil},
 		{"one field of the body alias", "def a(request):\n    data = request.json\n    logger.info('signup %s', data['email'])\n", nil},

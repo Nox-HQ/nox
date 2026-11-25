@@ -48,6 +48,9 @@ var notTheValue = map[string]bool{
 	"preview": true, "directory": true, "dir": true, "file": true, "folder": true,
 	"location": true, "regex": true, "pattern": true, "format": true, "rule": true,
 	"life": true, "lifetime": true, "duration": true, "timeout": true,
+	// A parser's or lexer's token is a piece of text, not a credential.
+	"search": true, "lexer": true, "lex": true, "parse": true, "parser": true,
+	"parsed": true, "syntax": true, "word": true, "grammar": true, "ast": true,
 }
 
 // The value of a chain whose earlier part is the credential, as in
