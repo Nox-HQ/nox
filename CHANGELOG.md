@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- APPCFG-001 debug mode (CWE-215) extended.
+  - **Django:** `DEBUG` read from the environment with a default that turns
+    it on, as in `os.environ.get("DJANGO_DEBUG", "1") == "1"`,
+    `env_bool("DEBUG", True)` and `config("DEBUG", default=True)`. Only a
+    non-development settings module counts.
+  - **Tornado:** `Application(..., debug=True)` and a `"debug": True`
+    settings dict.
+  - **Spring and JSF configuration outside dev/local/test profiles:**
+    - stack traces in error responses: `include-stacktrace` set to
+      `always` or `on-param`;
+    - every actuator endpoint exposed over HTTP: `exposure.include=*`;
+    - the H2 web console enabled;
+    - JSF `PROJECT_STAGE` set to Development.
+
 - LOGLEAK-001 sensitive data written to a log (CWE-532), new analyzer
   covering JavaScript/TypeScript, Python and Java.
   - **Log calls read:** `console.*`, a logger's level methods
