@@ -140,6 +140,9 @@ func normalizePyPI(name string) string {
 type declaredSet struct {
 	npm  map[string]struct{} // exact names (scoped kept as @scope/name)
 	pypi map[string]struct{} // normalized (normalizePyPI) names
+	// vaadin: a JVM build declares Vaadin, which provides @vaadin/* and the
+	// Frontend/ alias (vaadin.go).
+	vaadin bool
 }
 
 func newDeclaredSet() *declaredSet {
