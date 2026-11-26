@@ -357,6 +357,20 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		Metadata: map[string]string{"cwe": "CWE-770"},
 	})
 	rs.Add(&rules.Rule{
+		ID:          EnumerationRuleID,
+		Version:     "1.0",
+		Description: "Account enumeration: a login, sign-in or password-reset path answers that the account does not exist (\"No account is registered with that address\", \"User not found\", \"用户不存在\"), so a caller can tell which accounts exist (CWE-204)",
+		Severity:    findings.SeverityMedium,
+		Confidence:  findings.ConfidenceMedium,
+		Tags:        []string{"authentication", "account-enumeration", "owasp-a07"},
+		Remediation: "Give the same answer whether or not the account exists: \"Invalid email or password\" on login, and \"If that account exists, we sent a reset link\" on a reset request, with the same status code and, where practical, the same response time. Spring Security already does this for UsernameNotFoundException unless hideUserNotFoundExceptions is switched off; a custom exception carrying \"user not found\" bypasses it. To confirm before changing code: send the request for an e-mail that is registered and one that is not; if the answers differ, the finding holds.",
+		References: []string{
+			"https://cwe.mitre.org/data/definitions/204.html",
+			"https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#authentication-and-error-messages",
+		},
+		Metadata: map[string]string{"cwe": "CWE-204"},
+	})
+	rs.Add(&rules.Rule{
 		ID:          CSRFRouteRuleID,
 		Version:     "1.0",
 		Description: "POST route reached with the session cookie in a Flask or Express application with no CSRF protection: no CSRF library or token check, and a session cookie not set SameSite (CWE-352)",
@@ -404,6 +418,7 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	}
 	rls, globalLimiter := false, false
 	var csrf csrfDefences
+	var enumerations []findings.Finding
 	pyFiles, pyOrder := map[string]*pyFile{}, []string(nil)
 	compiled := &compiledReaders{}
 	var jvmFiles []*jvmFile
@@ -463,6 +478,14 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			csrf.read(false, withoutComments(lexctx.LangJavaScript, raw))
 		}
 		p := filepath.ToSlash(art.Path)
+		enumLang := lexctx.LangJavaScript
+		switch ext {
+		case ".py":
+			enumLang = lexctx.LangPython
+		case ".java", ".kt":
+			enumLang = lexctx.LangJava
+		}
+		enumerations = append(enumerations, scanEnumeration(p, enumLang, raw)...)
 		if ext == ".java" || ext == ".kt" {
 			jvmFiles = append(jvmFiles, newJVMFile(p, raw))
 			continue
@@ -546,6 +569,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	}
 	for _, h := range csrfRouteHits(views, csrf) {
 		fs.Add(buildCSRFRouteFinding(h))
+	}
+	for _, f := range enumerations {
+		fs.Add(f)
 	}
 	if !globalLimiter {
 		for _, h := range springLogins(jvmFiles) {
