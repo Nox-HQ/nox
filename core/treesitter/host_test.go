@@ -21,6 +21,10 @@ var hostSources = []struct{ lang, src string }{
 	{"php", "<?php\nfunction g() { return 1; }\n"},
 	{"ruby", "def g\n  1\nend\n"},
 	{"kotlin", "class A { fun g(): Int { return 1 } }\n"},
+	{"scala", "object A { def g(): Int = { 1 } }\n"},
+	{"swift", "func g() -> Int { return 1 }\n"},
+	{"rust", "fn g() -> i32 { 1 }\n"},
+	{"cpp", "int g() { return 1; }\n"},
 }
 
 // A pooled instance answers exactly as a fresh one: the same sequence of
