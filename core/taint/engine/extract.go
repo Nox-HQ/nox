@@ -197,7 +197,14 @@ func extractUnitsAt(path string, lang lexctx.Lang, content []byte) []unitDraft {
 		// each logical line is split on top-level semicolons. Ownership, Result/`?`
 		// unwrapping, iterator chains, and macro sinks make line recognition coarse;
 		// see extract_rust.go for the honest limits.
-		return extractRust(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true), joinOnlyBuilders)))
+		lines, ok := []logicalLine(nil), false
+		if treeFrontEnd("rust") {
+			lines, ok = rustTreeLines(content, regions)
+		}
+		if !ok {
+			lines = logicalLines(content, regions, true)
+		}
+		return extractRust(splitSemicolons(joinChainContinuations(lines, joinOnlyBuilders)))
 	case lexctx.LangCSharp:
 		// C# is brace-delimited like JS: paren/array continuations merge physical
 		// lines, then each logical line splits on top-level semicolons into
@@ -214,6 +221,11 @@ func extractUnitsAt(path string, lang lexctx.Lang, content []byte) []unitDraft {
 		// top-level semicolons into statements. Function definitions are recognized
 		// for per-function units (with params), and `::` is normalized to `.` inside
 		// extractCPP so scope-resolved calls match the catalog. See extract_cpp.go.
+		if treeFrontEnd("cpp") {
+			if lines, ok := cppTreeLines(content, regions); ok {
+				return extractCPP(splitSemicolons(lines))
+			}
+		}
 		return extractCPP(splitSemicolons(logicalLines(content, regions, true)))
 	case lexctx.LangPerl:
 		// Perl uses the line/statement RECOGNIZER (no CGo interpreter). Statements
@@ -230,6 +242,11 @@ func extractUnitsAt(path string, lang lexctx.Lang, content []byte) []unitDraft {
 		// a `;` may pack several onto one line, so — like Java — each logical line is
 		// split on top-level semicolons. It recognizes `def` headers for per-method
 		// units. See extract_scala.go.
+		if treeFrontEnd("scala") {
+			if lines, ok := scalaTreeLines(content, regions); ok {
+				return extractScala(splitSemicolons(lines))
+			}
+		}
 		return extractScala(splitSemicolons(logicalLines(content, regions, true)))
 	case lexctx.LangKotlin:
 		// Kotlin is brace-delimited like Java/JS: paren/array continuations merge
@@ -268,6 +285,11 @@ func extractUnitsAt(path string, lang lexctx.Lang, content []byte) []unitDraft {
 		// physical lines, then each logical line splits on top-level semicolons.
 		// Like C# it recognizes `func` headers for per-function units (and their
 		// internal parameter binding names). See extract_swift.go.
+		if treeFrontEnd("swift") {
+			if lines, ok := swiftTreeLines(content, regions); ok {
+				return extractSwift(splitSemicolons(lines))
+			}
+		}
 		return extractSwift(splitSemicolons(logicalLines(content, regions, true)))
 	case lexctx.LangObjC:
 		// Objective-C is C at its core: brace-delimited and `;`-terminated, so —
