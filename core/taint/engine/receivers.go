@@ -119,6 +119,15 @@ var (
 	javaFreemarkerImport = regexp.MustCompile(`(?m)^\s*import\s+freemarker\s*\.\s*template\s*\.\s*(?:Template|\*)\s*;`)
 )
 
+// A response writer. print, println and write are sinks by method name, but
+// append, printf and format are not: alone they name StringBuilder.append and
+// String.format. They are sinks on a writer the response hands out -- a local
+// assigned from `<anything>.getWriter()`, which is what `PrintWriter out =
+// response.getWriter();` and `var out = resp.getWriter();` both are -- and on
+// the inline `response.getWriter().format(...)` chain (catalog key
+// getWriter.format).
+var javaWriterFromResponse = regexp.MustCompile(`(?:^|[^\w.])([A-Za-z_]\w*)\s*=\s*[A-Za-z_][\w.]*\s*\.\s*getWriter\s*\(\s*\)`)
+
 // Application loggers (CWE-117). `info`, `warn` and `log` are names half of
 // every API uses, so a call is a log sink only on a receiver this file declares
 // or makes as a logger: a `Logger`/`Log` local or field (SLF4J, Log4j, JUL,
@@ -152,6 +161,9 @@ func javaReceiverBindings(content []byte) map[string]string {
 	}
 	for _, m := range javaSpelVar.FindAllSubmatch(content, -1) {
 		out[string(m[1])] = "spel_parser"
+	}
+	for _, m := range javaWriterFromResponse.FindAllSubmatch(content, -1) {
+		out[string(m[1])] = "response_writer"
 	}
 	for _, m := range javaVelocityEngineDecl.FindAllSubmatch(content, -1) {
 		out[string(m[1])] = "velocity_engine"

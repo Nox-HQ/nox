@@ -641,7 +641,7 @@ func (e *StructuralEngine) forwardPass(
 			// a launder-through-helper (return a constant) not over-report. Only a
 			// LONE call qualifies; a compound RHS (`x = helper(a) + tainted`) still
 			// falls through to conservative read-propagation.
-			if e.rhsIsLoneLocalCall(st, summaries) {
+			if e.rhsIsLoneLocalCall(lang, st, summaries) {
 				clearTaint()
 				continue
 			}
@@ -676,8 +676,14 @@ func (e *StructuralEngine) forwardPass(
 		for k, v := range carried.cleared {
 			cleared[k] = v
 		}
+		// An HTML decoder in the statement undoes an escaper beside it
+		// (decodeForHTML(encodeForHTML(p))): XSS stays.
+		decodes := len(htmlDecoded(st)) > 0
 		for _, rawCall := range st.Calls {
 			for _, class := range e.sanitizerClasses(lang, rawCall) {
+				if class == taint.VulnXSS && decodes {
+					continue
+				}
 				cleared[class] = true
 			}
 		}
@@ -873,18 +879,19 @@ func (e *StructuralEngine) interprocReturnTaint(lang string, st *taint.Statement
 // authoritative for x's taint. It is used to treat a non-taint-returning helper
 // as a barrier. A compound RHS (multiple calls, or a bare variable read
 // alongside the call) returns false so conservative read-propagation still runs.
-func (e *StructuralEngine) rhsIsLoneLocalCall(st *taint.Statement, summaries map[string]*funcSummary) bool {
-	if len(st.Calls) != 1 {
+func (e *StructuralEngine) rhsIsLoneLocalCall(lang string, st *taint.Statement, summaries map[string]*funcSummary) bool {
+	call, ok := loneCall(lang, st)
+	if !ok || !jvmCallIsOwnMethod(lang, st, call) {
 		return false
 	}
-	sum := resolveLocalCallee(st.Calls[0], summaries)
+	sum := resolveLocalCallee(call, summaries)
 	if sum == nil {
 		return false
 	}
 	// Every variable the statement reads must be an argument of the sole call;
 	// any read outside the call means the RHS is compound and taint could enter
 	// by a path the helper's summary does not cover.
-	info, ok := lookupSinkArg(st, st.Calls[0])
+	info, ok := lookupSinkArg(st, call)
 	if !ok {
 		return false
 	}
@@ -895,7 +902,7 @@ func (e *StructuralEngine) rhsIsLoneLocalCall(st *taint.Statement, summaries map
 	for _, v := range info.TaintedArgVars {
 		permitted[v] = struct{}{}
 	}
-	for _, seg := range strings.Split(st.Calls[0], ".") {
+	for _, seg := range strings.Split(call, ".") {
 		permitted[seg] = struct{}{}
 	}
 	for _, r := range st.Reads {
@@ -904,6 +911,67 @@ func (e *StructuralEngine) rhsIsLoneLocalCall(st *taint.Statement, summaries map
 		}
 	}
 	return true
+}
+
+// loneCall returns the one call on st's right-hand side. In Java and Kotlin
+// that includes a method called on an object constructed in place with no
+// arguments, `new Helper().run(a, b)` (Kotlin `Helper().run(a, b)`): the
+// statement's calls are the constructor and the method, and an object built
+// from nothing carries no request data, so the method's summary decides the
+// result as it does for `run(a, b)` or `this.run(a, b)`. A constructor that
+// takes arguments could carry taint into the object, and is not a lone call.
+func loneCall(lang string, st *taint.Statement) (string, bool) {
+	if len(st.Calls) == 1 {
+		return st.Calls[0], true
+	}
+	if len(st.Calls) != 2 || (lang != "java" && lang != "kotlin") {
+		return "", false
+	}
+	for i, ctor := range st.Calls {
+		method := st.Calls[1-i]
+		name, isMethod := strings.CutPrefix(method, ctor+".")
+		if !isMethod || strings.Contains(name, ".") || strings.Contains(ctor, ".") {
+			continue
+		}
+		if ctor == "" || ctor[0] < 'A' || ctor[0] > 'Z' {
+			continue
+		}
+		if info, found := lookupSinkArg(st, ctor); found {
+			for _, slot := range info.PositionalVars {
+				if len(slot) > 0 {
+					return "", false
+				}
+			}
+		}
+		return method, true
+	}
+	return "", false
+}
+
+// jvmCallIsOwnMethod reports, for Java and Kotlin, whether call names a method
+// of this file's own classes: called bare, on `this` or `super`, or on an
+// object constructed in place (loneCall). A call on any other receiver --
+// `thing.doSomething(p)` on an interface declared elsewhere -- is that type's
+// method, and only shares a name with a local one; its summary cannot make the
+// call a barrier. Other languages are unchanged.
+func jvmCallIsOwnMethod(lang string, st *taint.Statement, call string) bool {
+	if lang != "java" && lang != "kotlin" {
+		return true
+	}
+	recv, _, hasRecv := strings.Cut(call, ".")
+	if !hasRecv {
+		return true
+	}
+	if strings.Count(call, ".") != 1 {
+		return false
+	}
+	switch recv {
+	case "this", "super":
+		return true
+	}
+	// The constructed-in-place form: the constructor is the statement's other
+	// call (loneCall has checked it takes no arguments).
+	return len(st.Calls) == 2 && slices.Contains(st.Calls, recv)
 }
 
 // resolveLocalCallee resolves a raw call chain to a locally-defined function's
@@ -961,6 +1029,7 @@ func sortedReads(reads []string) []string {
 // sanitizer covers.
 func (e *StructuralEngine) inlineSanitized(lang string, st *taint.Statement) map[string]map[taint.VulnClass]bool {
 	out := map[string]map[taint.VulnClass]bool{}
+	decoded := htmlDecoded(st)
 	for _, rawCall := range st.Calls {
 		classes := e.sanitizerClasses(lang, rawCall)
 		if len(classes) == 0 {
@@ -975,7 +1044,36 @@ func (e *StructuralEngine) inlineSanitized(lang string, st *taint.Statement) map
 				out[v] = map[taint.VulnClass]bool{}
 			}
 			for _, c := range classes {
+				if c == taint.VulnXSS && decoded[v] {
+					continue
+				}
 				out[v][c] = true
+			}
+		}
+	}
+	return out
+}
+
+// htmlDecoders undo HTML escaping: ESAPI's decodeForHTML, Commons'
+// unescapeHtml/3/4, Spring's HtmlUtils.htmlUnescape. Keyed by method name.
+var htmlDecoders = map[string]bool{
+	"decodeForHTML": true, "unescapeHtml": true, "unescapeHtml3": true,
+	"unescapeHtml4": true, "htmlUnescape": true,
+}
+
+// htmlDecoded returns the variables an HTML decoder in st reads. An escaper
+// inside a decoder in the same statement -- decodeForHTML(encodeForHTML(p)) --
+// is undone, so it does not clear XSS for them.
+func htmlDecoded(st *taint.Statement) map[string]bool {
+	out := map[string]bool{}
+	for _, rawCall := range st.Calls {
+		name := rawCall[strings.LastIndex(rawCall, ".")+1:]
+		if !htmlDecoders[name] {
+			continue
+		}
+		if info, ok := lookupSinkArg(st, rawCall); ok {
+			for _, v := range info.TaintedArgVars {
+				out[v] = true
 			}
 		}
 	}

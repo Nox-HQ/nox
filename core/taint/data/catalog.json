@@ -4760,6 +4760,48 @@
           "note": "response writer .write(taintedHtml) — reflected XSS"
         },
         {
+          "call": "getWriter.append",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "PrintWriter.append(csq) writes to the response on inline response.getWriter(). Keyed on the receiver: append and format alone name StringBuilder.append and String.format"
+        },
+        {
+          "call": "response_writer.append",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "PrintWriter.append(csq) writes to the response on a local assigned from getWriter() (see receivers.go). Keyed on the receiver: append and format alone name StringBuilder.append and String.format"
+        },
+        {
+          "call": "getWriter.printf",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "PrintWriter.printf(format, args) writes the format and every argument to the response on inline response.getWriter(). Keyed on the receiver: append and format alone name StringBuilder.append and String.format"
+        },
+        {
+          "call": "response_writer.printf",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "PrintWriter.printf(format, args) writes the format and every argument to the response on a local assigned from getWriter() (see receivers.go). Keyed on the receiver: append and format alone name StringBuilder.append and String.format"
+        },
+        {
+          "call": "getWriter.format",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "PrintWriter.format([locale,] format, args) writes the format and every argument to the response on inline response.getWriter(). Keyed on the receiver: append and format alone name StringBuilder.append and String.format"
+        },
+        {
+          "call": "response_writer.format",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "PrintWriter.format([locale,] format, args) writes the format and every argument to the response on a local assigned from getWriter() (see receivers.go). Keyed on the receiver: append and format alone name StringBuilder.append and String.format"
+        },
+        {
           "call": "sendRedirect",
           "vuln_class": "open_redirect",
           "cwe": "CWE-601",
@@ -5214,6 +5256,55 @@
           "neutralizes": [
             "xss"
           ]
+        },
+        {
+          "call": "StringEscapeUtils.escapeHtml",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "Commons Lang 2's HTML escaper (escapeHtml4's predecessor)"
+        },
+        {
+          "call": "StringEscapeUtils.escapeHtml3",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "Commons Lang 3 / Text, HTML 3.2 entities"
+        },
+        {
+          "call": "encodeForHTML",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "OWASP ESAPI Encoder"
+        },
+        {
+          "call": "encodeForHTMLAttribute",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "OWASP ESAPI Encoder"
+        },
+        {
+          "call": "Encode.forHtmlContent",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "OWASP Java Encoder"
+        },
+        {
+          "call": "Encode.forHtmlAttribute",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "OWASP Java Encoder"
+        },
+        {
+          "call": "Jsoup.clean",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "jsoup's allowlist cleaner"
         },
         {
           "call": "Encoder.forHtml",
