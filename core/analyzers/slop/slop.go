@@ -192,6 +192,11 @@ func (a *Analyzer) ScanArtifactsInContext(ctx context.Context, artifacts, tree [
 				addDeclared(declared, art.Path, content)
 			}
 		}
+		if !declared.vaadin && isJVMBuild(base) {
+			if content, err := os.ReadFile(art.AbsPath); err == nil && declaresVaadin(content) {
+				declared.vaadin = true
+			}
+		}
 		if isPathAliasConfig(base) {
 			if content, err := os.ReadFile(art.AbsPath); err == nil {
 				aliases.add(content)
@@ -215,7 +220,7 @@ func (a *Analyzer) ScanArtifactsInContext(ctx context.Context, artifacts, tree [
 			return nil, err
 		}
 		art := artifacts[i]
-		if art.Type != discovery.Source || isVendoredPath(art.Path) {
+		if art.Type != discovery.Source || isVendoredPath(art.Path) || (declared.vaadin && isVaadinGenerated(art.Path)) {
 			continue
 		}
 		eco := ecosystemForExt(filepath.Ext(art.Path))
@@ -366,7 +371,7 @@ func (a *Analyzer) emitPredictive(fs *findings.FindingSet, eco ecosystem, path, 
 func declaredHas(d *declaredSet, eco ecosystem, pkg string) bool {
 	switch eco {
 	case ecoNPM:
-		return d.hasNPM(pkg)
+		return d.hasNPM(pkg) || (d.vaadin && vaadinProvided(pkg))
 	case ecoPyPI:
 		return d.hasPyPI(pkg)
 	}

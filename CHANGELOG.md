@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- AUTHN-005 (CWE-204, medium): account enumeration. A login, sign-in or
+  password-reset path (named so, or registered on such a route, or Spring's
+  `loadUserByUsername`) answers that the account does not exist: "No account
+  is registered with that address", "User [x] not found", "用户不存在",
+  `no_portal_account`. Not reported: one message for both cases ("Invalid
+  email or password", "If that account exists…"), Spring's
+  `UsernameNotFoundException` (hidden by default), log lines, lookups by an
+  id the caller already holds, and paths that are not authentication.
 - CRYPTO-003 (CWE-916, high severity, medium confidence): a password hashed
   with too little work, in Java/Kotlin, JavaScript/TypeScript and Python.
   - a fast digest (MD5, SHA-1, SHA-2: `hashlib`, `createHash`, CryptoJS,
@@ -522,6 +530,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- DATA-001 is dropped in Flyway migration scripts named by Flyway's
+  convention (`V3.9.2_2__add_jimuchatbi.sql`, `U3__…`, `R__…`) wherever the
+  project keeps them, as it already was under `migrations/`. A SQL dump that
+  is not a migration is still reported: it may be a real export. RealVuln:
+  25 findings on one repository, none matching a label.
+- SLOP-001 no longer reports Vaadin's own frontend as undeclared imports. A
+  project whose pom.xml or Gradle build depends on com.vaadin gets its
+  `frontend/generated/` tree (written by Vaadin on every build) skipped, and
+  the `@vaadin/*` scope and the `Frontend/` alias Vaadin provides treated as
+  declared. RealVuln: 373 SLOP-001 findings on two Vaadin repositories, none
+  matching a label, and no other change.
 - Route table: front-end code no longer registers routes. A file that
   imports a UI framework or browser HTTP client (React, Vue, Angular, axios)
   and no server framework, a client held by an object (`this.api.post`), and

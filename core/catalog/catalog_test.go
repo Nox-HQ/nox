@@ -159,8 +159,10 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// CWE-1021) and APPCFG-010 (session fixation protection off, CWE-384).
 	// 1529 -> 1530 adds CRYPTO-003 (a password hashed with a fast digest or a
 	// KDF below its work-factor floor, CWE-916).
-	if got := len(cat); got != 1530 {
-		t.Errorf("Catalog() returned %d rules, want 1530", got)
+	// 1530 -> 1531 adds AUTHN-005 (an authentication path that answers that
+	// the account does not exist, CWE-204).
+	if got := len(cat); got != 1531 {
+		t.Errorf("Catalog() returned %d rules, want 1531", got)
 	}
 }
 
