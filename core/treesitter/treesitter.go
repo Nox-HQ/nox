@@ -8,7 +8,8 @@
 // reads it back. Every parse runs in a fresh module instance, so no state
 // survives from one file to the next, under a memory limit, and stops when
 // its context is done. The guest is granted no clock, file or network: the
-// four WASI functions the runtime links against are stubs that fail.
+// WASI functions the runtime and the grammars link against are stubs that
+// fail, or end the guest.
 package treesitter
 
 import (
@@ -37,11 +38,14 @@ var moduleOf = map[string]string{
 	"php":        "php",
 	"ruby":       "ruby",
 	"kotlin":     "kotlin",
+	"scala":      "scala",
+	"swift":      "swift",
+	"rust":       "rust",
 }
 
 // Languages are the languages the embedded modules parse.
 func Languages() []string {
-	return []string{"csharp", "java", "javascript", "kotlin", "php", "python", "ruby", "tsx", "typescript"}
+	return []string{"csharp", "java", "javascript", "kotlin", "php", "python", "ruby", "rust", "scala", "swift", "tsx", "typescript"}
 }
 
 // Node is one node of a parse tree. Nodes are in pre-order: a node's
@@ -142,8 +146,9 @@ func (p *Parser) Close(ctx context.Context) error { return p.rt.Close(ctx) }
 // errnoNotSupported is WASI's ENOSYS.
 const errnoNotSupported = 52
 
-// instantiateWASIStubs grants the guest the four WASI functions the runtime
-// links against, each failing with ENOSYS. tree-sitter reaches the clock only
+// instantiateWASIStubs grants the guest the five WASI functions the runtime
+// and the grammars link against. Four fail with ENOSYS; proc_exit, which the
+// Swift scanner reaches through abort, ends the guest. tree-sitter reaches the clock only
 // when a parse timeout is set and the descriptors only to print a debug graph
 // or an assertion; nox sets neither, and a guest that tried gets an error,
 // not the host's clock or files.
@@ -160,6 +165,14 @@ func instantiateWASIStubs(ctx context.Context, rt wazero.Runtime) error {
 			WithGoModuleFunction(api.GoModuleFunc(fail), params, []api.ValueType{api.ValueTypeI32}).
 			Export(name)
 	}
+	// proc_exit does not return: it closes the guest, so the call that reached
+	// it fails and the file falls back like any other trap. It is the only
+	// stub that is not ENOSYS, and it gives the guest nothing from the host.
+	b.NewFunctionBuilder().
+		WithGoModuleFunction(api.GoModuleFunc(func(ctx context.Context, m api.Module, stack []uint64) {
+			_ = m.CloseWithExitCode(ctx, uint32(stack[0]))
+		}), []api.ValueType{api.ValueTypeI32}, nil).
+		Export("proc_exit")
 	_, err := b.Instantiate(ctx)
 	return err
 }
