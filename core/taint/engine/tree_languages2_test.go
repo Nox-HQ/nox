@@ -7,7 +7,7 @@ import (
 	"github.com/nox-hq/nox/core/lexctx"
 )
 
-// The tree-sitter front ends for Scala, Swift, Rust and C/C++ (tree_scala.go
+// The tree-sitter front ends for Scala, Swift and Rust (tree_scala.go
 // and its siblings), tested as tree_languages_test.go tests the first four:
 // through extractUnitsAt, with the front end selected by the environment, so
 // each test fails on the line segmenter (NOX_TAINT_TREESITTER=none) and passes
@@ -108,34 +108,6 @@ func TestRustTreeJoinsAStatementAcrossLines(t *testing.T) {
 		s := jsStmtAssigning(us, "h", "q")
 		if s == nil || !slices.Contains(s.reads, "id") {
 			t.Fatalf("q must read id; got %+v", s)
-		}
-	})
-}
-
-func TestCPPTreeJoinsAStatementAcrossLines(t *testing.T) {
-	t.Run("a method chain stays one call per line", func(t *testing.T) {
-		// Joining the chain would read id and call system in one
-		// statement, a flow the code does not have.
-		us := treeOnly(t, "cpp", lexctx.LangCPP, "void h() {\n  const char* id = getenv(\"ID\");\n  system(\"echo hi\")\n    .then(id);\n}\n")
-		for _, u := range us {
-			for _, st := range u.stmts {
-				if slices.Contains(st.calls, "system") && slices.Contains(st.reads, "id") {
-					t.Fatalf("system and id joined into one statement: %+v", st)
-				}
-			}
-		}
-	})
-	t.Run("SQL concatenated across lines", func(t *testing.T) {
-		us := treeOnly(t, "cpp", lexctx.LangCPP, "void h(Db* db) {\n  const char* id = getenv(\"ID\");\n  std::string q = std::string(\"SELECT * FROM users \") +\n                  \"WHERE id = \" + id;\n  db->query(q.c_str());\n}\n")
-		s := jsStmtAssigning(us, "h", "q")
-		if s == nil || !slices.Contains(s.reads, "id") {
-			t.Fatalf("q must read id; got %+v", s)
-		}
-	})
-	t.Run("a lambda body keeps its own statements", func(t *testing.T) {
-		us := treeOnly(t, "cpp", lexctx.LangCPP, "void h(int n) {\n  auto f = [&](int x) {\n    int v = x;\n    system(v);\n  };\n}\n")
-		if len(us) == 0 {
-			t.Fatalf("no units extracted")
 		}
 	})
 }

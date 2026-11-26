@@ -41,12 +41,11 @@ var moduleOf = map[string]string{
 	"scala":      "scala",
 	"swift":      "swift",
 	"rust":       "rust",
-	"cpp":        "cpp",
 }
 
 // Languages are the languages the embedded modules parse.
 func Languages() []string {
-	return []string{"cpp", "csharp", "java", "javascript", "kotlin", "php", "python", "ruby", "rust", "scala", "swift", "tsx", "typescript"}
+	return []string{"csharp", "java", "javascript", "kotlin", "php", "python", "ruby", "rust", "scala", "swift", "tsx", "typescript"}
 }
 
 // Node is one node of a parse tree. Nodes are in pre-order: a node's

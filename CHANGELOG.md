@@ -56,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     spans lines can be reported on the statement's first line, as it can be
     for Java and JavaScript, so a baseline entry for such a finding in these
     languages can need refreshing.
-- Tree-sitter front ends for Scala, Swift, Rust and C/C++ taint extraction,
+- Tree-sitter front ends for Scala, Swift and Rust taint extraction,
   on by default, behind the same A/B gate as the other languages (ADR 0006).
   Each joins the physical lines of a multi-line operator expression, so SQL or
   a command concatenated across lines (`val q = "SELECT ..." +` / `id`)
@@ -64,21 +64,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unlike Java, they join only the binary expression and not the whole
   statement: a probe showed a method chain read whole puts a constant-argument
   sink and a tainted variable in one statement, a false positive. The same
-  binary with and without the front ends, over 30 public repositories: no
+  binary with and without the front ends, over 22 public repositories: no
   finding added or dropped in any language, so the gain is shown by unit tests
   and probe files, not by the corpus. A file the parser declines is segmented
   as before. `NOX_TAINT_TREESITTER` selects the languages, for an A/B.
   - **Grammars:** `tree-sitter-scala` v0.26.14, `alex-pinkus/tree-sitter-swift`
-    0.7.4, `tree-sitter-rust` v0.24.2 and `tree-sitter-cpp` v0.23.4 (one
-    grammar for C and C++), pinned by commit and rebuilt byte-for-byte by
+    0.7.4 and `tree-sitter-rust` v0.24.2, pinned by commit and rebuilt byte-for-byte by
     `scripts/treesitter/build.sh --check`.
-  - **Binary size:** +13.9 MB (Scala 4.7, Swift 4.3, C/C++ 3.6, Rust 1.2);
-    the unstripped binary is 111 MB before and 125 MB after. Parse budgets
+  - **Binary size:** +10.3 MB (Scala 4.7, Swift 4.3, Rust 1.2). On
+    Signal-iOS, a Swift-heavy repository, a code-only scan used 85% more CPU
+    time with the Swift front end on (151 s to 279 s user). Parse budgets
     and sizes are in docs/benchmarks/2026-11-23-treesitter-budget.
   - **Error trees:** the share of files that fall back to the line segmenter
-    is 0.1% for Scala, 8.1% for Swift, 9.1% for Rust and 47.6% for C/C++
-    (56% of `.c` files: preprocessor conditionals inside statements, unknown
-    macros).
+    is 0.1% for Scala, 8.1% for Swift and 9.1% for Rust.
+  - **C/C++ not included:** `tree-sitter-cpp` gave an error tree for 47.6% of
+    C/C++ files (56% of `.c`), so half the files would pay for the parse and
+    fall back anyway; `tree-sitter-c` for `.c` files is to be tried first.
   - **Go stays on go/ast.**
 
 - APPCFG-001 debug mode (CWE-215) extended.

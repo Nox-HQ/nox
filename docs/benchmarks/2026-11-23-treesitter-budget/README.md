@@ -133,6 +133,12 @@ has one language for the two (`lexctx.LangCPP`), and `tree-sitter-c` was not
 built or measured. `build.sh --check` rebuilt all twelve modules and licences
 byte-equal; the eight earlier modules are unchanged.
 
+C/C++ was measured and is not shipped: the error-tree rate below (47.6%, 56% of
+`.c` files) means half the files would pay for the parse and fall back to the
+line segmenter anyway, so `cpp.wasm` (3,563,969 bytes) and its front end were
+removed before merge. The C/C++ rows below are kept as the measurement.
+`tree-sitter-c` for `.c` files is the next thing to try.
+
 Modules, the runtime included in each:
 
 | Module | Languages | Bytes |

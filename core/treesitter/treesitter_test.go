@@ -177,8 +177,6 @@ func TestEachLanguageParses(t *testing.T) {
 			"simple_identifier", "name", "h", "function_declaration"},
 		{"rust", "fn h(r: &Req) -> String {\n    let v = r.query(\"v\");\n    v\n}\n", "source_file",
 			"identifier", "name", "h", "function_item"},
-		{"cpp", "int h(Req& r) {\n  auto v = r.query(\"v\");\n  return v;\n}\n", "translation_unit",
-			"identifier", "declarator", "h", "function_declarator"},
 	} {
 		src := []byte(c.src)
 		tree, err := p.Parse(context.Background(), c.lang, src)
