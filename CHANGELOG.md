@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- AUTHN-005 (CWE-204, medium): account enumeration. A login, sign-in or
+  password-reset path (named so, or registered on such a route, or Spring's
+  `loadUserByUsername`) answers that the account does not exist: "No account
+  is registered with that address", "User [x] not found", "用户不存在",
+  `no_portal_account`. Not reported: one message for both cases ("Invalid
+  email or password", "If that account exists…"), Spring's
+  `UsernameNotFoundException` (hidden by default), log lines, lookups by an
+  id the caller already holds, and paths that are not authentication.
 - CRYPTO-003 (CWE-916, high severity, medium confidence): a password hashed
   with too little work, in Java/Kotlin, JavaScript/TypeScript and Python.
   - a fast digest (MD5, SHA-1, SHA-2: `hashlib`, `createHash`, CryptoJS,

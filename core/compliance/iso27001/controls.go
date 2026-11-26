@@ -280,7 +280,7 @@ var controls = []controlDef{
 		sources: []source{
 			{kind: fromFindings, label: "Static analysis of application code", scope: "code",
 				prefixes: []string{"TAINT-", "VARIANT-", "MEMSAFE-", "HARDEN-", "XSS-", "PROTO-", "ERRLEAK-", "LOGLEAK-"}, subjectFromSource: true},
-			{kind: fromFindings, label: "Authorization, authentication and webhook checks", scope: "code", ids: []string{"AUTHZ-001", "AUTHN-001", "AUTHN-002", "AUTHN-003", "AUTHN-004", "WEBHOOK-001"}, additive: true},
+			{kind: fromFindings, label: "Authorization, authentication and webhook checks", scope: "code", ids: []string{"AUTHZ-001", "AUTHN-001", "AUTHN-002", "AUTHN-003", "AUTHN-004", "AUTHN-005", "WEBHOOK-001"}, additive: true},
 			{kind: fromFindings, label: "Agents that run model-supplied SQL", scope: "ai", ids: []string{"AI-AGENT-009"}, additive: true},
 			{kind: fromLeads, label: "Authorization and authentication leads"},
 		},
