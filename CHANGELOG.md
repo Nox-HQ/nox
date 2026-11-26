@@ -505,6 +505,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `github.com/gorilla/websocket` (indirect, through `go.klarlabs.de/mcp`)
+  moved from v1.5.3 to the commit that fixes GO-2026-6278 / GHSA-w67g-5rqw-f597
+  (a weak random source for the WebSocket mask key). No tagged release carries
+  the fix yet. govulncheck found nox's code does not call the affected
+  function; the upgrade clears the dependency audit.
+
 - DATA-001 is dropped in Flyway migration scripts named by Flyway's
   convention (`V3.9.2_2__add_jimuchatbi.sql`, `U3__…`, `R__…`) wherever the
   project keeps them, as it already was under `migrations/`. A SQL dump that
