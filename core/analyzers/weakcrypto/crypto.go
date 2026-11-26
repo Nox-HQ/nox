@@ -385,6 +385,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		Metadata: map[string]string{"cwe": "CWE-327"},
 	})
 	rs.Add(randRule())
+	rs.Add(pwHashRule())
 	return rs
 }
 
@@ -401,7 +402,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// Insecure randomness (CRYPTO-002): Go (rand.go), Python
 		// (rand_python.go) and Java (rand_java.go).
 		randOK := ext == ".go" || ext == ".py" || ext == ".java"
-		if !weakOK && !randOK {
+		// Password hashing with too little work (CRYPTO-003, pwhash.go).
+		_, pwOK := pwFamilyByExt[ext]
+		if !weakOK && !randOK && !pwOK {
 			continue
 		}
 		// Test files are skipped: fixtures deliberately exercise weak
@@ -418,6 +421,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			continue
 		}
 
+		for _, f := range scanPasswordHash(art.Path, content) {
+			fs.Add(f)
+		}
 		switch {
 		case randOK && ext == ".go":
 			scanInsecureRandom(fs, art, content)
