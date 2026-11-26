@@ -33,11 +33,15 @@ var moduleOf = map[string]string{
 	"typescript": "typescript",
 	"tsx":        "typescript",
 	"java":       "java",
+	"csharp":     "csharp",
+	"php":        "php",
+	"ruby":       "ruby",
+	"kotlin":     "kotlin",
 }
 
 // Languages are the languages the embedded modules parse.
 func Languages() []string {
-	return []string{"java", "javascript", "python", "tsx", "typescript"}
+	return []string{"csharp", "java", "javascript", "kotlin", "php", "python", "ruby", "tsx", "typescript"}
 }
 
 // Node is one node of a parse tree. Nodes are in pre-order: a node's
