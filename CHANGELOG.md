@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Tree-sitter front ends for C#, PHP, Ruby and Kotlin taint extraction,
+  on by default, behind the same A/B gate as Python, JavaScript/TypeScript
+  and Java (ADR 0006). The tree supplies which physical lines form one
+  statement, so SQL or a command built across several lines
+  (`$q = "SELECT ..." .` / `"WHERE id = " .` / `$id;`) reaches its sink
+  where the line segmenter read it as separate statements. The same binary
+  with and without the front ends, over 27 public repositories: C# +2 / -0
+  findings, PHP +5 / -0 (one false positive that a one-line version of the
+  statement also produces), Kotlin no change, Ruby +1 / -0. Ruby joins only a
+  multi-line operator expression, not a whole method chain: joining chains
+  was measured and added 20 false positives. A file the parser declines (a
+  grammar error, too large) is segmented as before. `NOX_TAINT_TREESITTER`
+  selects the languages, for an A/B.
+  - **Grammars:** `tree-sitter-c-sharp` v0.24.0, `tree-sitter-php` v0.25.2
+    (the `php` grammar, so a file with HTML around its `<?php` parses),
+    `tree-sitter-ruby` v0.23.1 and `tree-sitter-grammars/tree-sitter-kotlin`
+    v1.1.0, pinned by commit and rebuilt byte-for-byte by
+    `scripts/treesitter/build.sh --check`.
+  - **Binary size:** +14.4 MB (C# 7.4, Kotlin 3.6, Ruby 2.2, PHP 1.2).
+    Parse budgets and sizes are in
+    docs/benchmarks/2026-11-23-treesitter-budget.
+  - **A finding can move line.** A finding on a statement that
+    spans lines can be reported on the statement's first line, as it can be
+    for Java and JavaScript, so a baseline entry for such a finding in these
+    languages can need refreshing.
+
 - APPCFG-001 debug mode (CWE-215) extended.
   - **Django:** `DEBUG` read from the environment with a default that turns
     it on, as in `os.environ.get("DJANGO_DEBUG", "1") == "1"`,
