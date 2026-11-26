@@ -447,6 +447,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Java XSS (TAINT-003): `append`, `printf` and `format` on a response
+  writer are sinks, inline (`response.getWriter().format(...)`) or on a local
+  assigned from `getWriter()`. Alone the names are `StringBuilder.append`
+  and `String.format`, which stay silent. HTML escapers added as sanitizers:
+  ESAPI `encodeForHTML`/`encodeForHTMLAttribute`, Commons Lang 2
+  `StringEscapeUtils.escapeHtml` and `escapeHtml3`, OWASP Encoder
+  `Encode.forHtmlContent`/`forHtmlAttribute`, and `Jsoup.clean`.
+- CRYPTO-001 on Java and Kotlin reads an algorithm held in a name: a class
+  constant or a local assigned once, or `props.getProperty(key[, fallback])`
+  resolved from the project's `.properties` files (the fallback only when the
+  scan saw the project's properties and none defines the key; a key defined
+  two ways is unknown). New weak forms: MD2/MD4, the bare `"SHA"` alias of
+  SHA-1, `Cipher.getInstance("AES")` (ECB by default), Blowfish, DES-family
+  `KeyGenerator`/`SecretKeyFactory` and PBE-with-MD5, and Commons Codec /
+  Guava MD5 and SHA-1 one-shot calls. Lines the literal pattern already
+  reported keep their message and fingerprint.
 - A query built from a function's parameter is raised from low to medium
   confidence when the call graph finds that function on a path from an HTTP
   route handler: a request does arrive there, though the file does not show
@@ -529,6 +545,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   precision 0.14 -> 0.21), held-out 11.2 -> 11.5.
 
 ### Fixed
+
+- Java/Kotlin taint: a helper called on an object constructed in place with
+  no arguments, `new Helper().run(a, b)`, is resolved to the file's own
+  `run`, as `run(a, b)` and `this.run(a, b)` already were. A helper that
+  returns a constant was not a barrier there, so its caller reported a flow
+  the helper had stopped. The reverse case is fixed too: a call on any other
+  receiver, `thing.run(p)` on an interface declared elsewhere, was taken for
+  the local `run` of the same name and could clear the value; it is now an
+  unknown call, which carries its argument.
+- An HTML decoder around an escaper in the same statement,
+  `decodeForHTML(encodeForHTML(p))`, `unescapeHtml4(escapeHtml4(p))`,
+  `HtmlUtils.htmlUnescape(htmlEscape(p))`, undoes it: XSS is no longer
+  cleared.
 
 - `github.com/gorilla/websocket` (indirect, through `go.klarlabs.de/mcp`)
   moved from v1.5.3 to the commit that fixes GO-2026-6278 / GHSA-w67g-5rqw-f597

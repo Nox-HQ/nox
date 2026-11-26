@@ -245,6 +245,69 @@ numbers only. Recorded as **no reproducible baseline**.
 LLM-based tools (Kolega, Cyfendo, both above 85 on both suites by their own
 reports) are not deterministic and are not compared.
 
+## Java recall and helper precision, 2026-11-26
+
+nox on this branch against main at `6432d3f`, same scorer, scan root
+(`src/main/java`) and suite commit (`10dfcc5`). TPR / FPR per category:
+
+| category | main | now |
+|---|---|---|
+| xss | 54% / 24% | 100% / 9% |
+| crypto | 55% / 0% | 100% / 0% |
+| sqli | 93% / 40% | 96% / 20% |
+| cmdi | 93% / 41% | 100% / 16% |
+| pathtraver | 92% / 35% | 94% / 15% |
+| ldapi | 96% / 38% | 100% / 12% |
+| xpathi | 100% / 55% | 100% / 10% |
+| hash, weakrand, securecookie, trustbound | unchanged | unchanged |
+| **category-averaged** | **56.4** | **79.7** |
+| **pooled** | **56.5** (76.5 / 19.9) | **81.5** (90.0 / 8.5) |
+
+Against the strongest reproducible deterministic baseline above,
+cognium-dev's pooled 73.5 (TPR 91.0, FPR 17.4), **the M3 OWASP Java target
+is met**: 81.5 pooled, at a lower detection rate than cognium's and less than
+half its false-positive rate.
+
+What moved it. Each change is a Java/Kotlin semantics change, probed first on
+self-written servlets and then scored here per category:
+
+- **Response writer sinks.** `append`, `printf` and `format` on
+  `response.getWriter()` (inline, or a local assigned from it) are XSS
+  sinks; on any other receiver they are `StringBuilder.append` and
+  `String.format`, and stay silent.
+- **HTML escapers as sanitizers.** ESAPI `encodeForHTML`, Commons Lang 2
+  `escapeHtml`, OWASP Encoder `forHtmlContent`/`forHtmlAttribute` and
+  `Jsoup.clean`. A decoder around an escaper in the same statement
+  (`decodeForHTML(encodeForHTML(p))`) undoes it, and XSS stays.
+- **A helper on an object constructed in place.** `new Helper().run(a, b)`
+  with a no-argument constructor is now resolved to the file's own `run`, as
+  `run(a, b)` and `this.run(a, b)` already were, so a helper that returns a
+  constant is a barrier. This is most of the false-positive drop. A call on
+  any other receiver, `thing.run(p)`, is no longer taken for the local `run`
+  of the same name, which had made such calls barriers too.
+- **CRYPTO-001 reads an algorithm held in a name.** A constant or a local
+  assigned once, and `props.getProperty(key, fallback)` resolved from the
+  project's `.properties` files, plus weak forms the literal pattern did not
+  list (bare `"AES"`, which is ECB; DES-family key generators; MD2/MD4).
+
+How the crypto false positives were found: a first cut took a
+`getProperty` call's literal fallback as the algorithm and raised crypto's
+FPR from 0% to 23%. Counting findings by reported algorithm across the
+category, and `Cipher.getInstance` argument forms across the suite, showed
+the fallback was the cause: it applies only when no properties file defines
+the key. It is now used only when the scan sees the project's properties and
+none defines the key. Under the `src/main/java` root the scan sees none, so
+configured algorithms stay unknown, which is why hash stays at 69%. With the
+root at `src/main`, the configured values are read: hash rises to 100% and
+the pooled score to 84.3 (see below). The headline keeps the documented root.
+
+| scan root | category-averaged | pooled |
+|---|---:|---:|
+| `src/main/java` (documented) | 79.7 | 81.5 |
+| `src/main` (resources visible) | 82.5 | 84.3 |
+
+OWASP Python is unchanged at 62.9.
+
 ## Limits
 
 - The benchmarks are synthetic. A score here is evidence about a rule's

@@ -392,6 +392,7 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 // ScanArtifacts reports weak-primitive construction across discovered sources.
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
 	fs := findings.NewFindingSet()
+	props := projectProperties(artifacts)
 
 	for _, art := range artifacts {
 		if err := ctx.Err(); err != nil {
@@ -437,10 +438,25 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		}
 
 		markers := commentsByExt[ext]
+		// JVM forms the literal pattern cannot see (crypto_jvm.go): a named
+		// algorithm and the weak forms it does not list.
+		var jvmConsts map[string]string
+		jvm := ext == ".java" || ext == ".kt"
+		if jvm {
+			jvmConsts = jvmConstants(string(content), props)
+		}
 
 		for i, line := range strings.Split(string(content), "\n") {
 			loc := re.FindStringIndex(line)
 			if loc == nil {
+				if !jvm {
+					continue
+				}
+				name, at := jvmLineWeakness(line, jvmConsts)
+				if at < 0 || inLineComment(line, markers, at) {
+					continue
+				}
+				fs.Add(weakFinding(art.Path, i+1, name))
 				continue
 			}
 			// Skip a match that sits inside a line comment. Commented-out or
@@ -458,22 +474,56 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 			if m := algorithmIn(line[loc[0]:loc[1]]); m != "" {
 				algo = m
 			}
-			fs.Add(findings.Finding{
-				RuleID:   ruleID,
-				Severity: findings.SeverityMedium,
-				// Confidence mirrors the rule: unambiguous call, ambiguous purpose.
-				Confidence: findings.ConfidenceLow,
-				Message:    "Use of " + algo + ", which is broken for security purposes",
-				Location: findings.Location{
-					FilePath:  art.Path,
-					StartLine: i + 1,
-					EndLine:   i + 1,
-				},
-				Metadata: map[string]string{"cwe": "CWE-327", "algorithm": algo},
-			})
+			fs.Add(weakFinding(art.Path, i+1, algo))
 		}
 	}
 	return fs, nil
+}
+
+// projectProperties reads the project's .properties files, outside test
+// paths, for the JVM pass's configured algorithms (crypto_jvm.go). It is read
+// only when the project has JVM sources.
+func projectProperties(artifacts []discovery.Artifact) map[string]string {
+	props := map[string]string{}
+	jvm := false
+	for _, art := range artifacts {
+		switch strings.ToLower(filepath.Ext(art.Path)) {
+		case ".java", ".kt":
+			jvm = true
+		}
+	}
+	if !jvm {
+		return props
+	}
+	for _, art := range artifacts {
+		if !strings.EqualFold(filepath.Ext(art.Path), ".properties") || source.IsTestPath(art.Path) {
+			continue
+		}
+		content, err := os.ReadFile(art.AbsPath)
+		if err != nil {
+			continue
+		}
+		parseProperties(content, props)
+		props[propertiesSeen] = "1"
+	}
+	return props
+}
+
+// weakFinding is one CRYPTO-001 finding for algo at path:line.
+func weakFinding(path string, line int, algo string) findings.Finding {
+	return findings.Finding{
+		RuleID:   ruleID,
+		Severity: findings.SeverityMedium,
+		// Confidence mirrors the rule: unambiguous call, ambiguous purpose.
+		Confidence: findings.ConfidenceLow,
+		Message:    "Use of " + algo + ", which is broken for security purposes",
+		Location: findings.Location{
+			FilePath:  path,
+			StartLine: line,
+			EndLine:   line,
+		},
+		Metadata: map[string]string{"cwe": "CWE-327", "algorithm": algo},
+	}
 }
 
 // inLineComment reports whether a match starting at `at` sits to the right of a
