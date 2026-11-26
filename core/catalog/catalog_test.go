@@ -155,8 +155,12 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// response, CWE-209).
 	// 1526 -> 1527 adds LOGLEAK-001 (sensitive data written to a log,
 	// CWE-532).
-	if got := len(cat); got != 1527 {
-		t.Errorf("Catalog() returned %d rules, want 1527", got)
+	// 1527 -> 1529 adds APPCFG-009 (framing protection switched off,
+	// CWE-1021) and APPCFG-010 (session fixation protection off, CWE-384).
+	// 1529 -> 1530 adds CRYPTO-003 (a password hashed with a fast digest or a
+	// KDF below its work-factor floor, CWE-916).
+	if got := len(cat); got != 1530 {
+		t.Errorf("Catalog() returned %d rules, want 1530", got)
 	}
 }
 

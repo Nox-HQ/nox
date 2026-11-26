@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- CRYPTO-003 (CWE-916, high severity, medium confidence): a password hashed
+  with too little work, in Java/Kotlin, JavaScript/TypeScript and Python.
+  - a fast digest (MD5, SHA-1, SHA-2: `hashlib`, `createHash`, CryptoJS,
+    Spring/Commons `DigestUtils`, `MessageDigest`, Guava `Hashing`, a bare
+    `md5()`/`sha256()` helper) of a value named as a password, passphrase,
+    passcode, PIN or credential, or stored into a name that says it holds
+    one's digest (`passwordHash = …`, `setPinHash(…)`);
+  - PBKDF2 below 10,000 iterations (`PBEKeySpec`, `pbkdf2_hmac`,
+    `pbkdf2Sync`) and bcrypt below cost 10, read from a literal, a
+    `x || 4` fallback, or a constant in the same file.
+  - Not reported: digests of tokens, nonces and reset tokens; HTTP Digest
+    and MONGODB-CR protocol hashes; the Pwned Passwords range API; calls
+    written in strings or comments.
+- APPCFG-009 (CWE-1021, medium): framing protection switched off. Spring
+  Security `frameOptions().disable()` and `headers().disable()` (all three
+  spellings, and the Kotlin DSL); X-Frame-Options set to `ALLOWALL` or `*`,
+  or removed from the response; `frame-ancestors *`; helmet
+  `frameguard: false` / `xFrameOptions: false`; Django
+  `@xframe_options_exempt` and `X_FRAME_OPTIONS = 'ALLOWALL'`. A header
+  removed and `frame-ancestors *` set on the next line are one finding.
+- APPCFG-010 (CWE-384, medium): Spring Security session fixation protection
+  set to `none`, so the pre-login session id survives authentication.
 - APPCFG-001 debug mode (CWE-215) extended.
   - **Django:** `DEBUG` read from the environment with a default that turns
     it on, as in `os.environ.get("DJANGO_DEBUG", "1") == "1"`,

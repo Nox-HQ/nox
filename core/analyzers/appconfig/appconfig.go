@@ -85,7 +85,7 @@ func (r rule) conf() findings.Confidence {
 
 // allRules is every rule the analyzer reports: settings, cookie flags,
 // signing keys, secret fallbacks in configuration.
-var allRules = append(append(append(append(append([]rule{}, builtin...), cookieRules...), signingKeyRules...), secretFallbackRules...), csrfRules...)
+var allRules = append(append(append(append(append(append([]rule{}, builtin...), cookieRules...), signingKeyRules...), secretFallbackRules...), csrfRules...), framingRules...)
 
 var (
 	py   = []lexctx.Lang{lexctx.LangPython}
@@ -211,7 +211,7 @@ var langByExt = map[string]lexctx.Lang{
 var configExt = map[string]bool{".properties": true, ".yml": true, ".yaml": true, ".xml": true}
 
 // triggers is a cheap prefilter: a file that names none of these cannot match.
-var triggers = [][]byte{[]byte("csrf"), []byte("CSRF"), []byte("MIDDLEWARE"), []byte("debug"), []byte("DEBUG"), []byte("rigin"), []byte("CORS"), []byte("cors"), []byte("decode"), []byte("parse"), []byte("Unverified"), []byte("none"), []byte("ookie"), []byte("ession("), []byte("httpOnly"), []byte("httponly"), []byte("HttpOnly"), []byte("SESSION_COOKIE"), []byte("ecret"), []byte("ECRET"), []byte("sign("), []byte("verify("), []byte("encode("), []byte("HMAC"), []byte("SigningKey"), []byte("signWith"), []byte("cookieParser(")}
+var triggers = [][]byte{[]byte("csrf"), []byte("CSRF"), []byte("MIDDLEWARE"), []byte("debug"), []byte("DEBUG"), []byte("rigin"), []byte("CORS"), []byte("cors"), []byte("decode"), []byte("parse"), []byte("Unverified"), []byte("none"), []byte("ookie"), []byte("ession("), []byte("httpOnly"), []byte("httponly"), []byte("HttpOnly"), []byte("SESSION_COOKIE"), []byte("ecret"), []byte("ECRET"), []byte("sign("), []byte("verify("), []byte("encode("), []byte("HMAC"), []byte("SigningKey"), []byte("signWith"), []byte("cookieParser("), []byte("rame-Options"), []byte("RAME-OPTIONS"), []byte("rame-options"), []byte("frameOptions"), []byte("frame-ancestors"), []byte("frameguard"), []byte("xFrameOptions"), []byte("xframe_options_exempt"), []byte("X_FRAME_OPTIONS"), []byte("headers("), []byte("sessionFixation")}
 
 // ScanArtifacts reports the settings across the discovered source files.
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
@@ -275,7 +275,9 @@ func ScanFile(path string, lang lexctx.Lang, content []byte) []findings.Finding 
 				}
 				line := lexctx.LineForOffset(content, start)
 				key := r.id + ":" + strconv.Itoa(line)
-				if seen[key] {
+				if seen[key] || (r.id == RuleFramingOff && (seen[r.id+":"+strconv.Itoa(line-1)] || seen[r.id+":"+strconv.Itoa(line-2)])) {
+					// One decision written as two adjacent statements (the
+					// header removed, then frame-ancestors * set) is one finding.
 					continue
 				}
 				seen[key] = true
