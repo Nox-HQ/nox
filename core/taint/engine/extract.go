@@ -159,7 +159,14 @@ func extractUnitsAt(path string, lang lexctx.Lang, content []byte) []unitDraft {
 		// continuations merge physical lines and each logical line is split on
 		// top-level semicolons. lexctx has already blanked the HTML template shell
 		// (non-code), so only real <?php … ?> code reaches the recognizer.
-		return extractPHP(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true), joinAlways, "->")))
+		lines, ok := []logicalLine(nil), false
+		if treeFrontEnd("php") {
+			lines, ok = phpTreeLines(content, regions)
+		}
+		if !ok {
+			lines = logicalLines(content, regions, true)
+		}
+		return extractPHP(splitSemicolons(joinChainContinuations(lines, joinAlways, "->")))
 	case lexctx.LangJava:
 		// Java uses the lexctx line/statement recognizer (no CGo tree-sitter): it is
 		// brace-delimited and `;`-terminated like JS, so it shares the
@@ -176,6 +183,11 @@ func extractUnitsAt(path string, lang lexctx.Lang, content []byte) []unitDraft {
 		// block/hash delimiters (not statement bodies — those are `def...end`), so
 		// braces must NOT force line-merging, matching the JS convention. Ruby
 		// statements are newline-terminated, so no semicolon split is needed.
+		if treeFrontEnd("ruby") {
+			if lines, ok := rubyTreeLines(content, regions); ok {
+				return extractRuby(lines)
+			}
+		}
 		return extractRuby(logicalLines(content, regions, true))
 	case lexctx.LangRust:
 		// Rust uses the line/statement RECOGNIZER (like Python/JS, NOT a real
@@ -190,6 +202,11 @@ func extractUnitsAt(path string, lang lexctx.Lang, content []byte) []unitDraft {
 		// C# is brace-delimited like JS: paren/array continuations merge physical
 		// lines, then each logical line splits on top-level semicolons into
 		// statements. Unlike JS it recognizes method headers for per-method units.
+		if treeFrontEnd("csharp") {
+			if lines, ok := csharpTreeLines(content, regions); ok {
+				return extractCSharp(splitSemicolons(lines))
+			}
+		}
 		return extractCSharp(splitSemicolons(logicalLines(content, regions, true)))
 	case lexctx.LangCPP:
 		// C/C++ is brace-delimited and `;`-terminated like C#: paren/array
@@ -220,7 +237,14 @@ func extractUnitsAt(path string, lang lexctx.Lang, content []byte) []unitDraft {
 		// Kotlin statements are usually newline-terminated (semicolons optional),
 		// so the split only affects the rare `a; b` line; it recognizes `fun`
 		// headers for per-function units. See extract_kotlin.go.
-		return extractKotlin(splitSemicolons(joinChainContinuations(logicalLines(content, regions, true), joinAlways)))
+		lines, ok := []logicalLine(nil), false
+		if treeFrontEnd("kotlin") {
+			lines, ok = kotlinTreeLines(content, regions)
+		}
+		if !ok {
+			lines = logicalLines(content, regions, true)
+		}
+		return extractKotlin(splitSemicolons(joinChainContinuations(lines, joinAlways)))
 	case lexctx.LangShell:
 		// Shell is command-oriented and paren-less. Statements are newline- or
 		// `;`-terminated; `{}`/`()` delimit function bodies (not continuations), so
