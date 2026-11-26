@@ -567,11 +567,15 @@ func TestUnknownExtensionIsSkipped(t *testing.T) {
 
 func TestRuleIsRegistered(t *testing.T) {
 	rs := (&Analyzer{}).Rules().Rules()
-	// Two rules: broken primitives (this file) and insecure randomness
-	// (rand.go). A rule added without a catalogue entry is invisible to
-	// `nox rules`, so the count is asserted rather than only the lookup.
-	if len(rs) != 2 {
-		t.Fatalf("expected 2 rules, got %d", len(rs))
+	// Three rules: broken primitives (this file), insecure randomness
+	// (rand.go) and password hashing with too little work (pwhash.go). A rule
+	// added without a catalogue entry is invisible to `nox rules`, so the count
+	// is asserted rather than only the lookup.
+	if len(rs) != 3 {
+		t.Fatalf("expected 3 rules, got %d", len(rs))
+	}
+	if r, ok := (&Analyzer{}).Rules().ByID(pwHashRuleID); !ok || r.Metadata["cwe"] != "CWE-916" {
+		t.Errorf("%s missing from the catalogue or not CWE-916", pwHashRuleID)
 	}
 	r, ok := (&Analyzer{}).Rules().ByID(ruleID)
 	if !ok {
