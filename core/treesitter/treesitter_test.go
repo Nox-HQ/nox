@@ -156,6 +156,14 @@ func TestEachLanguageParses(t *testing.T) {
 			"identifier", "name", "Card", "variable_declarator"},
 		{"java", "class C { void h(HttpServletRequest request) { String v = request.getParameter(\"v\"); } }\n", "program",
 			"identifier", "name", "h", "method_declaration"},
+		{"csharp", "class C { void H(HttpRequest r) { var v = r.Query[\"v\"]; } }\n", "compilation_unit",
+			"identifier", "name", "H", "method_declaration"},
+		{"php", "<?php\nfunction h($r) { $v = $_GET['v']; return $v; }\n", "program",
+			"name", "name", "h", "function_definition"},
+		{"ruby", "def h(r)\n  v = r.params[:v]\n  v\nend\n", "program",
+			"identifier", "name", "h", "method"},
+		{"kotlin", "class C {\n  fun h(r: Req): String {\n    val v = r.getParameter(\"v\")\n    return v\n  }\n}\n", "source_file",
+			"identifier", "name", "h", "function_declaration"},
 	} {
 		src := []byte(c.src)
 		tree, err := p.Parse(context.Background(), c.lang, src)
