@@ -194,6 +194,57 @@ Per the plan this benchmark is scored and not read case by case, so which of
 #1175–#1184 moved Python is not attributed here. Finding it would take scoring
 builds between the two gates, not reading cases.
 
+## Published deterministic baselines, recorded 2026-11-26
+
+The M3 target is an OWASP Benchmark score above the best deterministic tool
+published for it. These are the published numbers, with where each comes
+from. "Pooled" is TPR − FPR over all cases; "category-averaged" is the mean
+of the per-category scores, which is what `score_java.py` prints. nox at the
+M3 gate, scored both ways: Java pooled **56.5** (TPR 76.5%, FPR 19.9%),
+category-averaged 56.4.
+
+**Java 1.2, full suite (2,740 cases)**
+
+| tool | score | scoring | source | kind |
+|---|---:|---|---|---|
+| cognium-dev 4.9.13, no LLM | **73.5** (TPR 91.0, FPR 17.4) | pooled, expected CWE in the case's file | [cogniumhq/sast-benchmarks](https://github.com/cogniumhq/sast-benchmarks), suite `20cbf3d`, open scorer and raw output | vendor-run, reproducible |
+| CodeQL 2.27.0 `java-security-extended` | 59.9 | same scorer | same repository | third-party run, reproducible |
+| Semgrep OSS 1.177.0 `p/java` + `p/security-audit` | 47.9 | same scorer | same repository | third-party run, reproducible |
+| FindBugs + FindSecBugs 1.4.6 | 39.1 | category-averaged | OWASP's published scorecard (2016–17) | OWASP-published |
+| SonarQube Java 3.14 | 33.3 | category-averaged | OWASP's published scorecard | OWASP-published |
+| Semgrep `p/default` (measured here) | 34.9 | category-averaged | this directory | measured here |
+
+Higher vendor claims exist (Proscan and Fluid Attacks 100, Kiuwan and Xygeni
+83.3, Conviso about 76.5) without published raw output, so they cannot be
+reproduced and are not used as the target. The cognium row was checked in its
+repository and the FindSecBugs and SonarQube rows in OWASP's scorecard HTML
+(`scorecard/OWASP_Benchmark_Home.html` in BenchmarkJava) on 2026-11-26;
+cognium's 2026-10-22 re-run of a later version scores 73.0.
+
+Against the strongest reproducible deterministic number, **the M3 OWASP Java
+target is not met**: 56.5 against 73.5, pooled on both sides. nox is above
+every OWASP-published row and above CodeQL and Semgrep as measured on the
+same scorer. By category, the distance is the trust-boundary category
+(0 of 126 detected: TAINT-011, request data stored in a session, is opt-in by
+design because the pattern is common and usually deliberate, and is
+Python-only), the false-positive rates of sqli, cmdi, pathtraver,
+ldapi and xpathi (35–55%), and XSS recall (54%) — read from category totals,
+not from cases.
+
+**Python 0.1 (1,230 cases).** OWASP publishes no scorecard for it, and no
+independent run was found. Two deterministic tools publish full-suite
+self-claims without independent reproduction: PandaWard (1.00 per-category
+average, [docs/BENCHMARKS.md](https://github.com/ratomirjovanovic/pandaward/blob/main/docs/BENCHMARKS.md))
+and VyQL (macro score 0.896, [benchmarks/RESULTS.md](https://github.com/vyprai/vyql/blob/main/benchmarks/RESULTS.md)).
+PandaWard's document also scores Semgrep `p/default` 0.069, CodeQL 0.132 and
+Opengrep with its own bundled rules 0.735. nox's 62.9 is above every
+third-party-measured row; whether it is above "the best published" depends
+on whether unreproduced self-claims count, and the plan takes reproducible
+numbers only. Recorded as **no reproducible baseline**.
+
+LLM-based tools (Kolega, Cyfendo, both above 85 on both suites by their own
+reports) are not deterministic and are not compared.
+
 ## Limits
 
 - The benchmarks are synthetic. A score here is evidence about a rule's
