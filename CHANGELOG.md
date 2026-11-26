@@ -497,6 +497,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- DATA-001 is dropped in Flyway migration scripts named by Flyway's
+  convention (`V3.9.2_2__add_jimuchatbi.sql`, `U3__…`, `R__…`) wherever the
+  project keeps them, as it already was under `migrations/`. A SQL dump that
+  is not a migration is still reported: it may be a real export. RealVuln:
+  25 findings on one repository, none matching a label.
+- SLOP-001 no longer reports Vaadin's own frontend as undeclared imports. A
+  project whose pom.xml or Gradle build depends on com.vaadin gets its
+  `frontend/generated/` tree (written by Vaadin on every build) skipped, and
+  the `@vaadin/*` scope and the `Frontend/` alias Vaadin provides treated as
+  declared. RealVuln: 373 SLOP-001 findings on two Vaadin repositories, none
+  matching a label, and no other change.
 - Route table: front-end code no longer registers routes. A file that
   imports a UI framework or browser HTTP client (React, Vue, Angular, axios)
   and no server framework, a client held by an object (`this.api.post`), and
