@@ -525,6 +525,98 @@ No new drops: the only lower counts are the two already accounted for in
 - **Tree-sitter:** M3's other half, the remaining languages on tree-sitter, has
   not started.
 
+## M3 gate re-run, 2026-11-27
+
+nox at `2903f9c`, the same offline default configuration. All 203
+repositories were rescanned with a build of that commit, and all 203 scans
+exited normally. Changes since the 2026-11-25 gate:
+- CRYPTO-003 (weak password hashing) and APPCFG-009/010 (clickjacking and
+  session fixation switched off), #1187;
+- account enumeration AUTHN-005, #1191;
+- the OWASP Java work: response-writer sinks, HTML escapers as sanitizers,
+  helper resolution, CRYPTO-001 named algorithms, #1194;
+- tree-sitter front ends for C#, PHP, Ruby, Kotlin, Scala, Swift, Rust, C and
+  C++, and the trailing-operator continuation rule for seven languages,
+  #1188, #1190, #1195–#1197.
+
+Held-out labels were not read between the two gates.
+
+**The overall target is met; held-out is not:**
+
+| | target | dev | held-out | all 203 |
+|---|---:|---:|---:|---:|
+| F3, 2026-11-25 | ≥ 25 | 26.9 | 20.0 | 24.6 |
+| F3, now | ≥ 25 | **28.4** | **20.8** | **25.8** |
+
+| nox at `2903f9c` | precision | recall | F3 |
+|---|---:|---:|---:|
+| dev, Python | 0.365 | 0.381 | 37.9 |
+| dev, JS/TS | 0.204 | 0.327 | 30.9 |
+| dev, Java | 0.106 | 0.240 | 21.3 |
+| held-out, Python | 0.420 | 0.312 | 32.0 |
+| held-out, JS/TS | 0.134 | 0.233 | 21.7 |
+| held-out, Java | 0.058 | 0.171 | 14.3 |
+
+On the repositories Semgrep was run on (Python + JS/TS), nox scores
+**34.1 / 26.0** on dev / held-out (33.3 / 25.8 at the last gate), against
+Semgrep's 10.7 / 8.7.
+
+**What moved.** Dev gained 1.5 F3 and held-out 0.8 (held-out +22 labels, +54
+unmatched findings). Most of the held-out gain
+is Java, 12.8 → 14.3; JS/TS moved 21.2 → 21.7 and Python 32.1 → 32.0. By class,
+the only held-out recall change is crypto/secrets/config, 35.9% → 40.2%. The new rules, matched /
+unmatched:
+
+| rule | dev | held-out |
+|---|---:|---:|
+| CRYPTO-003 weak password hashing | 41 / 31 | 12 / 21 |
+| APPCFG-009 clickjacking protection off | 19 / 29 | 7 / 8 |
+| APPCFG-010 session fixation protection off | 4 / 0 | 0 / 0 |
+| AUTHN-005 account enumeration | 16 / 41 | 3 / 11 |
+| CRYPTO-001 weak cipher or digest (was) | 12 / 89 | 13 / 29 |
+| CRYPTO-001 (now) | 12 / 107 | 13 / 40 |
+
+CRYPTO-003 and APPCFG-009 carry over to held-out at about dev's precision.
+AUTHN-005 matches three held-out labels, but authentication/session recall
+stays at 55 of 273, so they add no label the class did not already have. The
+`(was)` row is the last gate. The CRYPTO-001 findings it gained are the named
+and configured algorithms from #1194, and they match no new labels on either
+split. The tree-sitter and continuation changes were A/B-tested on their own
+corpora with no RealVuln label gained or lost (their PRs record each).
+
+**Where held-out stands.** Recall by class on held-out:
+
+| class | held-out recall |
+|---|---:|
+| injection | 35.4% |
+| crypto/secrets/config | 40.2% |
+| information exposure | 31.2% |
+| mass assignment | 23.2% |
+| authentication/session | 20.1% |
+| other | 1.9% |
+| authorization | 0 |
+| business logic | 0 |
+
+Authorization and business logic are 448 of held-out's 2,383 labels (19%).
+The top two missed held-out CWEs are CWE-639, missing object-level
+authorization (174), and CWE-862, missing authorization (103). nox detects
+neither class yet. Injection recall is 35.4% on held-out against 51.3% on dev,
+the same 16-point gap as at the M2 gap-close gate. It is the class where dev
+work has generalised least.
+
+**OWASP Benchmark** (same build; see
+[the OWASP document](../2026-09-28-owasp/README.md#m3-gate-re-run-2026-11-27)):
+Python **62.9**, Java **79.7** category-averaged, **81.5** pooled (TPR 90.0,
+FPR 8.5), above cognium-dev's 73.5.
+
+**M3 status at this gate.**
+- **F3 ≥ 25:** overall 25.8 meets it. Held-out is 20.8, 4.2 short.
+- **OWASP Benchmark above the best published deterministic tool:** met on
+  Java. Python has no reproducible baseline.
+- **Remaining languages on tree-sitter:** done. Go stays on go/ast. Seven
+  languages use the continuation rule instead of a grammar, as decided
+  2026-11-27.
+
 ## Measured and rejected: dropping through-call flows
 
 Most of the unmatched findings the framework sources added (#1140) are a

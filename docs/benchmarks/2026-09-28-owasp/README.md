@@ -308,6 +308,22 @@ the pooled score to 84.3 (see below). The headline keeps the documented root.
 
 OWASP Python is unchanged at 62.9.
 
+## M3 gate re-run, 2026-11-27
+
+nox at `2903f9c`, same scorers, scan roots and suite commits. This build adds
+tree-sitter front ends for C and C++ and the trailing-operator continuation
+rule for seven languages; neither suite is in those languages.
+
+| | M3 gate, 2026-11-25 | 2026-11-26 (#1194) | now |
+|---|---:|---:|---:|
+| Python | 62.9 | 62.9 | **62.9** |
+| Java, category-averaged | 56.4 | 79.7 | **79.7** |
+| Java, pooled (TPR / FPR) | 56.5 (76.5 / 19.9) | 81.5 (90.0 / 8.5) | **81.5** (90.0 / 8.5) |
+
+Java pooled counts: 1,273 TP, 142 FN, 112 FP, 1,213 TN. The M3 OWASP target
+holds on Java against cognium-dev's 73.5. Python has no reproducible
+deterministic baseline to compare against.
+
 ## Limits
 
 - The benchmarks are synthetic. A score here is evidence about a rule's
