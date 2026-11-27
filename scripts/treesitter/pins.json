@@ -95,6 +95,13 @@
       "tag": "v0.24.2",
       "commit": "77a3747266f4d621d0757825e6b11edcbf991ca5",
       "languages": [{"name": "rust", "function": "tree_sitter_rust", "dir": "."}]
+    },
+    {
+      "name": "c",
+      "repo": "https://github.com/tree-sitter/tree-sitter-c",
+      "tag": "v0.24.2",
+      "commit": "b780e47fc780ddc8da13afa35a3f4ed5c157823d",
+      "languages": [{"name": "c", "function": "tree_sitter_c", "dir": "."}]
     }
   ]
 }
