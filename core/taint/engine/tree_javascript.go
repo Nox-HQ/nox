@@ -77,6 +77,13 @@ func treeJoinedLines(grammar string, stmtKinds, bodyKinds map[string]bool, conte
 // error tree, taking joins only from statements that hold no ERROR or MISSING
 // node and lie inside no ERROR node (see tree_c.go for why that is sound).
 func treeJoinedLinesFrom(grammar string, stmtKinds, bodyKinds map[string]bool, content []byte, regions []lexctx.Region, localErrors bool) ([]logicalLine, bool) {
+	return treeJoinedLinesBlocked(grammar, stmtKinds, bodyKinds, nil, content, regions, localErrors)
+}
+
+// treeJoinedLinesBlocked is treeJoinedLinesFrom with blocks, which names
+// further nodes that keep a statement holding them unjoined, as a body does
+// (nil for none).
+func treeJoinedLinesBlocked(grammar string, stmtKinds, bodyKinds map[string]bool, blocks func(*treesitter.Tree, int) bool, content []byte, regions []lexctx.Region, localErrors bool) ([]logicalLine, bool) {
 	p := sharedTreeParser()
 	if p == nil {
 		return nil, false
@@ -87,7 +94,7 @@ func treeJoinedLinesFrom(grammar string, stmtKinds, bodyKinds map[string]bool, c
 	if !usable {
 		return nil, false
 	}
-	join := treeLineJoins(tree, content, stmtKinds, bodyKinds)
+	join := treeLineJoinsBlocked(tree, content, stmtKinds, bodyKinds, blocks)
 	return logicalLinesJoined(content, regions, true, nil, func(l int) bool { return join[l] }), true
 }
 
@@ -96,6 +103,12 @@ func treeJoinedLinesFrom(grammar string, stmtKinds, bodyKinds map[string]bool, c
 // of bodyKinds, no ERROR or MISSING node, and lies inside no ERROR node. On a
 // clean tree the last two never hold.
 func treeLineJoins(tree *treesitter.Tree, content []byte, stmtKinds, bodyKinds map[string]bool) map[int]bool {
+	return treeLineJoinsBlocked(tree, content, stmtKinds, bodyKinds, nil)
+}
+
+// treeLineJoinsBlocked is treeLineJoins where a node blocks names, like a
+// node of bodyKinds, also keeps the statements holding it unjoined.
+func treeLineJoinsBlocked(tree *treesitter.Tree, content []byte, stmtKinds, bodyKinds map[string]bool, blocks func(*treesitter.Tree, int) bool) map[int]bool {
 	// inError[i]: node i lies inside an ERROR node. Parents come first.
 	inError := make([]bool, len(tree.Nodes))
 	for i, n := range tree.Nodes {
@@ -105,7 +118,7 @@ func treeLineJoins(tree *treesitter.Tree, content []byte, stmtKinds, bodyKinds m
 	// pre-order with parents earlier, so one backward pass carries it up.
 	hasBody := make([]bool, len(tree.Nodes))
 	for i := len(tree.Nodes) - 1; i > 0; i-- {
-		if hasBody[i] || bodyKinds[tree.Nodes[i].Kind] {
+		if hasBody[i] || bodyKinds[tree.Nodes[i].Kind] || (blocks != nil && blocks(tree, i)) {
 			hasBody[tree.Nodes[i].Parent] = true
 		}
 	}

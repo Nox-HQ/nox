@@ -50,7 +50,7 @@ func sharedTreeParser() *treesitter.Parser {
 }
 
 // treeFrontEndDefault are the languages the tree-sitter front end segments.
-var treeFrontEndDefault = []string{"python", "javascript", "java", "csharp", "php", "ruby", "kotlin", "scala", "swift", "rust", "c"}
+var treeFrontEndDefault = []string{"python", "javascript", "java", "csharp", "php", "ruby", "kotlin", "scala", "swift", "rust", "c", "cpp"}
 
 // treeFrontEnd reports whether the tree-sitter front end segments lang.
 // NOX_TAINT_TREESITTER, when set, replaces the default list ("none" for no

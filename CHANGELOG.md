@@ -112,6 +112,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     had. RealVuln's three `.c` files report the same. On redis a code-only
     scan used 77% more CPU time (14.5 s to 25.5 s user), the cost of the
     parse. The gain is shown by unit tests and a probe file, not the corpus.
+- Tree-sitter front end for C++ (`.cpp`, `.cc`, `.cxx`) taint extraction, on
+  by default. It joins what the C front end joins, and a multi-line operator
+  expression (`std::string("ls ") +` / `getenv("CMD")`), reading error trees
+  per statement as C does (16.7% of C++ files have an error somewhere). A
+  statement holding a chained call (`db.exec("x").bind(id)`, `p->f()->g()`)
+  is not joined: read whole it would call the sink with a constant and read
+  the tainted argument in one statement. Headers keep the line segmenter.
+  - **Grammar:** `tree-sitter-cpp` v0.23.4, pinned by commit, +3.6 MB.
+  - **A/B** over seven C++ repositories and three C repositories with C++
+    sources: 141 to 141 findings, none added or dropped. On poco a code-only
+    scan used 38% more CPU time (63 s to 87 s user).
 
 - APPCFG-001 debug mode (CWE-215) extended.
   - **Django:** `DEBUG` read from the environment with a default that turns
