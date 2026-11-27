@@ -112,6 +112,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     had. RealVuln's three `.c` files report the same. On redis a code-only
     scan used 77% more CPU time (14.5 s to 25.5 s user), the cost of the
     parse. The gain is shown by unit tests and a probe file, not the corpus.
+- Taint extraction for Perl, PowerShell, Objective-C, Lua, Elixir, Dart and
+  Groovy continues a statement split after an operator or an assignment
+  (`local cmd = "ls " ..` / `os.getenv("DIR")`, `my $c =` / `$ENV{X};`,
+  PowerShell's backtick). The line segmenter continued a line only inside
+  brackets, so each of these lost its flow. Each language lists only operators
+  that cannot end a statement in it (a Perl line may end in a regex's `/`, a
+  Dart one in a nullable type's `?`); comments are ignored and a string counts
+  as an operand. These languages stay on the line segmenter: a probe found no
+  other gap a parse tree would close, so no grammar is added for them.
 - Tree-sitter front end for C++ (`.cpp`, `.cc`, `.cxx`) taint extraction, on
   by default. It joins what the C front end joins, and a multi-line operator
   expression (`std::string("ls ") +` / `getenv("CMD")`), reading error trees
