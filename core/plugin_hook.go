@@ -29,6 +29,33 @@ type PluginScanOutput struct {
 	// that was never installed produced a clean scan and a passing gate, which
 	// is the exact failure the degradation mechanism exists to prevent.
 	Degradations []Degradation
+
+	// Egress names the tools that ran and declare network hosts
+	// (ScanResult.PluginEgress).
+	Egress []PluginEgress
+}
+
+// PluginEgress is one plugin tool a scan ran that declares network hosts.
+type PluginEgress struct {
+	Plugin string
+	Tool   string
+	Hosts  []string
+}
+
+type offlineScanKey struct{}
+
+// WithOfflineScan marks ctx as belonging to an offline scan, so the plugin
+// hooks can refuse tools that declare network hosts. The hooks' signatures
+// predate the offline guarantee reaching plugins; the context carries it
+// without changing them.
+func WithOfflineScan(ctx context.Context) context.Context {
+	return context.WithValue(ctx, offlineScanKey{}, true)
+}
+
+// OfflineScan reports whether ctx belongs to an offline scan.
+func OfflineScan(ctx context.Context) bool {
+	v, _ := ctx.Value(offlineScanKey{}).(bool)
+	return v
 }
 
 // ScanPluginHook runs the analysis plugins listed in a project's .nox.yaml

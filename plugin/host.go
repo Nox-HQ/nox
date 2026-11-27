@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -35,6 +36,11 @@ type Host struct {
 	// and governs host-global concerns (concurrency, the InvokeAll deadline).
 	overrides           Policy
 	ignoreTrackProfiles bool
+
+	// offline refuses tools that declare network hosts (WithOffline).
+	offline bool
+	// egress lists the authorized tools that declare network hosts.
+	egress []Egress
 }
 
 // WithPolicyOverrides supplies the operator's explicit .nox.yaml settings so
@@ -245,6 +251,21 @@ func (h *Host) authorizeToolWithoutTermination(ctx context.Context, p *Plugin, t
 func (h *Host) authorize(ctx context.Context, p *Plugin, toolName string, terminate bool) error {
 	pluginName := p.Info().Name
 
+	// Offline first, and without terminating or recording a violation: the
+	// plugin declared its network use honestly, and the operator chose a scan
+	// that may not make it.
+	egressHosts := toolEgressHosts(p, toolName)
+	if h.offline && len(egressHosts) > 0 {
+		refusal := &OfflineEgressError{Plugin: pluginName, Tool: toolName, Hosts: egressHosts}
+		// Recorded here because no caller records it: InvokeAll treats every
+		// refusal as an already-recorded violation. Error severity, so the
+		// missing output becomes a degradation rather than a quiet gap.
+		h.mu.Lock()
+		h.diagnostics = append(h.diagnostics, Diagnostic{Severity: "error", Message: refusal.Error(), Source: pluginName})
+		h.mu.Unlock()
+		return refusal
+	}
+
 	// refuse records the violation and, for caller-initiated invocations,
 	// shuts the plugin down.
 	refuse := func(v RuntimeViolation) error {
@@ -321,6 +342,9 @@ func (h *Host) authorize(ctx context.Context, p *Plugin, toolName string, termin
 		}
 	}
 
+	if len(egressHosts) > 0 {
+		h.recordEgress(pluginName, toolName, egressHosts)
+	}
 	return nil
 }
 
@@ -627,6 +651,10 @@ func (h *Host) InvokePostScan(ctx context.Context, result *core.ScanResult, work
 		// guarantee bypassable by any plugin declaring a non-read-only tool
 		// with requires_scan_context.
 		if err := h.authorizeToolWithoutTermination(ctx, pt.plugin, pt.tool); err != nil {
+			var offline *OfflineEgressError
+			if errors.As(err, &offline) {
+				continue // authorize recorded it
+			}
 			h.mu.Lock()
 			h.diagnostics = append(h.diagnostics, Diagnostic{
 				Severity: "error",

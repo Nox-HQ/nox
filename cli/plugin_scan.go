@@ -220,6 +220,7 @@ func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target str
 		plugin.WithPolicy(&policy),
 		plugin.WithPolicyOverrides(&overrides),
 		plugin.WithIgnoreTrackProfiles(ignoreTrackProfiles),
+		plugin.WithOffline(core.OfflineScan(ctx)),
 	)
 	defer func() { _ = host.Close() }()
 	// Per-plugin registration, for the same reason as the scan phase: one
@@ -248,6 +249,7 @@ func runPostScanPlugins(ctx context.Context, result *core.ScanResult, target str
 	if invErr := host.InvokePostScan(ctx, result, absTarget); invErr != nil {
 		return fmt.Errorf("post-scan plugins: %w", invErr)
 	}
+	result.PluginEgress = append(result.PluginEgress, egressOf(host)...)
 	// Same reasoning as the scan phase: an enrichment that never ran is absent
 	// from the findings, and absence has to be reported somewhere a gate can
 	// see it. A post-scan plugin is where reachability annotations come from,
@@ -394,6 +396,7 @@ func runPluginBinaries(ctx context.Context, target string, binaries []installedP
 		plugin.WithPolicy(policy),
 		plugin.WithPolicyOverrides(overrides),
 		plugin.WithIgnoreTrackProfiles(ignoreTrackProfiles),
+		plugin.WithOffline(core.OfflineScan(ctx)),
 	)
 	defer func() { _ = host.Close() }()
 
@@ -490,8 +493,18 @@ func runPluginBinaries(ctx context.Context, target string, binaries []installedP
 	}
 	out.Degradations = append(out.Degradations, errorDegradations(diags, "",
 		"findings this plugin would have produced are missing from this scan; other plugins still ran")...)
+	out.Egress = egressOf(host)
 
 	return out, nil
+}
+
+// egressOf converts the host's record of network-declaring tools it ran.
+func egressOf(host *plugin.Host) []core.PluginEgress {
+	var out []core.PluginEgress
+	for _, e := range host.Egress() {
+		out = append(out, core.PluginEgress{Plugin: e.Plugin, Tool: e.Tool, Hosts: e.Hosts})
+	}
+	return out
 }
 
 // scanInvokesTool is the name of the analysis-phase tool nox scan calls on
