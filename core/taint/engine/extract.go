@@ -222,8 +222,13 @@ func extractUnitsAt(path string, lang lexctx.Lang, content []byte) []unitDraft {
 		// top-level semicolons into statements. Function definitions are recognized
 		// for per-function units (with params), and `::` is normalized to `.` inside
 		// extractCPP so scope-resolved calls match the catalog. See extract_cpp.go.
-		if treeFrontEnd("c") && strings.EqualFold(filepath.Ext(path), ".c") {
+		switch ext := strings.ToLower(filepath.Ext(path)); {
+		case ext == ".c" && treeFrontEnd("c"):
 			if lines, ok := cTreeLines(content, regions); ok {
+				return extractCPP(splitSemicolons(lines))
+			}
+		case (ext == ".cpp" || ext == ".cc" || ext == ".cxx") && treeFrontEnd("cpp"):
+			if lines, ok := cppTreeLines(content, regions); ok {
 				return extractCPP(splitSemicolons(lines))
 			}
 		}

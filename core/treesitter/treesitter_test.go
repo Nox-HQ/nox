@@ -179,6 +179,8 @@ func TestEachLanguageParses(t *testing.T) {
 			"identifier", "name", "h", "function_item"},
 		{"c", "char *h(struct req *r) {\n    char *v = query(r, \"v\");\n    return v;\n}\n", "translation_unit",
 			"identifier", "declarator", "h", "function_declarator"},
+		{"cpp", "std::string h(const Req &r) {\n    auto v = r.query(\"v\");\n    return v;\n}\n", "translation_unit",
+			"identifier", "declarator", "h", "function_declarator"},
 	} {
 		src := []byte(c.src)
 		tree, err := p.Parse(context.Background(), c.lang, src)

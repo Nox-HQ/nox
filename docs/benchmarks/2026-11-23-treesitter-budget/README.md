@@ -212,3 +212,21 @@ back whole (the parse recovered rather than being stopped), and the C front
 end takes joins from the statements that hold no ERROR or MISSING node and lie
 inside no ERROR node, so 3,477 of the 3,500 files (99.3%) get the tree's joins
 where whole-file fallback would have given 1,641 (46.9%).
+
+## C++ (2026-11-27)
+
+`tree-sitter/tree-sitter-cpp` v0.23.4, the grammar measured above, now for
+`.cpp`, `.cc` and `.cxx` files; `cpp.wasm` rebuilt to the same 3,563,969 bytes.
+Measured on every such file of seven C++ repositories cloned shallow on
+2026-11-27 (drogon 6822c1e, Crow 69bfb6c, oatpp f83d648, cpp-httplib ba9447e,
+SQLiteCpp 7302cd3, pistache ddf06c2, poco 88f8284), the machine at a load
+average of about 20:
+
+| Language | Files | MiB | MiB/s | Checks/KiB p50 | p99 | max | Most checks, one file | Error trees |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| C++ | 2,678 | 26.0 | 0.26 | 7.7 | 14.0 | 22.0 | 10,098 | 446 (16.7%) |
+
+The costliest file used 17% of its budget. Error trees by repository: pistache
+48.1%, oatpp 42.1%, Crow 31.0%, SQLiteCpp 25.0%, cpp-httplib 14.6%, drogon
+14.4%, poco 12.9%. 9 of the 446 come back without a tree; the others are read
+per statement as C's are.
