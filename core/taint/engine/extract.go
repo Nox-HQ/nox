@@ -16,6 +16,7 @@
 package engine
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/nox-hq/nox/core/lexctx"
@@ -221,6 +222,11 @@ func extractUnitsAt(path string, lang lexctx.Lang, content []byte) []unitDraft {
 		// top-level semicolons into statements. Function definitions are recognized
 		// for per-function units (with params), and `::` is normalized to `.` inside
 		// extractCPP so scope-resolved calls match the catalog. See extract_cpp.go.
+		if treeFrontEnd("c") && strings.EqualFold(filepath.Ext(path), ".c") {
+			if lines, ok := cTreeLines(content, regions); ok {
+				return extractCPP(splitSemicolons(lines))
+			}
+		}
 		return extractCPP(splitSemicolons(logicalLines(content, regions, true)))
 	case lexctx.LangPerl:
 		// Perl uses the line/statement RECOGNIZER (no CGo interpreter). Statements

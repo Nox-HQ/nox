@@ -104,6 +104,17 @@ Rules for the implementation:
    the scan's findings changed, which broke determinism. The deadline remains
    only as a backstop for a runtime defect (1 minute plus 1 minute per MiB).
    Measurements: [docs/benchmarks/2026-11-23-treesitter-budget](../benchmarks/2026-11-23-treesitter-budget/README.md).
+
+   *Amended 2026-11-27:* a front end whose tree only adds line joins to the
+   current recognizer's lines may use an error tree, taking a join only from
+   a statement that holds no ERROR or MISSING node and lies inside no ERROR
+   node; every other line is read by the recognizer exactly as on fallback.
+   An error then costs the statements it touches, not the file. C is the
+   first such front end: parsed without its preprocessor, 53% of the corpus's
+   `.c` files have an error somewhere (busybox 94%), so whole-file fallback
+   would have left the tree unused on more than half of them; read locally,
+   99.3% of them have a tree to take joins from. The rule stays as
+   written for a front end that reads structure from the tree (Python's).
 4. **Behind the existing boundary.** Extraction produces `taint.Unit`s today;
    the tree-sitter front end produces the same units, so the engine,
    summaries and analyzers are unchanged. Each language moves over only after

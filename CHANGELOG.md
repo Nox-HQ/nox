@@ -89,6 +89,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     C/C++ files (56% of `.c`), so half the files would pay for the parse and
     fall back anyway; `tree-sitter-c` for `.c` files is to be tried first.
   - **Go stays on go/ast.**
+- Tree-sitter front end for C (`.c` files) taint extraction, on by default
+  (ADR 0006). It joins a statement across lines: a declaration whose
+  initializer starts on the next line (`char *cmd =` / `getenv("CMD");`), an
+  assignment, cast or ternary continued, and a `return` whose value is on the
+  next line. The line segmenter read each as two statements, so `cmd` was
+  assigned from nothing, and a helper returning `getenv(...)` that way did not
+  count as returning taint. C has no method chains, so it joins whole
+  statements; a declaration is joined per declarator. C++ and headers keep the
+  line segmenter.
+  - **Error trees are used locally.** Parsed without its preprocessor, 53% of
+    `.c` files have an error somewhere (unknown macros, conditionals inside a
+    statement; busybox 94%). A join is taken only from a statement that holds
+    no error and lies inside none, and the rest of the file is segmented as
+    before, so an error costs its own statements, not the file. ADR 0006,
+    rule 3, is amended for front ends that only add joins.
+  - **Grammar:** `tree-sitter-c` v0.24.2, pinned by commit, +0.7 MB.
+  - **A/B** over eight C repositories (the same binary with and without the
+    front end): 211 to 212 findings, the one added an environment-to-path
+    flow in git whose stated path runs through field-insensitive struct
+    taint, the same class as the environment-to-path finding git already
+    had. RealVuln's three `.c` files report the same. On redis a code-only
+    scan used 77% more CPU time (14.5 s to 25.5 s user), the cost of the
+    parse. The gain is shown by unit tests and a probe file, not the corpus.
 
 - APPCFG-001 debug mode (CWE-215) extended.
   - **Django:** `DEBUG` read from the environment with a default that turns

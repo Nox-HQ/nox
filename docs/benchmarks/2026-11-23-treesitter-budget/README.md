@@ -191,3 +191,24 @@ segmenter, as on any error tree. Where the error trees are:
   declaration (busybox, 696 of 751 files; curl's `CS_ENTRY(...)` tables) are
   the causes sampled. The C++ grammar parses C with a preprocessor it does not
   model; whether `tree-sitter-c` does better on `.c` files was not measured.
+
+## C (2026-11-27)
+
+`tree-sitter/tree-sitter-c` v0.24.2, for `.c` files only, pinned in
+`scripts/treesitter/pins.json`. `c.wasm` is 745,982 bytes, the smallest module.
+Measured with the same harness on every `.c` file of the eight C repositories
+above, the machine at a load average of about 30:
+
+| Language | Files | MiB | MiB/s | Checks/KiB p50 | p99 | max | Most checks, one file | Error trees |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| C | 3,500 | 55.5 | 0.60 | 6.4 | 13.4 | 21.9 | 4,974 | 1,859 (53.1%) |
+
+The costliest file used 22% of its budget. Per repository the error-tree rate
+is busybox 93.6%, sqlite 61.4%, git 55.9%, redis 53.6%, pgbouncer 33.3%, curl
+30.3%, mosquitto 25.5% and Damn_Vulnerable_C_Program 0%: no better than
+`tree-sitter-cpp` on the same files (56%), as both parse C without its
+preprocessor. What differs is the use: 1,836 of the 1,859 error trees come
+back whole (the parse recovered rather than being stopped), and the C front
+end takes joins from the statements that hold no ERROR or MISSING node and lie
+inside no ERROR node, so 3,477 of the 3,500 files (99.3%) get the tree's joins
+where whole-file fallback would have given 1,641 (46.9%).
