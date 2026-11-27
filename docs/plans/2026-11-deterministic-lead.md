@@ -63,6 +63,11 @@ misses to convert). We do not.
   precisely**, and all other languages on tree-sitter. Overall F3 ≥ 25; OWASP
   Benchmark score above the best deterministic tool published for it.
 
+- **M4 — authorization, and an opt-in LLM track** (decided with the
+  maintainer 2026-11-27). The deterministic target is unchanged: held-out
+  F3 ≥ 25. LLM triage is a plugin, opt-in, bring-your-own-key, and is scored
+  as a separate "nox + LLM" row; the deterministic headline never includes it.
+
 ## Tasks
 
 ### Measurement
@@ -154,3 +159,56 @@ Gate 2026-11-24 (main 0cc6f49, all 203 rescanned): dev F3 17.0 -> 21.3, injectio
 - [x] M3 gate: dev and held-out, OWASP Benchmark, published (2026-11-25, main b68bccf). F3 dev **26.9** (target 25, met), held-out **20.0** (not met), all 203 24.6. On Semgrep's repos nox scores 33.3 / 25.8 against Semgrep's 10.7 / 8.7. Held-out moved about 85% as far as dev, so the M3 classes generalise: auth/session recall 4.4% -> 20.1% and information exposure 0.9% -> 31.2% on held-out. OWASP Python 62.9, Java 56.4, against Semgrep p/default's 10.7 / 34.9. Open: OWASP Java 56.5 pooled against the best reproducible deterministic baseline, cognium-dev 73.5 (not met; CodeQL 59.9, FindSecBugs 39.1, docs/benchmarks/2026-09-28-owasp#published-deterministic-baselines-recorded-2026-11-26), Python has no reproducible baseline; remaining languages on tree-sitter not started; held-out Java 12.8. See docs/benchmarks/2026-11-21-realvuln/README.md#m3-gate-2026-11-25
 - [x] OWASP Java above the best reproducible deterministic baseline: pooled 56.5 -> **81.5** (TPR 90.0, FPR 8.5) against cognium-dev 73.5, category-averaged 56.4 -> 79.7, at the documented `src/main/java` root. Response-writer `append`/`printf`/`format` sinks, HTML escapers as sanitizers (a decoder around one undoes it), `new Helper().run(...)` resolved to the file's own method so a constant-returning helper is a barrier (and a same-named method on another type no longer is), and CRYPTO-001 reading named and configured algorithms. RealVuln dev: 0 TP change, dev F3 28.4 unchanged; +16 CRYPTO-001 (DES key factories, bare "AES", MD5 of access codes; Broadleaf cache-key MD5s), -2 TAINT-003 behind `Encode.forHtmlAttribute`. OWASP Python unchanged (62.9). docs/benchmarks/2026-09-28-owasp#java-recall-and-helper-precision-2026-11-26
 - [x] M3 gate re-run (2026-11-27, main 2903f9c, all 203 rescanned): F3 dev 26.9 -> **28.4**, held-out 20.0 -> **20.8** (target 25, not met), all 203 24.6 -> **25.8**; held-out Java 12.8 -> 14.3. On Semgrep's repos 34.1 / 26.0 against 10.7 / 8.7. OWASP Python 62.9, Java 79.7 category-averaged / 81.5 pooled (target met on Java). Tree-sitter item done. Held-out gap: authorization and business logic are 19% of held-out labels at zero recall (CWE-639 174 and CWE-862 103 missed), and held-out injection recall is 35.4% against dev's 51.3%. See docs/benchmarks/2026-11-21-realvuln/README.md#m3-gate-re-run-2026-11-27
+
+### M4 — authorization, and the opt-in LLM track (decided 2026-11-27)
+
+At the M3 gate re-run, authorization and business logic are 19% of held-out
+labels at zero recall (CWE-639 and CWE-862 the two most missed), and
+held-out injection recall is 35.4% against dev's 51.3%. Precision alone cannot
+close the held-out gap: at held-out recall 0.228, F3 is at most 24.7 even with
+precision 1.0.
+
+Decided with the maintainer:
+- LLM triage lives in `nox-plugin-triage-agent` (roadmap 7d), a post-scan
+  plugin whose verdicts are enrichments keyed by fingerprint and never change
+  a finding. `nox-plugin-llm-triage`, which a scan never calls (no
+  `requires_scan_context`), is archived once its per-finding snippet judging
+  is merged in.
+- Bring-your-own-key through `NOX_AI_*`. Source snippets leave the machine only
+  with the plugin enabled, redacted of secrets; verdicts are cached by
+  (fingerprint, snippet hash, pack version, provider, model), so a re-run is
+  reproducible.
+- "Training" is a versioned triage pack (per-class instructions and worked
+  examples from dev labels, a threshold per class chosen on dev), not a
+  fine-tuned model: with a user's key the model is the user's.
+- Scope: triage of existing findings, and LLM review of authorization.
+
+Measured before building (dev only):
+- AUTHZ-001's leads (Express, Fastify, Flask, FastAPI) scored as findings:
+  63 on dev, 13 matched, F3 28.4 -> 28.6. AUTHN-001's: 23, 2 matched.
+- A route with no authentication evidence in a file where at least two sibling
+  routes carry it: 1,219 candidates, 44 matched (Flask 10/37, Spring 13/188,
+  FastAPI 14/211, Express 6/458, Django 1/268, NestJS 0/75), F3 28.6. Rejected:
+  public-by-design routes dominate.
+- A Spring handler taking an id-named parameter without the check/assert
+  scope-or-ownership call its siblings make with an id (ruoyi's
+  `checkUserDataScope`): 6 candidates, 1 matched. Real but rare. Rejected.
+- Dev has 629 authorization labels, 58% Java; a sample sits in service
+  classes, interceptors, `application.yml` and generic base controllers as much
+  as in handlers. Most are not a syntactic deviation a reader can state, which
+  is why the LLM track reviews route handlers rather than only confirming
+  deterministic candidates.
+
+- [ ] Consolidate LLM triage into `nox-plugin-triage-agent`: per-finding
+  judging with a workspace-confined snippet, secret redaction before egress,
+  verdicts as enrichments only, deterministic cache, versioned pack, bounds
+- [ ] Find out whether `nox scan --offline` stops plugin egress and how a
+  plugin declares network use; close the gap in core if it does not
+- [ ] Triage pack v1 from dev labels; score "nox + LLM" on dev with the
+  maintainer's key (cost agreed before each run); held-out only at a gate
+- [ ] LLM authorization review: a plugin tool that asks, per route handler,
+  whether the record it touches is related to the caller; candidates are the
+  route inventory, scored on dev
+- [ ] Archive `nox-plugin-llm-triage` after the consolidation is released
+- [ ] Deterministic authorization: keep looking for shapes a reader can state
+  precisely (each measured on dev before building)
