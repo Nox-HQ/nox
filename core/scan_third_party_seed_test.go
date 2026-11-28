@@ -20,6 +20,16 @@ func TestIsSeedDataPath(t *testing.T) {
 		{"src/main/resources/db/migration/V2__seed.sql", true},
 		{"db/migrations/0003_add_users.py", true},
 		{"scripts/db_seed.py", true},
+		// Flyway names a migration by version, wherever its location is.
+		{"jeecg-boot/src/main/resources/flyway/sql/mysql/V3.9.2_2__add_jimuchatbi.sql", true},
+		{"src/main/resources/db/changes/V12__add_tenants.sql", true},
+		{"sql/R__refresh_views.sql", true},
+		{"sql/U3__undo_tenants.sql", true},
+		// A database dump is not reported as seed data: it may be a real export.
+		{"db/jeecgboot-mysql-5.7.sql", false},
+		{"src/main/resources/database/moduleSchemas.sql", false},
+		{"docs/V2__notes.md", false},
+		{"src/Vendor__users.sql", false},
 		{"src/routes/users.ts", false},
 		{"src/lib/seedling.ts", false},
 		{"src/crypto/seedRandom.ts", false},

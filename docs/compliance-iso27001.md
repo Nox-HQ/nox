@@ -96,7 +96,7 @@ fixed limit of that evidence.
 | A.8.25 | Secure development life cycle | The scan record itself | That it runs on every change or blocks release. Indirect. |
 | A.8.26 | Application security requirements | None | Everything: requirements are written before code. Always `not_evidenced`. |
 | A.8.27 | Secure system architecture and engineering principles | AI inventory; AI-, AGENT-, MCP- rules | Architecture review, documented principles, threat models. Indirect. |
-| A.8.28 | Secure coding | TAINT-, VARIANT-, MEMSAFE-, HARDEN-; AUTHZ-001 and AI-AGENT-009; authorization leads are named as an unconfirmed gap, never counted as findings | Defect classes and languages not covered; standards, training, review |
+| A.8.28 | Secure coding | TAINT-, VARIANT-, MEMSAFE-, HARDEN-, XSS-; AUTHZ-001 and AI-AGENT-009; authorization leads are named as an unconfirmed gap, never counted as findings | Defect classes and languages not covered; standards, training, review |
 | A.8.29 | Security testing in development and acceptance | The scan record, plus the `dynamic_verification` capability | Penetration tests, acceptance tests. Limited unless dynamic verification answered. |
 
 ## Guards against a false all-clear

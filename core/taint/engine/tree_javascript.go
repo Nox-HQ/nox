@@ -70,19 +70,55 @@ func jsTreeLines(path string, content []byte, regions []lexctx.Region) ([]logica
 // node of bodyKinds; false when the parser declines the file. The grammar is
 // a treesitter language name.
 func treeJoinedLines(grammar string, stmtKinds, bodyKinds map[string]bool, content []byte, regions []lexctx.Region) ([]logicalLine, bool) {
+	return treeJoinedLinesFrom(grammar, stmtKinds, bodyKinds, content, regions, false)
+}
+
+// treeJoinedLinesFrom is treeJoinedLines; with localErrors it also uses an
+// error tree, taking joins only from statements that hold no ERROR or MISSING
+// node and lie inside no ERROR node (see tree_c.go for why that is sound).
+func treeJoinedLinesFrom(grammar string, stmtKinds, bodyKinds map[string]bool, content []byte, regions []lexctx.Region, localErrors bool) ([]logicalLine, bool) {
+	return treeJoinedLinesBlocked(grammar, stmtKinds, bodyKinds, nil, content, regions, localErrors)
+}
+
+// treeJoinedLinesBlocked is treeJoinedLinesFrom with blocks, which names
+// further nodes that keep a statement holding them unjoined, as a body does
+// (nil for none).
+func treeJoinedLinesBlocked(grammar string, stmtKinds, bodyKinds map[string]bool, blocks func(*treesitter.Tree, int) bool, content []byte, regions []lexctx.Region, localErrors bool) ([]logicalLine, bool) {
 	p := sharedTreeParser()
 	if p == nil {
 		return nil, false
 	}
 	tree, lim := p.ParseFile(context.Background(), grammar, content, treesitter.Budget{})
-	if lim != nil {
+	// An error tree is used only by a caller that takes joins locally.
+	usable := lim == nil || (localErrors && lim.Reason == treesitter.ReasonErrorTree && tree != nil)
+	if !usable {
 		return nil, false
+	}
+	join := treeLineJoinsBlocked(tree, content, stmtKinds, bodyKinds, blocks)
+	return logicalLinesJoined(content, regions, true, nil, func(l int) bool { return join[l] }), true
+}
+
+// treeLineJoins is the set of physical lines (1-based) to join with the next:
+// every line but the last of each statement of stmtKinds that holds no node
+// of bodyKinds, no ERROR or MISSING node, and lies inside no ERROR node. On a
+// clean tree the last two never hold.
+func treeLineJoins(tree *treesitter.Tree, content []byte, stmtKinds, bodyKinds map[string]bool) map[int]bool {
+	return treeLineJoinsBlocked(tree, content, stmtKinds, bodyKinds, nil)
+}
+
+// treeLineJoinsBlocked is treeLineJoins where a node blocks names, like a
+// node of bodyKinds, also keeps the statements holding it unjoined.
+func treeLineJoinsBlocked(tree *treesitter.Tree, content []byte, stmtKinds, bodyKinds map[string]bool, blocks func(*treesitter.Tree, int) bool) map[int]bool {
+	// inError[i]: node i lies inside an ERROR node. Parents come first.
+	inError := make([]bool, len(tree.Nodes))
+	for i, n := range tree.Nodes {
+		inError[i] = n.Error || (n.Parent >= 0 && inError[n.Parent])
 	}
 	// hasBody[i]: node i contains a function or class body. Records are in
 	// pre-order with parents earlier, so one backward pass carries it up.
 	hasBody := make([]bool, len(tree.Nodes))
 	for i := len(tree.Nodes) - 1; i > 0; i-- {
-		if hasBody[i] || bodyKinds[tree.Nodes[i].Kind] {
+		if hasBody[i] || bodyKinds[tree.Nodes[i].Kind] || (blocks != nil && blocks(tree, i)) {
 			hasBody[tree.Nodes[i].Parent] = true
 		}
 	}
@@ -101,7 +137,7 @@ func treeJoinedLines(grammar string, stmtKinds, bodyKinds map[string]bool, conte
 	}
 	join := map[int]bool{}
 	for i, n := range tree.Nodes {
-		if !stmtKinds[n.Kind] || hasBody[i] || n.End <= n.Start {
+		if !stmtKinds[n.Kind] || hasBody[i] || n.End <= n.Start || n.HasError || inError[i] {
 			continue
 		}
 		first, last := row(n.Start), row(n.End-1)
@@ -109,5 +145,5 @@ func treeJoinedLines(grammar string, stmtKinds, bodyKinds map[string]bool, conte
 			join[l] = true
 		}
 	}
-	return logicalLinesJoined(content, regions, true, nil, func(l int) bool { return join[l] }), true
+	return join
 }

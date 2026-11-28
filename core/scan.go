@@ -28,16 +28,20 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/authz"
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
+	"github.com/nox-hq/nox/core/analyzers/errleak"
 	"github.com/nox-hq/nox/core/analyzers/fileperms"
 	"github.com/nox-hq/nox/core/analyzers/flowunits"
 	"github.com/nox-hq/nox/core/analyzers/hardening"
 	"github.com/nox-hq/nox/core/analyzers/iac"
+	"github.com/nox-hq/nox/core/analyzers/logleak"
 	"github.com/nox-hq/nox/core/analyzers/memsafe"
+	"github.com/nox-hq/nox/core/analyzers/protopollution"
 	"github.com/nox-hq/nox/core/analyzers/provenance"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
 	"github.com/nox-hq/nox/core/analyzers/slop"
 	"github.com/nox-hq/nox/core/analyzers/slop/feed"
 	"github.com/nox-hq/nox/core/analyzers/taintflow"
+	"github.com/nox-hq/nox/core/analyzers/templates"
 	"github.com/nox-hq/nox/core/analyzers/variants"
 	"github.com/nox-hq/nox/core/analyzers/weakcrypto"
 	"github.com/nox-hq/nox/core/baseline"
@@ -745,8 +749,12 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	cryptoAnalyzer := weakcrypto.NewAnalyzer()
 	filepermsAnalyzer := fileperms.NewAnalyzer()
 	hardeningAnalyzer := hardening.NewAnalyzer()
+	templatesAnalyzer := templates.NewAnalyzer()
 	appconfigAnalyzer := appconfig.NewAnalyzer()
 	memsafeAnalyzer := memsafe.NewAnalyzer()
+	protoAnalyzer := protopollution.NewAnalyzer()
+	errleakAnalyzer := errleak.NewAnalyzer()
+	logleakAnalyzer := logleak.NewAnalyzer()
 	variantsAnalyzer := variants.NewAnalyzer()
 	variantsAnalyzer.RecordReasoningTo(reasons)
 	// A signature database that fails to parse leaves every VARIANT-* rule
@@ -867,6 +875,14 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			addFindings(fs)
 			return nil
 		}},
+		{"templates", func(c context.Context) error {
+			fs, err := templatesAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		}},
 		{"appconfig", func(c context.Context) error {
 			fs, err := appconfigAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
@@ -877,6 +893,30 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		}},
 		{"memsafe", func(c context.Context) error {
 			fs, err := memsafeAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		}},
+		{"protopollution", func(c context.Context) error {
+			fs, err := protoAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		}},
+		{"errleak", func(c context.Context) error {
+			fs, err := errleakAnalyzer.ScanArtifacts(c, artifacts)
+			if err != nil {
+				return err
+			}
+			addFindings(fs)
+			return nil
+		}},
+		{"logleak", func(c context.Context) error {
+			fs, err := logleakAnalyzer.ScanArtifacts(c, artifacts)
 			if err != nil {
 				return err
 			}
@@ -1013,8 +1053,12 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 		{"weakcrypto", cryptoAnalyzer.Rules()},
 		{"fileperms", filepermsAnalyzer.Rules()},
 		{"hardening", hardeningAnalyzer.Rules()},
+		{"templates", templatesAnalyzer.Rules()},
 		{"appconfig", appconfigAnalyzer.Rules()},
 		{"memsafe", memsafeAnalyzer.Rules()},
+		{"protopollution", protoAnalyzer.Rules()},
+		{"errleak", errleakAnalyzer.Rules()},
+		{"logleak", logleakAnalyzer.Rules()},
 		{"slop", slopAnalyzer.Rules()},
 		{"variants", variantsAnalyzer.Rules()},
 		{"taintflow", taintflowAnalyzer.Rules()},

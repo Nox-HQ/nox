@@ -512,9 +512,13 @@ var needsByFamily = map[string]string{
 	"ai-prompt-injection":  "What this input may do once it reaches the model.",
 	"weak-crypto":          "Which algorithm or key size your stored data and peers can move to; changing it can make existing data unreadable.",
 	"transport-security":   "Which protocol versions and certificates your clients support.",
+	"template-output":      "Whether the printed value can hold anything a user wrote, or only HTML the application built from fixed markup.",
 	"app-config":           "Which origins, keys and settings the deployment actually uses, which the source writes down only as a literal.",
 	"file-permissions":     "Which account should own and access this file.",
 	"memory-safety":        "The size or bound that is right for this buffer, which the code does not state.",
+	"prototype-pollution":  "Whether this merge ever receives parsed or request data, which its callers decide.",
+	"sensitive-logging":    "Which fields your log lines need to tell events apart (ids, outcomes), so credentials, headers and request bodies can be left out; who reads the logs and how long they are kept.",
+	"error-disclosure":     "Which messages the client may see: a fixed text with a correlation id for unexpected errors, and the messages of your own exception types for the rest. Write the exception itself to the server log under that id.",
 	"agentic-dataflow":     "Which data this agent step may receive from, and pass to, the next one, and who vouches for it.",
 	"taint-flow":           "Where this input is validated before it is used, and what it is checked against; the flow is real but the safe boundary depends on your feature.",
 	"cve-variants":         "Whether the library version you run has the vulnerable behaviour: check the advisory for the affected versions, then upgrade or confirm it does not apply.",
@@ -568,6 +572,18 @@ var needsByRule = map[string]string{
 	"AUTHN-001": "A call with no credentials. Request the route without a token or session; a 2xx answer with data " +
 		"means anyone can reach it. A static scan cannot see a gateway or middleware that authenticates before " +
 		"the application, so only that call settles it.",
+	"AUTHN-002": "Whether a proxy, gateway or WAF in front of this application already limits attempts on this route, " +
+		"and what limit fits it. Send 50 wrong passwords for one account in a minute: if every attempt is answered and " +
+		"none is refused or delayed, add a limiter and per-account lockout in the application.",
+	"AUTHN-004": "Which CSRF defence fits the application: a synchronizer token (Flask-WTF CSRFProtect, csrf-csrf) " +
+		"in every form and fetch, or SameSite=Lax on the session cookie if no flow needs a cross-site POST. Submit a form to the " +
+		"route from another origin while signed in: if it succeeds, add the defence.",
+	"AUTHN-005": "Which answer the login and reset paths should give for an unknown account: the same message, status and " +
+		"timing as for a known one. Send the request for a registered address and an unregistered one: if the answers " +
+		"differ, make them the same.",
+	"AUTHN-003": "Whether a proxy, gateway or WAF in front of this application already throttles this route, and how " +
+		"many accounts or messages per client and per address are acceptable. Send 50 requests in a minute: if every " +
+		"one creates an account or sends a message, add a limit in the application.",
 }
 
 // needsByClass says what the code's owner has to decide, per taint class.
@@ -589,6 +605,8 @@ var needsByClass = map[string]string{
 	"xxe":                    "A change to the parser setup: turn off external entities and DTD loading.",
 	"trust_boundary":         "A decision from you: where this input is validated before it is trusted, and what it is checked against.",
 	"argument_injection":     "A change to the call: put a literal \"--\" before the value so the program reads it as an operand, or validate that it does not start with \"-\".",
+	"log_injection":          "A change to the log call: strip or encode CR and LF in the value, or use a structured (JSON) log format that escapes them.",
+	"mass_assignment":        "A change to the write: copy only the fields the caller may set (an allowlist or a DTO with exactly those fields), never the whole request object.",
 }
 
 func ruleIDs(ff []findings.Finding, fps []string) []string {

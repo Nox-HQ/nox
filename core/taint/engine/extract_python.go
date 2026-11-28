@@ -1,6 +1,9 @@
 package engine
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // extractPython turns Python logical lines into unit drafts. Function bodies
 // (`def name(...):`) become their own units keyed by name; everything else
@@ -71,6 +74,15 @@ func extractPython(lines []logicalLine) []unitDraft {
 				}
 				blocks.openState(indent, state, chains[indent])
 				continue
+			}
+		}
+		// `for k, v in items:` binds each target name from the iterated value,
+		// on every iteration the body may run.
+		for _, b := range pyForBindings(ll) {
+			if st, ok := recognizeStatement(langPython, b); ok {
+				st.conditional = true
+				st.fieldBinding = true
+				cur.stmts = append(cur.stmts, st)
 			}
 		}
 		ll = rewriteConstTernary(ll, env)
@@ -313,4 +325,33 @@ func pyConditionalHeader(trimmed string) bool {
 		}
 	}
 	return false
+}
+
+// pyForHeader is a for loop header: the target and the iterated expression.
+var pyForHeader = regexp.MustCompile(`^(\s*(?:async\s+)?for\s+)(.+?)\s+in\s+(.+):\s*$`)
+
+// pyForBindings returns one assignment per target name of a `for` header,
+// each from the iterated expression: `for k, v in d.items():` binds k and v
+// from d.items(). The lines keep the header's offsets so a call in the
+// expression is read where it was written.
+func pyForBindings(ll logicalLine) []logicalLine {
+	m := pyForHeader.FindStringSubmatchIndex(ll.code)
+	if m == nil {
+		return nil
+	}
+	targets := strings.Trim(strings.TrimSpace(ll.code[m[4]:m[5]]), "()[]")
+	exprCode := ll.code[m[6]:m[7]]
+	exprRaw := exprCode
+	if len(ll.raw) == len(ll.code) {
+		exprRaw = ll.raw[m[6]:m[7]]
+	}
+	var out []logicalLine
+	for _, t := range strings.Split(targets, ",") {
+		name := strings.Trim(strings.TrimSpace(t), "()[]* ")
+		if !isSimpleIdent(name) {
+			continue
+		}
+		out = append(out, logicalLine{line: ll.line, code: name + " = " + exprCode, raw: name + " = " + exprRaw})
+	}
+	return out
 }

@@ -123,6 +123,7 @@ var controls = []controlDef{
 			{kind: fromFindings, label: "Secret scanning of the working tree", scope: "secrets", prefixes: []string{"SEC-"}, anywhere: true},
 			{kind: fromFindings, label: "Literal credentials in infrastructure and CI configuration", scope: "iac", ids: literalCredentialIaC, additive: true},
 			{kind: fromFindings, label: "Literal credentials in AI and MCP configuration", scope: "ai", ids: literalCredentialAI, additive: true},
+			{kind: fromFindings, label: "Literal credential defaults in application configuration", scope: "code", ids: []string{"APPCFG-007"}, additive: true},
 		},
 		limits: []string{
 			"A clean secret scan shows no recognizable credential was found in the scanned files; it does not show credentials are generated, stored, rotated or revoked well.",
@@ -278,8 +279,8 @@ var controls = []controlDef{
 		id: "A.8.28", title: "Secure coding", theme: "Technological",
 		sources: []source{
 			{kind: fromFindings, label: "Static analysis of application code", scope: "code",
-				prefixes: []string{"TAINT-", "VARIANT-", "MEMSAFE-", "HARDEN-"}, subjectFromSource: true},
-			{kind: fromFindings, label: "Authorization, authentication and webhook checks", scope: "code", ids: []string{"AUTHZ-001", "AUTHN-001", "WEBHOOK-001"}, additive: true},
+				prefixes: []string{"TAINT-", "VARIANT-", "MEMSAFE-", "HARDEN-", "XSS-", "PROTO-", "ERRLEAK-", "LOGLEAK-"}, subjectFromSource: true},
+			{kind: fromFindings, label: "Authorization, authentication and webhook checks", scope: "code", ids: []string{"AUTHZ-001", "AUTHN-001", "AUTHN-002", "AUTHN-003", "AUTHN-004", "AUTHN-005", "WEBHOOK-001"}, additive: true},
 			{kind: fromFindings, label: "Agents that run model-supplied SQL", scope: "ai", ids: []string{"AI-AGENT-009"}, additive: true},
 			{kind: fromLeads, label: "Authorization and authentication leads"},
 		},

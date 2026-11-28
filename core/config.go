@@ -340,7 +340,7 @@ func ThirdPartyDirs() []string {
 func ThirdPartyDropRulePatterns() []string {
 	return []string{
 		"AI-*", "MCP-*", "AGENT-*", "IAC-*", "TAINT-*", "SLOP-*", "VARIANT-*",
-		"CRYPTO-*", "APPCFG-*", "HARDEN-*", "DATA-001",
+		"CRYPTO-*", "APPCFG-*", "HARDEN-*", "XSS-*", "DATA-001",
 	}
 }
 
@@ -365,11 +365,20 @@ func IsSeedDataPath(path string) bool {
 		}
 	}
 	base := parts[len(parts)-1]
+	if flywayMigrationName.MatchString(base) {
+		return true
+	}
 	if i := strings.LastIndexByte(base, '.'); i > 0 {
 		base = base[:i]
 	}
 	return seedFileName.MatchString(base)
 }
+
+// flywayMigrationName is Flyway's naming convention for a migration script,
+// which marks it as one wherever the project keeps it: versioned
+// V<version>__<description>.sql (V3.9.2_2__add_jimuchatbi.sql), undo
+// U<version>__, and repeatable R__. Matched against the lower-cased basename.
+var flywayMigrationName = regexp.MustCompile(`^(?:[vu]\d+(?:[._]\d+)*|r)__[^/]+\.sql$`)
 
 // MatchesNonProductionPath reports whether path matches any of the given globs
 // under the context-downgrade matching rules. It is a robust, filepath-style

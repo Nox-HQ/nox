@@ -63,7 +63,10 @@ func TestEmbeddedModulesMatchTheirRecordedSums(t *testing.T) {
 }
 
 // The guest is granted nothing a parse could use to observe the host: the
-// only imports are the four WASI functions the stubs answer with ENOSYS.
+// only imports are the four WASI functions the stubs answer with ENOSYS. The
+// Swift grammar's scanner calls exit(1) when its one allocation fails, so
+// swift.wasm also imports proc_exit, which the host ends the guest with: it
+// reads nothing from the host.
 func TestModulesImportOnlyTheStubbedFunctions(t *testing.T) {
 	ctx := context.Background()
 	rt := wazero.NewRuntime(ctx)
@@ -88,8 +91,12 @@ func TestModulesImportOnlyTheStubbedFunctions(t *testing.T) {
 			got = append(got, name)
 		}
 		sort.Strings(got)
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("%s imports %v, want exactly %v", e.Name(), got, want)
+		wantHere := want
+		if e.Name() == "swift.wasm" {
+			wantHere = []string{"clock_time_get", "fd_close", "fd_seek", "fd_write", "proc_exit"}
+		}
+		if !reflect.DeepEqual(got, wantHere) {
+			t.Errorf("%s imports %v, want exactly %v", e.Name(), got, wantHere)
 		}
 		if len(c.ImportedMemories()) != 0 {
 			t.Errorf("%s imports a memory", e.Name())
@@ -156,6 +163,24 @@ func TestEachLanguageParses(t *testing.T) {
 			"identifier", "name", "Card", "variable_declarator"},
 		{"java", "class C { void h(HttpServletRequest request) { String v = request.getParameter(\"v\"); } }\n", "program",
 			"identifier", "name", "h", "method_declaration"},
+		{"csharp", "class C { void H(HttpRequest r) { var v = r.Query[\"v\"]; } }\n", "compilation_unit",
+			"identifier", "name", "H", "method_declaration"},
+		{"php", "<?php\nfunction h($r) { $v = $_GET['v']; return $v; }\n", "program",
+			"name", "name", "h", "function_definition"},
+		{"ruby", "def h(r)\n  v = r.params[:v]\n  v\nend\n", "program",
+			"identifier", "name", "h", "method"},
+		{"kotlin", "class C {\n  fun h(r: Req): String {\n    val v = r.getParameter(\"v\")\n    return v\n  }\n}\n", "source_file",
+			"identifier", "name", "h", "function_declaration"},
+		{"scala", "object O {\n  def h(r: Req): String = {\n    val v = r.getParameter(\"v\")\n    v\n  }\n}\n", "compilation_unit",
+			"identifier", "name", "h", "function_definition"},
+		{"swift", "func h(r: Req) -> String {\n  let v = r.query(\"v\")\n  return v\n}\n", "source_file",
+			"simple_identifier", "name", "h", "function_declaration"},
+		{"rust", "fn h(r: &Req) -> String {\n    let v = r.query(\"v\");\n    v\n}\n", "source_file",
+			"identifier", "name", "h", "function_item"},
+		{"c", "char *h(struct req *r) {\n    char *v = query(r, \"v\");\n    return v;\n}\n", "translation_unit",
+			"identifier", "declarator", "h", "function_declarator"},
+		{"cpp", "std::string h(const Req &r) {\n    auto v = r.query(\"v\");\n    return v;\n}\n", "translation_unit",
+			"identifier", "declarator", "h", "function_declarator"},
 	} {
 		src := []byte(c.src)
 		tree, err := p.Parse(context.Background(), c.lang, src)

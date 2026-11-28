@@ -185,6 +185,10 @@ var strideByRule = map[string][]Category{
 	// A route anyone can call is spoofing in the STRIDE sense (the caller is
 	// never established) and the privilege it exposes.
 	"AUTHN-001": {Spoofing, ElevationOfPrivilege},
+	"AUTHN-002": {Spoofing},
+	"AUTHN-003": {DenialOfService},
+	"AUTHN-004": {Spoofing, Tampering},
+	"AUTHN-005": {InformationDisclosure},
 	// A webhook payload nobody authenticated can be forged by anyone who can
 	// reach the URL.
 	"WEBHOOK-001": {Spoofing, Tampering},

@@ -83,8 +83,9 @@ func (r rule) conf() findings.Confidence {
 	return r.confidence
 }
 
-// allRules is every rule the analyzer reports: settings, then cookie flags.
-var allRules = append(append(append([]rule{}, builtin...), cookieRules...), signingKeyRules...)
+// allRules is every rule the analyzer reports: settings, cookie flags,
+// signing keys, secret fallbacks in configuration.
+var allRules = append(append(append(append(append(append([]rule{}, builtin...), cookieRules...), signingKeyRules...), secretFallbackRules...), csrfRules...), framingRules...)
 
 var (
 	py   = []lexctx.Lang{lexctx.LangPython}
@@ -97,7 +98,7 @@ var builtin = []rule{
 	{
 		id: RuleDebugMode, cwe: "CWE-215", severity: findings.SeverityMedium,
 		message:     "Web framework debug mode is enabled in source",
-		description: "Web framework debug mode enabled in source (Flask app.run(debug=True), app.debug = True, DEBUG config, Django settings DEBUG = True, FastAPI(debug=True))",
+		description: "Web framework debug mode enabled in source (Flask app.run(debug=True), app.debug = True, DEBUG config, Django settings DEBUG = True or read from the environment with a default that turns it on, FastAPI(debug=True)); Spring stack traces in error responses, every actuator endpoint exposed, the H2 console, JSF Development stage",
 		remediation: "Debug mode serves stack traces, local variables and, in Flask/Werkzeug, an interactive debugger that runs code. Read it from the environment and default to off: `debug=os.environ.get(\"FLASK_DEBUG\") == \"1\"`, Django `DEBUG = env.bool(\"DEBUG\", False)`.",
 		tags:        []string{"debug", "configuration", "owasp-a05"},
 		patterns: []pattern{
@@ -105,8 +106,17 @@ var builtin = []rule{
 			{langs: py, need: ".debug", re: regexp.MustCompile(`(?m)^\s*[A-Za-z_]\w*\.debug\s*=\s*True\b`)},
 			{langs: py, need: "DEBUG", re: regexp.MustCompile(`\.config\s*\[\s*['"]DEBUG['"]\s*\]\s*=\s*True\b`)},
 			{langs: py, need: "DEBUG", re: regexp.MustCompile(`\.config\.update\s*\([^)\n]*\bDEBUG\s*=\s*True\b`)},
+			// Tornado: Application(..., debug=True) or a settings dict holding
+			// "debug": True. The dict form starts at the "{" or "," before the
+			// key, since a match must start in code.
+			{langs: py, need: "debug", near: "tornado", re: regexp.MustCompile(`\bApplication\s*\([^)\n]*\bdebug\s*=\s*True\b`)},
+			{langs: py, need: "debug", near: "tornado", re: regexp.MustCompile(`[{,]\s*["']debug["']\s*:\s*True\b`)},
 			{langs: py, need: "FastAPI", re: regexp.MustCompile(`\bFastAPI\s*\([^)\n]*\bdebug\s*=\s*True\b`)},
 			{langs: py, need: "DEBUG", re: regexp.MustCompile(`(?m)^DEBUG\s*=\s*True\b`), fileOK: isDjangoSettings},
+			// Read from the environment, but on when the variable is unset:
+			// os.environ.get("DJANGO_DEBUG", "1") == "1", env_bool("DEBUG", True),
+			// config("DEBUG", default=True, cast=bool).
+			{langs: py, need: "DEBUG", re: regexp.MustCompile(`(?m)^DEBUG\s*=[^\n#]*\b(?:os\s*\.\s*environ\s*\.\s*get|os\s*\.\s*getenv|getenv|env\s*\.\s*bool|env|_?env_bool|config)\s*\(\s*["'][A-Za-z_]\w*["']\s*,\s*(?:default\s*=\s*)?(?:True\b|1\b|["'](?:1|[Tt]rue|TRUE|[Yy]es|YES|[Oo]n|ON)["'])`), fileOK: isDjangoSettings},
 		},
 	},
 	{
@@ -201,7 +211,7 @@ var langByExt = map[string]lexctx.Lang{
 var configExt = map[string]bool{".properties": true, ".yml": true, ".yaml": true, ".xml": true}
 
 // triggers is a cheap prefilter: a file that names none of these cannot match.
-var triggers = [][]byte{[]byte("debug"), []byte("DEBUG"), []byte("rigin"), []byte("CORS"), []byte("cors"), []byte("decode"), []byte("parse"), []byte("Unverified"), []byte("none"), []byte("ookie"), []byte("ession("), []byte("httpOnly"), []byte("httponly"), []byte("HttpOnly"), []byte("SESSION_COOKIE"), []byte("ecret"), []byte("ECRET"), []byte("sign("), []byte("verify("), []byte("encode("), []byte("HMAC"), []byte("SigningKey"), []byte("signWith"), []byte("cookieParser(")}
+var triggers = [][]byte{[]byte("csrf"), []byte("CSRF"), []byte("MIDDLEWARE"), []byte("debug"), []byte("DEBUG"), []byte("rigin"), []byte("CORS"), []byte("cors"), []byte("decode"), []byte("parse"), []byte("Unverified"), []byte("none"), []byte("ookie"), []byte("ession("), []byte("httpOnly"), []byte("httponly"), []byte("HttpOnly"), []byte("SESSION_COOKIE"), []byte("ecret"), []byte("ECRET"), []byte("sign("), []byte("verify("), []byte("encode("), []byte("HMAC"), []byte("SigningKey"), []byte("signWith"), []byte("cookieParser("), []byte("rame-Options"), []byte("RAME-OPTIONS"), []byte("rame-options"), []byte("frameOptions"), []byte("frame-ancestors"), []byte("frameguard"), []byte("xFrameOptions"), []byte("xframe_options_exempt"), []byte("X_FRAME_OPTIONS"), []byte("headers("), []byte("sessionFixation")}
 
 // ScanArtifacts reports the settings across the discovered source files.
 func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Artifact) (*findings.FindingSet, error) {
@@ -222,7 +232,8 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if err != nil {
 			continue
 		}
-		found := scanCookieConfig(art.Path, content)
+		found := append(scanCookieConfig(art.Path, content), scanSecretFallback(art.Path, content)...)
+		found = append(found, scanDebugConfig(art.Path, content)...)
 		if ok {
 			found = ScanFile(art.Path, lang, content)
 		}
@@ -264,7 +275,9 @@ func ScanFile(path string, lang lexctx.Lang, content []byte) []findings.Finding 
 				}
 				line := lexctx.LineForOffset(content, start)
 				key := r.id + ":" + strconv.Itoa(line)
-				if seen[key] {
+				if seen[key] || (r.id == RuleFramingOff && (seen[r.id+":"+strconv.Itoa(line-1)] || seen[r.id+":"+strconv.Itoa(line-2)])) {
+					// One decision written as two adjacent statements (the
+					// header removed, then frame-ancestors * set) is one finding.
 					continue
 				}
 				seen[key] = true
@@ -282,7 +295,7 @@ func ScanFile(path string, lang lexctx.Lang, content []byte) []findings.Finding 
 	if masked == nil {
 		masked = lexctx.MaskNonCode(lang, content)
 	}
-	for _, f := range scanCookies(path, lang, content, masked) {
+	for _, f := range append(scanCookies(path, lang, content, masked), append(scanDjangoCSRF(path, lang, content), scanCSRFExempt(path, lang, content)...)...) {
 		key := f.RuleID + ":" + strconv.Itoa(f.Location.StartLine)
 		if !seen[key] {
 			seen[key] = true

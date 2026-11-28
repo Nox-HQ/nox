@@ -74,23 +74,38 @@
         },
         {
           "call": "sys.argv",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "argparse.ArgumentParser",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "os.environ",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "os.getenv",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "os.environ.get",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "input",
@@ -625,6 +640,153 @@
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
           "note": "http.server BaseHTTPRequestHandler: self.wfile.write(body) is the response body"
+        },
+        {
+          "call": "logging.debug",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.info",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.warning",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.warn",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.error",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.critical",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.exception",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.log",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "logging.fatal",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "stdlib root logger"
+        },
+        {
+          "call": "app_logger.debug",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.info",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.warning",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.warn",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.error",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.critical",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.exception",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.log",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.fatal",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "logging.getLogger / structlog logger; bound in receivers.go"
+        },
+        {
+          "call": "update",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "dict.update / QuerySet.update / obj.__dict__.update with the whole request mapping (mass_assignment.go)"
+        },
+        {
+          "call": "kwargs_splat",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "a call passing the whole request mapping as **kwargs: Model(**data), objects.create(**data); recorded by mass_assignment.go"
+        },
+        {
+          "call": "setattr",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "setattr(obj, name, value) with an attribute name the client chose"
         }
       ],
       "sanitizers": [
@@ -768,6 +930,20 @@
             "ldap_injection"
           ],
           "note": "ldap3.utils.dn.escape_rdn"
+        },
+        {
+          "call": "repr",
+          "neutralizes": [
+            "log_injection"
+          ],
+          "note": "escapes CR/LF"
+        },
+        {
+          "call": "json.dumps",
+          "neutralizes": [
+            "log_injection"
+          ],
+          "note": "escapes CR/LF"
         }
       ],
       "checks": [
@@ -870,11 +1046,17 @@
         },
         {
           "call": "process.argv",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "process.env",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "fs.readFile",
@@ -1038,9 +1220,21 @@
           "call": "RequestBoundBody",
           "kind": "http_body",
           "note": "sentinel: a handler parameter the framework binds from the request -- NestJS @Body/@Query/@Param/@Headers/@Ip/@HostParam/@UploadedFile(s); seeded at function entry by core/taint/engine/framework_params.go"
+        },
+        {
+          "call": "RequestBoundBodyObject",
+          "kind": "http_body",
+          "note": "a handler parameter bound to the whole request body (NestJS @Body() with no field name); see framework_params.go"
         }
       ],
       "sinks": [
+        {
+          "call": "xxe_noent_parser.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "synthetic chain: libxmljs/libxmljs2 parseXmlString or parseXml given noent: true, which substitutes entities and reads external ones; see engine/xxe_libxmljs.go"
+        },
         {
           "call": "child_process.exec",
           "vuln_class": "command_injection",
@@ -1693,6 +1887,209 @@
           "vuln_class": "xss",
           "cwe": "CWE-79",
           "rule_id": "TAINT-003"
+        },
+        {
+          "call": "console.log",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "console output reaches the process log"
+        },
+        {
+          "call": "console.info",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "console output reaches the process log"
+        },
+        {
+          "call": "console.warn",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "console output reaches the process log"
+        },
+        {
+          "call": "console.error",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "console output reaches the process log"
+        },
+        {
+          "call": "console.debug",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "console output reaches the process log"
+        },
+        {
+          "call": "console.trace",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "console output reaches the process log"
+        },
+        {
+          "call": "app_logger.log",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.info",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.warn",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.error",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.debug",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.trace",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.verbose",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.fatal",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "NestJS Logger, winston, pino, bunyan, log4js; bound in receivers.go"
+        },
+        {
+          "call": "Object.assign",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Object.assign(record, wholeRequestObject): every field the client sent lands on the record; judged on the sources, not the target"
+        },
+        {
+          "call": "create",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Mongoose/Sequelize/TypeORM/Prisma create: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "insert",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "TypeORM/Knex insert: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "insertMany",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Mongoose insertMany: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "update",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Sequelize instance.update / TypeORM repository.update / Prisma update: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "updateOne",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Mongoose updateOne: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "updateMany",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Mongoose updateMany: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "findByIdAndUpdate",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Mongoose findByIdAndUpdate: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "findOneAndUpdate",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Mongoose findOneAndUpdate: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "replaceOne",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Mongoose replaceOne: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "save",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "TypeORM repository.save: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "merge",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "TypeORM repository.merge(entity, ...sources): a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "upsert",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Sequelize/Prisma upsert: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "build",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Sequelize build: a mass-assignment sink only for a whole request object (mass_assignment.go)"
+        },
+        {
+          "call": "bulkCreate",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Sequelize bulkCreate: a mass-assignment sink only for a whole request object (mass_assignment.go)"
         }
       ],
       "sanitizers": [
@@ -1821,6 +2218,13 @@
           "neutralizes": [
             "xss"
           ]
+        },
+        {
+          "call": "JSON.stringify",
+          "neutralizes": [
+            "log_injection"
+          ],
+          "note": "escapes CR/LF as \\\\r \\\\n"
         }
       ],
       "checks": [
@@ -1889,7 +2293,10 @@
         },
         {
           "call": "os.Args",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "r.URL.Path",
@@ -2547,11 +2954,17 @@
         },
         {
           "call": "ENV",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "ARGV",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "gets",
@@ -3660,11 +4073,17 @@
         },
         {
           "call": "System.getenv",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "System.getProperty",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "RequestBoundQuery",
@@ -3680,6 +4099,21 @@
           "call": "RequestBoundBody",
           "kind": "http_body",
           "note": "sentinel: a handler parameter bound from the request body or form by annotation (@RequestBody, @RequestPart, @ModelAttribute, @FormParam, @BeanParam, @Body, @RestForm); see RequestBoundQuery"
+        },
+        {
+          "call": "getOriginalFilename",
+          "kind": "http_body",
+          "note": "Spring MultipartFile.getOriginalFilename(): the file name the client sent"
+        },
+        {
+          "call": "getSubmittedFileName",
+          "kind": "http_body",
+          "note": "Servlet Part.getSubmittedFileName(): the file name the client sent"
+        },
+        {
+          "call": "RequestBoundBodyObject",
+          "kind": "http_body",
+          "note": "sentinel: a handler parameter an object binding (@RequestBody, @ModelAttribute, @BeanParam, @Body) fills with an object or map type -- the whole request object, which mass assignment (TAINT-014) needs; see RequestBoundQuery"
         }
       ],
       "sinks": [
@@ -3872,6 +4306,209 @@
           "note": "new URL(u).openConnection() — matched on the method suffix"
         },
         {
+          "call": "get.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.get().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "post.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.post().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "put.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.put().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "patch.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.patch().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "delete.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.delete().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "head.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.head().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "options.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.options().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "method.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestClient / WebClient `.method().uri(url)`: the request goes to the URL. Only the first argument is the target; later ones fill URI template variables, which are encoded (sinkArgShapeDangerous)."
+        },
+        {
+          "call": "newBuilder.uri",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "java.net.http `HttpRequest.newBuilder().uri(URI.create(url))`; the request is sent by HttpClient.send/sendAsync."
+        },
+        {
+          "call": "HttpRequest.newBuilder",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "java.net.http `HttpRequest.newBuilder(URI.create(url))`: the one-argument form names the target."
+        },
+        {
+          "call": "getForEntity",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `getForEntity(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "getForObject",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `getForObject(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "postForEntity",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `postForEntity(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "postForObject",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `postForObject(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "postForLocation",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `postForLocation(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "patchForObject",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `patchForObject(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "headForHeaders",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `headForHeaders(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "optionsForAllow",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `optionsForAllow(url, ...)`: the first argument is the target; later ones are the body, the response type or URI template variables."
+        },
+        {
+          "call": "restTemplate.exchange",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Spring RestTemplate `exchange(url, method, ...)`, keyed on the conventional field name because `exchange` alone is generic."
+        },
+        {
+          "call": "client.target",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "JAX-RS `Client.target(url)`, keyed on the conventional variable name because `target` alone is generic."
+        },
+        {
+          "call": "newClient.target",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "JAX-RS `ClientBuilder.newClient().target(url)`."
+        },
+        {
+          "call": "HttpClient.create",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Micronaut / Reactor `HttpClient.create(url)`: the client is bound to that base URL."
+        },
+        {
+          "call": "Jsoup.connect",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "jsoup `Jsoup.connect(url)` fetches the URL."
+        },
+        {
+          "call": "HttpGet",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Apache HttpClient `new HttpGet(url)`: the request object carries its target."
+        },
+        {
+          "call": "HttpPost",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Apache HttpClient `new HttpPost(url)`: the request object carries its target."
+        },
+        {
+          "call": "HttpPut",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Apache HttpClient `new HttpPut(url)`: the request object carries its target."
+        },
+        {
+          "call": "HttpPatch",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Apache HttpClient `new HttpPatch(url)`: the request object carries its target."
+        },
+        {
+          "call": "HttpDelete",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Apache HttpClient `new HttpDelete(url)`: the request object carries its target."
+        },
+        {
+          "call": "HttpHead",
+          "vuln_class": "ssrf",
+          "cwe": "CWE-918",
+          "rule_id": "TAINT-006",
+          "note": "Apache HttpClient `new HttpHead(url)`: the request object carries its target."
+        },
+        {
           "call": "ObjectInputStream.readObject",
           "vuln_class": "unsafe_deserialization",
           "cwe": "CWE-502",
@@ -3900,6 +4537,209 @@
           "note": "ScriptEngine.eval(script) — matched on the method suffix"
         },
         {
+          "call": "spel_parser.parseExpression",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "Spring Expression Language: `parseExpression(expr)` parses arg 0, and `getValue` on the result runs it, with access to types and methods (T(java.lang.Runtime)). The local is bound by its declared type, in a file that imports org.springframework.expression (receivers.go); the variables of the evaluation context are data."
+        },
+        {
+          "call": "SpelExpressionParser.parseExpression",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "Spring Expression Language: `parseExpression(expr)` parses arg 0, and `getValue` on the result runs it, with access to types and methods (T(java.lang.Runtime)). The local is bound by its declared type, in a file that imports org.springframework.expression (receivers.go); the variables of the evaluation context are data."
+        },
+        {
+          "call": "spel_parser.parseRaw",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "Spring Expression Language: `parseExpression(expr)` parses arg 0, and `getValue` on the result runs it, with access to types and methods (T(java.lang.Runtime)). The local is bound by its declared type, in a file that imports org.springframework.expression (receivers.go); the variables of the evaluation context are data."
+        },
+        {
+          "call": "Ognl.getValue",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "OGNL: the expression is arg 0; the context and root after it are data the expression reads."
+        },
+        {
+          "call": "Ognl.setValue",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "OGNL: the expression is arg 0; the context and root after it are data the expression reads."
+        },
+        {
+          "call": "Ognl.parseExpression",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "OGNL: the expression is arg 0; the context and root after it are data the expression reads."
+        },
+        {
+          "call": "MVEL.eval",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "MVEL: the expression is arg 0; the variable map after it is data."
+        },
+        {
+          "call": "MVEL.evalToString",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "MVEL: the expression is arg 0; the variable map after it is data."
+        },
+        {
+          "call": "MVEL.executeExpression",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "MVEL: the expression is arg 0; the variable map after it is data."
+        },
+        {
+          "call": "MVEL.compileExpression",
+          "vuln_class": "code_injection",
+          "cwe": "CWE-94",
+          "rule_id": "TAINT-005",
+          "note": "MVEL: the expression is arg 0; the variable map after it is data."
+        },
+        {
+          "call": "Velocity.evaluate",
+          "vuln_class": "ssti",
+          "cwe": "CWE-1336",
+          "rule_id": "TAINT-003",
+          "note": "Velocity `evaluate(context, writer, logTag, template)`: the template string is arg 3; the context holds data."
+        },
+        {
+          "call": "velocity_engine.evaluate",
+          "vuln_class": "ssti",
+          "cwe": "CWE-1336",
+          "rule_id": "TAINT-003",
+          "note": "VelocityEngine `evaluate(context, writer, logTag, template)`: the template string is arg 3. The local is bound by its declared type (receivers.go)."
+        },
+        {
+          "call": "freemarker.template.Template",
+          "vuln_class": "ssti",
+          "cwe": "CWE-1336",
+          "rule_id": "TAINT-003",
+          "note": "FreeMarker `new Template(name, source | reader, cfg)`: the template source is arg 1; the data model passed to process() is not parsed. A bare `Template` resolves here only in a file importing freemarker.template (receivers.go)."
+        },
+        {
+          "call": "handlebars.compileInline",
+          "vuln_class": "ssti",
+          "cwe": "CWE-1336",
+          "rule_id": "TAINT-003",
+          "note": "Handlebars.java `compileInline(template)`: the template is arg 0; the context passed to apply() is data. The local is bound by its declared type (receivers.go)."
+        },
+        {
+          "call": "xml_dom_builder.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a DocumentBuilder from a DocumentBuilderFactory made in this file and never hardened (see engine/xxe_java.go)"
+        },
+        {
+          "call": "xml_dom_factory.newDocumentBuilder.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "parse on a builder made from an unhardened DocumentBuilderFactory"
+        },
+        {
+          "call": "DocumentBuilderFactory.newInstance.newDocumentBuilder.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a factory made inline, which cannot have been hardened"
+        },
+        {
+          "call": "xml_sax_parser.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a SAXParser or XMLReader from a factory made in this file and never hardened"
+        },
+        {
+          "call": "xml_sax_factory.newSAXParser.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "parse on a parser made from an unhardened SAXParserFactory"
+        },
+        {
+          "call": "xml_sax_parser.getXMLReader.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "the XMLReader of an unhardened SAXParser"
+        },
+        {
+          "call": "xml_sax_factory.newSAXParser.getXMLReader.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "the XMLReader of a parser from an unhardened SAXParserFactory"
+        },
+        {
+          "call": "SAXParserFactory.newInstance.newSAXParser.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a factory made inline, which cannot have been hardened"
+        },
+        {
+          "call": "SAXParserFactory.newInstance.newSAXParser.getXMLReader.parse",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a factory made inline, which cannot have been hardened"
+        },
+        {
+          "call": "xml_stax_factory.createXMLStreamReader",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "StAX: an XMLInputFactory made in this file with DTD support left on"
+        },
+        {
+          "call": "xml_stax_factory.createXMLEventReader",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "StAX: an XMLInputFactory made in this file with DTD support left on"
+        },
+        {
+          "call": "XMLInputFactory.newInstance.createXMLStreamReader",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a factory made inline, which cannot have been hardened"
+        },
+        {
+          "call": "XMLInputFactory.newInstance.createXMLEventReader",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a factory made inline, which cannot have been hardened"
+        },
+        {
+          "call": "XMLInputFactory.newFactory.createXMLStreamReader",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a factory made inline, which cannot have been hardened"
+        },
+        {
+          "call": "XMLInputFactory.newFactory.createXMLEventReader",
+          "vuln_class": "xxe",
+          "cwe": "CWE-611",
+          "rule_id": "TAINT-010",
+          "note": "a factory made inline, which cannot have been hardened"
+        },
+        {
           "call": "println",
           "vuln_class": "xss",
           "cwe": "CWE-79",
@@ -3918,6 +4758,48 @@
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
           "note": "response writer .write(taintedHtml) — reflected XSS"
+        },
+        {
+          "call": "getWriter.append",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "PrintWriter.append(csq) writes to the response on inline response.getWriter(). Keyed on the receiver: append and format alone name StringBuilder.append and String.format"
+        },
+        {
+          "call": "response_writer.append",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "PrintWriter.append(csq) writes to the response on a local assigned from getWriter() (see receivers.go). Keyed on the receiver: append and format alone name StringBuilder.append and String.format"
+        },
+        {
+          "call": "getWriter.printf",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "PrintWriter.printf(format, args) writes the format and every argument to the response on inline response.getWriter(). Keyed on the receiver: append and format alone name StringBuilder.append and String.format"
+        },
+        {
+          "call": "response_writer.printf",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "PrintWriter.printf(format, args) writes the format and every argument to the response on a local assigned from getWriter() (see receivers.go). Keyed on the receiver: append and format alone name StringBuilder.append and String.format"
+        },
+        {
+          "call": "getWriter.format",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "PrintWriter.format([locale,] format, args) writes the format and every argument to the response on inline response.getWriter(). Keyed on the receiver: append and format alone name StringBuilder.append and String.format"
+        },
+        {
+          "call": "response_writer.format",
+          "vuln_class": "xss",
+          "cwe": "CWE-79",
+          "rule_id": "TAINT-003",
+          "note": "PrintWriter.format([locale,] format, args) writes the format and every argument to the response on a local assigned from getWriter() (see receivers.go). Keyed on the receiver: append and format alone name StringBuilder.append and String.format"
         },
         {
           "call": "sendRedirect",
@@ -4004,6 +4886,314 @@
           "cwe": "CWE-78",
           "rule_id": "TAINT-002",
           "note": "ProcessBuilder.command(...) sets the program and arguments of a builder declared ProcessBuilder (see receivers.go); started by .start()"
+        },
+        {
+          "call": "app_logger.trace",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.debug",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.info",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.warn",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.error",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.fatal",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.log",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.tracef",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.debugf",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.infof",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.warnf",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.errorf",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.fatalf",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.warning",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.severe",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.fine",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.finer",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.finest",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "app_logger.config",
+          "vuln_class": "log_injection",
+          "cwe": "CWE-117",
+          "rule_id": "TAINT-013",
+          "note": "A logger local or field (SLF4J/Log4j/JUL/JBoss/Commons Logging) or Lombok-injected log; bound in receivers.go"
+        },
+        {
+          "call": "spring_mvc.redirect_view",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "Spring MVC view name \"redirect:\" + value, returned or passed to ModelAndView; recorded by redirect_java.go"
+        },
+        {
+          "call": "RedirectView",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "Spring new RedirectView(url)"
+        },
+        {
+          "call": "Response.seeOther",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "JAX-RS Response.seeOther(URI)"
+        },
+        {
+          "call": "Response.temporaryRedirect",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "JAX-RS Response.temporaryRedirect(URI)"
+        },
+        {
+          "call": "HttpResponse.redirect",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "Micronaut HttpResponse.redirect(URI)"
+        },
+        {
+          "call": "HttpResponse.seeOther",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "Micronaut HttpResponse.seeOther(URI)"
+        },
+        {
+          "call": "HttpResponse.temporaryRedirect",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "Micronaut HttpResponse.temporaryRedirect(URI)"
+        },
+        {
+          "call": "HttpResponse.permanentRedirect",
+          "vuln_class": "open_redirect",
+          "cwe": "CWE-601",
+          "rule_id": "TAINT-007",
+          "note": "Micronaut HttpResponse.permanentRedirect(URI)"
+        },
+        {
+          "call": "Files.readAttributes",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.readAttributes: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.getAttribute",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.getAttribute: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.list",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.list: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.walk",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.walk: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.find",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.find: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.newByteChannel",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.newByteChannel: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.move",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.move: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.deleteIfExists",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.deleteIfExists: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.createDirectories",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.createDirectories: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.createDirectory",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.createDirectory: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.createFile",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.createFile: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.size",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.size: reaches the filesystem at the given path"
+        },
+        {
+          "call": "Files.getLastModifiedTime",
+          "vuln_class": "path_traversal",
+          "cwe": "CWE-22",
+          "rule_id": "TAINT-004",
+          "note": "java.nio.file.Files.getLastModifiedTime: reaches the filesystem at the given path"
+        },
+        {
+          "call": "org.springframework.beans.BeanUtils.copyProperties",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "the whole request object copied onto a bean: reads slot 0 (source); see mass_assignment.go"
+        },
+        {
+          "call": "org.apache.commons.beanutils.BeanUtils.copyProperties",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Apache Commons copyProperties(dest, orig): reads slot 1"
+        },
+        {
+          "call": "org.apache.commons.beanutils.PropertyUtils.copyProperties",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Apache Commons copyProperties(dest, orig): reads slot 1"
+        },
+        {
+          "call": "setPropertyValue",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "BeanWrapper.setPropertyValue(name, value) with a property name taken from the request mapping"
         }
       ],
       "sanitizers": [
@@ -4068,6 +5258,55 @@
           ]
         },
         {
+          "call": "StringEscapeUtils.escapeHtml",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "Commons Lang 2's HTML escaper (escapeHtml4's predecessor)"
+        },
+        {
+          "call": "StringEscapeUtils.escapeHtml3",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "Commons Lang 3 / Text, HTML 3.2 entities"
+        },
+        {
+          "call": "encodeForHTML",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "OWASP ESAPI Encoder"
+        },
+        {
+          "call": "encodeForHTMLAttribute",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "OWASP ESAPI Encoder"
+        },
+        {
+          "call": "Encode.forHtmlContent",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "OWASP Java Encoder"
+        },
+        {
+          "call": "Encode.forHtmlAttribute",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "OWASP Java Encoder"
+        },
+        {
+          "call": "Jsoup.clean",
+          "neutralizes": [
+            "xss"
+          ],
+          "note": "jsoup's allowlist cleaner"
+        },
+        {
           "call": "Encoder.forHtml",
           "neutralizes": [
             "xss"
@@ -4095,6 +5334,34 @@
           ],
           "requires_guard": true,
           "note": "Path.normalize() canonicalizes; must be paired with a startsWith allow-base check"
+        },
+        {
+          "call": "Encode.forJava",
+          "neutralizes": [
+            "log_injection"
+          ],
+          "note": "OWASP Encoder: escapes CR/LF"
+        },
+        {
+          "call": "encodeForJava",
+          "neutralizes": [
+            "log_injection"
+          ],
+          "note": "OWASP Encoder"
+        },
+        {
+          "call": "StringEscapeUtils.escapeJava",
+          "neutralizes": [
+            "log_injection"
+          ],
+          "note": "Commons Text/Lang: escapes CR/LF"
+        },
+        {
+          "call": "encodeForLog",
+          "neutralizes": [
+            "log_injection"
+          ],
+          "note": "project log encoders"
         }
       ],
       "checks": [
@@ -4112,19 +5379,31 @@
       "sources": [
         {
           "call": "env.args",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "std.env.args",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "env.var",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "std.env.var",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "web.Query",
@@ -5445,11 +6724,17 @@
         },
         {
           "call": "System.getenv",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "System.getProperty",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "RequestBoundQuery",
@@ -5465,6 +6750,11 @@
           "call": "RequestBoundBody",
           "kind": "http_body",
           "note": "sentinel: a handler parameter bound from the request body or form by annotation (@RequestBody, @RequestPart, @ModelAttribute, @FormParam, @BeanParam, @Body, @RestForm); see RequestBoundQuery"
+        },
+        {
+          "call": "RequestBoundBodyObject",
+          "kind": "http_body",
+          "note": "sentinel: a handler parameter an object binding (@RequestBody, @ModelAttribute, @BeanParam, @Body) fills with an object or map type -- the whole request object, which mass assignment (TAINT-014) needs; see RequestBoundQuery"
         }
       ],
       "sinks": [
@@ -5643,6 +6933,34 @@
           "cwe": "CWE-79",
           "rule_id": "TAINT-003",
           "note": "response writer .println(taintedHtml) — reflected XSS"
+        },
+        {
+          "call": "org.springframework.beans.BeanUtils.copyProperties",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "the whole request object copied onto a bean: reads slot 0 (source); see mass_assignment.go"
+        },
+        {
+          "call": "org.apache.commons.beanutils.BeanUtils.copyProperties",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Apache Commons copyProperties(dest, orig): reads slot 1"
+        },
+        {
+          "call": "org.apache.commons.beanutils.PropertyUtils.copyProperties",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "Apache Commons copyProperties(dest, orig): reads slot 1"
+        },
+        {
+          "call": "setPropertyValue",
+          "vuln_class": "mass_assignment",
+          "cwe": "CWE-915",
+          "rule_id": "TAINT-014",
+          "note": "BeanWrapper.setPropertyValue(name, value) with a property name taken from the request mapping"
         }
       ],
       "sanitizers": [
@@ -5751,11 +7069,17 @@
       "sources": [
         {
           "call": "ENV",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "ARGV",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "STDIN",
@@ -5918,11 +7242,17 @@
       "sources": [
         {
           "call": "CommandLine.arguments",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "ProcessInfo.processInfo.environment",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "URLComponents.queryItems",
@@ -6294,11 +7624,17 @@
       "sources": [
         {
           "call": "Platform.environment",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "args",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "request.uri.queryParameters",
@@ -6597,7 +7933,10 @@
         {
           "call": "argv",
           "kind": "argv",
-          "note": "the C main(argc, argv) command-line vector"
+          "note": "the C main(argc, argv) command-line vector",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "text",
@@ -6941,22 +8280,34 @@
         {
           "call": "args",
           "kind": "argv",
-          "note": "$args automatic variable (script/function argument array)"
+          "note": "$args automatic variable (script/function argument array)",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "PSScriptParameter",
           "kind": "argv",
-          "note": "sentinel: a read of a top-level script param() parameter, bound from the untrusted command line. The extractor promotes this chain onto any statement that reads a script parameter (names are arbitrary, so the catalog keys the sentinel, not each name); function parameters are NOT promoted"
+          "note": "sentinel: a read of a top-level script param() parameter, bound from the untrusted command line. The extractor promotes this chain onto any statement that reads a script parameter (names are arbitrary, so the catalog keys the sentinel, not each name); function parameters are NOT promoted",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "MyInvocation",
           "kind": "argv",
-          "note": "$MyInvocation.* carries bound parameters / the invocation line"
+          "note": "$MyInvocation.* carries bound parameters / the invocation line",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "env",
           "kind": "env",
-          "note": "$env:NAME provider access, shaped to a bare `env` read"
+          "note": "$env:NAME provider access, shaped to a bare `env` read",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "Read_Host",
@@ -7178,51 +8529,87 @@
       "sources": [
         {
           "call": "$1",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$2",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$3",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$4",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$5",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$6",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$7",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$8",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$9",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$@",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$*",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "$#",
-          "kind": "argv"
+          "kind": "argv",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "read",
@@ -7357,12 +8744,18 @@
         {
           "call": "arg",
           "kind": "argv",
-          "note": "the global `arg` table holds the CLI arguments; `arg[1]`, `arg[2]`, ... are attacker-controlled"
+          "note": "the global `arg` table holds the CLI arguments; `arg[1]`, `arg[2]`, ... are attacker-controlled",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "os.getenv",
           "kind": "env",
-          "note": "process environment variable, attacker-influenceable"
+          "note": "process environment variable, attacker-influenceable",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "io.read",
@@ -7534,12 +8927,18 @@
         {
           "call": "System.get_env",
           "kind": "env",
-          "note": "process environment variable (attacker-influenced in many deployments)"
+          "note": "process environment variable (attacker-influenced in many deployments)",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "System.argv",
           "kind": "argv",
-          "note": "command-line arguments"
+          "note": "command-line arguments",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "IO.read",
@@ -7761,16 +9160,25 @@
         {
           "call": "System/getenv",
           "kind": "env",
-          "note": "process environment variable"
+          "note": "process environment variable",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "getenv",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "*command-line-args*",
           "kind": "argv",
-          "note": "command-line arguments seq"
+          "note": "command-line arguments seq",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "read-line",
@@ -7984,11 +9392,17 @@
         },
         {
           "call": "System.getenv",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "System.getProperty",
-          "kind": "env"
+          "kind": "env",
+          "not_for": [
+            "log_injection"
+          ]
         },
         {
           "call": "args",

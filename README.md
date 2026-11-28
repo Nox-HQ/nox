@@ -164,7 +164,7 @@ make build
 
 ## What Nox Detects
 
-Nox ships with **1516 built-in rules** across five analyzer suites:
+Nox ships with **1531 built-in rules** across five analyzer suites:
 
 ### Secrets (884 rules)
 
@@ -276,6 +276,17 @@ suppresses masks, modulo, unsigned shifts, guarded values and length-derived
 values. Conversions whose operand type is not provable from the enclosing
 function are not reported — nox parses Go with `go/ast`, not `go/types`. See
 [`docs/design/go-integer-overflow.md`](docs/design/go-integer-overflow.md).
+
+### Application logic
+
+| Rule | Description |
+|------|-------------|
+| PROTO-001 | A JavaScript/TypeScript recursive merge that walks into `target[key]` with no `__proto__`/`constructor` guard — prototype pollution (CWE-1321) |
+| AUTHN-002 | A login, OTP or token-consuming password-reset route, or Spring Security form login / HTTP Basic, with no rate limit, throttle or lockout visible in the application (CWE-307) |
+| AUTHN-003 | A registration, forgot-password or one-time-code issuing route with no throttle visible in the application (CWE-770) |
+| AUTHN-004 | A POST route authenticated by the session cookie in a Flask or Express application with no CSRF library, token check or SameSite session cookie (CWE-352) |
+| ERRLEAK-001 | A caught exception's stack trace, object or traceback -- or the message of an exception of a generic type -- written into the HTTP response, in JavaScript/TypeScript, Python and Java (CWE-209) |
+| LOGLEAK-001 | A credential's value, an Authorization or cookie header, or a request's whole body passed to a log call in JavaScript/TypeScript, Python or Java; Django mail sent to the console outside development settings; sqlite statements traced to the log (CWE-532) |
 
 ## Configuration
 

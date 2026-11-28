@@ -328,6 +328,62 @@ func (a *Analyzer) Rules() *rules.RuleSet {
 		},
 		Metadata: map[string]string{"cwe": "CWE-345"},
 	})
+	rs.Add(&rules.Rule{
+		ID:          BruteForceRuleID,
+		Version:     "1.0",
+		Description: "Credential check without attempt limiting: an unauthenticated login, OTP or password-reset route has no rate limit, throttle or lockout on the route, its router, the application or the handler (CWE-307)",
+		Severity:    findings.SeverityMedium,
+		Confidence:  findings.ConfidenceMedium,
+		Tags:        []string{"authentication", "brute-force", "rate-limit", "owasp-a07"},
+		Remediation: "Limit attempts per account and per client address on every route that checks a credential: express-rate-limit or express-slow-down on the login route, @nestjs/throttler with @Throttle, @fastify/rate-limit, Flask-Limiter or slowapi with @limiter.limit(\"5/minute\"), django-axes or django-ratelimit, Bucket4j or Resilience4j in Spring. Count failed attempts per account and lock or delay after a threshold. If a gateway or WAF already limits the route, waive the finding with that reason. To confirm before changing code: send 50 wrong passwords for one account in a minute; if every attempt is answered and none is refused or delayed, the finding holds.",
+		References: []string{
+			"https://cwe.mitre.org/data/definitions/307.html",
+			"https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#protect-against-automated-attacks",
+		},
+		Metadata: map[string]string{"cwe": "CWE-307"},
+	})
+	rs.Add(&rules.Rule{
+		ID:          UnthrottledIssueRuleID,
+		Version:     "1.0",
+		Description: "Account creation or message issuance without throttling: an unauthenticated registration, forgot-password, reset-request or one-time-code route has no rate limit or throttle on the route, its router, the application or the handler (CWE-770)",
+		Severity:    findings.SeverityLow,
+		Confidence:  findings.ConfidenceMedium,
+		Tags:        []string{"authentication", "rate-limit", "abuse", "owasp-a07"},
+		Remediation: "Limit requests per client address and per target account or e-mail on every route that creates an account or sends a message: express-rate-limit, @nestjs/throttler, @fastify/rate-limit, Flask-Limiter or slowapi, django-ratelimit, Bucket4j or Resilience4j. Add a CAPTCHA to public sign-up. If a gateway or WAF already limits the route, waive the finding with that reason. To confirm before changing code: send 50 requests in a minute; if every one creates an account or sends a message, the finding holds.",
+		References: []string{
+			"https://cwe.mitre.org/data/definitions/770.html",
+			"https://owasp.org/API-Security/editions/2023/en/0xa6-unrestricted-access-to-sensitive-business-flows/",
+		},
+		Metadata: map[string]string{"cwe": "CWE-770"},
+	})
+	rs.Add(&rules.Rule{
+		ID:          EnumerationRuleID,
+		Version:     "1.0",
+		Description: "Account enumeration: a login, sign-in or password-reset path answers that the account does not exist (\"No account is registered with that address\", \"User not found\", \"用户不存在\"), so a caller can tell which accounts exist (CWE-204)",
+		Severity:    findings.SeverityMedium,
+		Confidence:  findings.ConfidenceMedium,
+		Tags:        []string{"authentication", "account-enumeration", "owasp-a07"},
+		Remediation: "Give the same answer whether or not the account exists: \"Invalid email or password\" on login, and \"If that account exists, we sent a reset link\" on a reset request, with the same status code and, where practical, the same response time. Spring Security already does this for UsernameNotFoundException unless hideUserNotFoundExceptions is switched off; a custom exception carrying \"user not found\" bypasses it. To confirm before changing code: send the request for an e-mail that is registered and one that is not; if the answers differ, the finding holds.",
+		References: []string{
+			"https://cwe.mitre.org/data/definitions/204.html",
+			"https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#authentication-and-error-messages",
+		},
+		Metadata: map[string]string{"cwe": "CWE-204"},
+	})
+	rs.Add(&rules.Rule{
+		ID:          CSRFRouteRuleID,
+		Version:     "1.0",
+		Description: "POST route reached with the session cookie in a Flask or Express application with no CSRF protection: no CSRF library or token check, and a session cookie not set SameSite (CWE-352)",
+		Severity:    findings.SeverityMedium,
+		Confidence:  findings.ConfidenceMedium,
+		Tags:        []string{"csrf", "session", "owasp-a01", "flask", "express"},
+		Remediation: "Add CSRF protection to the application: Flask-WTF CSRFProtect(app) (and {{ csrf_token() }} in forms, or the X-CSRFToken header from JavaScript), or csrf-csrf / lusca in Express with the token in every form and fetch. Set the session cookie SameSite=Lax at least (Flask SESSION_COOKIE_SAMESITE = \"Lax\", express-session cookie: { sameSite: \"lax\" }). To confirm before changing code: from a page on another origin, submit a form to the route while signed in; if it succeeds, the finding holds.",
+		References: []string{
+			"https://cwe.mitre.org/data/definitions/352.html",
+			"https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html",
+		},
+		Metadata: map[string]string{"cwe": "CWE-352"},
+	})
 	return rs
 }
 
@@ -360,7 +416,9 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		// AUTHZ candidate is a finding, so none belongs in stage accounting.
 		ix.reasoning = a.reasoning
 	}
-	rls := false
+	rls, globalLimiter := false, false
+	var csrf csrfDefences
+	var enumerations []findings.Finding
 	pyFiles, pyOrder := map[string]*pyFile{}, []string(nil)
 	compiled := &compiledReaders{}
 	var jvmFiles []*jvmFile
@@ -390,8 +448,13 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 				jvmBuildDirs[jvmDir(p)] = true
 			}
 			if !nsource.IsTestPath(art.Path) {
-				if b, err := os.ReadFile(art.AbsPath); err == nil && jvmConfigGuards(art.Path, b) {
-					jvmGuardFiles = append(jvmGuardFiles, p)
+				if b, err := os.ReadFile(art.AbsPath); err == nil {
+					if jvmConfigGuards(art.Path, b) {
+						jvmGuardFiles = append(jvmGuardFiles, p)
+					}
+					if !globalLimiter && globalLimiterRe.Match(b) {
+						globalLimiter = true
+					}
 				}
 			}
 			continue
@@ -406,7 +469,23 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 		if !rls && rlsRe.Match(raw) {
 			rls = true
 		}
+		if !globalLimiter && globalLimiterRe.Match(raw) {
+			globalLimiter = true
+		}
+		if ext == ".py" {
+			csrf.read(true, withoutComments(lexctx.LangPython, raw))
+		} else if jsExt[ext] {
+			csrf.read(false, withoutComments(lexctx.LangJavaScript, raw))
+		}
 		p := filepath.ToSlash(art.Path)
+		enumLang := lexctx.LangJavaScript
+		switch ext {
+		case ".py":
+			enumLang = lexctx.LangPython
+		case ".java", ".kt":
+			enumLang = lexctx.LangJava
+		}
+		enumerations = append(enumerations, scanEnumeration(p, enumLang, raw)...)
 		if ext == ".java" || ext == ".kt" {
 			jvmFiles = append(jvmFiles, newJVMFile(p, raw))
 			continue
@@ -484,6 +563,20 @@ func (a *Analyzer) ScanArtifacts(ctx context.Context, artifacts []discovery.Arti
 	exposed, hooks := exposures(views)
 	for _, h := range hooks {
 		fs.Add(buildWebhookFinding(h))
+	}
+	for _, h := range bruteForceHits(views, globalLimiter) {
+		fs.Add(buildBruteForceFinding(h))
+	}
+	for _, h := range csrfRouteHits(views, csrf) {
+		fs.Add(buildCSRFRouteFinding(h))
+	}
+	for _, f := range enumerations {
+		fs.Add(f)
+	}
+	if !globalLimiter {
+		for _, h := range springLogins(jvmFiles) {
+			fs.Add(buildBruteForceFinding(h))
+		}
 	}
 	if !a.authnEnabled {
 		leads = append(leads, exposed...)
@@ -683,8 +776,17 @@ var denyRe = regexp.MustCompile(`(?i)\b(?:deny|forbid|reject|block)\w*\s*\(`)
 // guardRegistration reads a route registered with a single argument that is
 // itself access control: authentication (`isAuthorized()`), authorization, or a
 // blanket denial (`denyAll()`).
+// inlineFunctionRe: an argument that is a function written in place, which
+// handles the request; a guard is a reference or a call that returns one.
+var inlineFunctionRe = regexp.MustCompile(`^(?:async\s+)?(?:function\b|\([^()]*\)\s*(?::[^=]+)?=>|[A-Za-z_$][\w$]*\s*=>)`)
+
 func guardRegistration(chain []mwRef, r *route) (authn, authz string) {
 	only := mwRef{r.file, r.args[0]}
+	if inlineFunctionRe.MatchString(strings.TrimSpace(only.text())) {
+		// `app.post('/login', (req, res) => ...)` is an endpoint, not a guard
+		// registered for a route served elsewhere.
+		return "", ""
+	}
 	authn, authz = classifyChain(append(append([]mwRef(nil), chain...), only))
 	if authn == "" && authz == "" && denyRe.MatchString(only.text()) {
 		authz = compact(only.text())

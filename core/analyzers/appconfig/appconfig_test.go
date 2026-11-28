@@ -32,6 +32,14 @@ func TestSettingsWrittenInSource(t *testing.T) {
 		{"django dev settings", "proj/settings/local.py", lexctx.LangPython, "DEBUG = True\n", RuleDebugMode, false},
 		{"DEBUG outside settings", "tools/build.py", lexctx.LangPython, "DEBUG = True\n", RuleDebugMode, false},
 		{"debug in a comment", "app.py", lexctx.LangPython, "# app.run(debug=True) for local runs\napp.run()\n", RuleDebugMode, false},
+		{"django debug on unless the environment says otherwise", "proj/settings.py", lexctx.LangPython, "DEBUG = os.environ.get(\"DJANGO_DEBUG\", \"1\") == \"1\"\n", RuleDebugMode, true},
+		{"django env_bool defaulting on", "proj/settings.py", lexctx.LangPython, "DEBUG = env_bool(\"DJANGO_DEBUG\", True)\n", RuleDebugMode, true},
+		{"django decouple default on", "proj/settings.py", lexctx.LangPython, "DEBUG = config('DEBUG', default=True, cast=bool)\n", RuleDebugMode, true},
+		{"django debug off unless the environment says so", "proj/settings.py", lexctx.LangPython, "DEBUG = os.getenv(\"DEBUG\", \"False\").lower() == \"true\"\n", RuleDebugMode, false},
+		{"django env default on in dev settings", "proj/settings/dev.py", lexctx.LangPython, "DEBUG = env_bool(\"DJANGO_DEBUG\", True)\n", RuleDebugMode, false},
+		{"tornado settings dict", "server.py", lexctx.LangPython, "import tornado.web\nsettings = {\n    \"template_path\": \"t\",\n    \"debug\": True\n}\n", RuleDebugMode, true},
+		{"tornado Application keyword", "server.py", lexctx.LangPython, "import tornado.web\napp = tornado.web.Application(handlers, debug=True)\n", RuleDebugMode, true},
+		{"a debug key outside tornado", "report.py", lexctx.LangPython, "opts = {\"verbose\": 1, \"debug\": True}\n", RuleDebugMode, false},
 
 		// APPCFG-002 CORS from any origin.
 		{"spring addAllowedOriginPattern", "Cors.java", lexctx.LangJava, "config.addAllowedOriginPattern(\"*\");\n", RuleCORSAny, true},

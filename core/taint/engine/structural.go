@@ -34,8 +34,22 @@ func ExtractUnits(filePath string, lang lexctx.Lang, content []byte) (units []ta
 	// ordinary import idiom be recognised. Additions only; see imports.go.
 	applyImportAliases(drafts, importAliases(lang, content))
 	if lang == lexctx.LangPython {
+		// Mass assignment through **mapping: see mass_assignment.go.
+		applyKwargsSplats(drafts)
+	}
+	if lang == lexctx.LangPython {
 		// XXE: see xxe_python.go.
 		applyXXEParsers(drafts, pythonXXEParsers(content))
+	}
+	if lang == lexctx.LangJava {
+		// Bean copies named by their import: see mass_assignment.go.
+		applyJavaBeanCopies(drafts, content)
+		// Spring MVC "redirect:" view names: see redirect_java.go.
+		applySpringRedirectViews(drafts, content)
+	}
+	if lang == lexctx.LangJavaScript {
+		// XXE through libxmljs's noent option: see xxe_libxmljs.go.
+		applyLibxmljsNoent(drafts, content)
 	}
 	if lang == lexctx.LangPython {
 		// Trust boundary: see trust_boundary_python.go.
@@ -108,16 +122,17 @@ func copyKeywordArgs(m map[string]string) map[string]string {
 // taint.Statement, copying the argument-shape evidence into taint.SinkArgInfo.
 func toStatement(d *stmtDraft) taint.Statement {
 	st := taint.Statement{
-		Line:        d.line,
-		Assigns:     d.assigns,
-		Conditional: d.conditional,
-		Calls:       append([]string(nil), d.calls...),
-		Reads:       append([]string(nil), d.reads...),
-		Chains:      append([]string(nil), d.chains...),
-		Returns:     append([]string(nil), d.returns...),
-		IsReturn:    d.isReturn,
-		Expr:        d.expr,
-		SQLVars:     append([]string(nil), d.sqlVars...),
+		Line:         d.line,
+		Assigns:      d.assigns,
+		Conditional:  d.conditional,
+		Calls:        append([]string(nil), d.calls...),
+		Reads:        append([]string(nil), d.reads...),
+		Chains:       append([]string(nil), d.chains...),
+		Returns:      append([]string(nil), d.returns...),
+		IsReturn:     d.isReturn,
+		FieldBinding: d.fieldBinding,
+		Expr:         d.expr,
+		SQLVars:      append([]string(nil), d.sqlVars...),
 	}
 	if len(d.sinkArgs) > 0 {
 		st.SinkArgs = make(map[string]taint.SinkArgInfo, len(d.sinkArgs))
@@ -231,6 +246,9 @@ type taintInfo struct {
 	sqlBuilt bool
 	// throughCall: see taint.Flow.ThroughCall.
 	throughCall bool
+	// whole: the value is the whole request object, every field the client
+	// sent (mass_assignment.go).
+	whole bool
 }
 
 // passResult is the output of a forward pass: the flows found, the final taint
@@ -484,6 +502,9 @@ func (e *StructuralEngine) forwardPass(
 							", or the source cannot reach that class"))
 					continue
 				}
+				if sink.VulnClass == taint.VulnMassAssignment && !massAssignmentReaches(lang, &sink, rawCall, info, v, ti) {
+					continue // a field of the request, or the record written to
+				}
 				if inlineCleared[v][sink.VulnClass] {
 					suppressed = append(suppressed, suppression(lang, unit, st, &sink, rawCall, sourceVar,
 						"a sanitizer wrapping the value at the call cleared it for "+
@@ -599,7 +620,7 @@ func (e *StructuralEngine) forwardPass(
 				}
 			}
 			checked.admit(cleared, st.Assigns, st.Line, e.partialClasses(lang, st.Calls))
-			setTaint(taintInfo{src: src, srcLine: st.Line, cleared: cleared})
+			setTaint(taintInfo{src: src, srcLine: st.Line, cleared: cleared, whole: wholeBinding(lang, st, src, tainted)})
 			continue
 		}
 
@@ -620,7 +641,7 @@ func (e *StructuralEngine) forwardPass(
 			// a launder-through-helper (return a constant) not over-report. Only a
 			// LONE call qualifies; a compound RHS (`x = helper(a) + tainted`) still
 			// falls through to conservative read-propagation.
-			if e.rhsIsLoneLocalCall(st, summaries) {
+			if e.rhsIsLoneLocalCall(lang, st, summaries) {
 				clearTaint()
 				continue
 			}
@@ -630,12 +651,19 @@ func (e *StructuralEngine) forwardPass(
 		// most-recently-introduced source and its cleared set.
 		var carried *taintInfo
 		for _, v := range sortedReads(st.Reads) {
-			if ti, ok := tainted[v]; ok {
-				c := cloneTaintInfo(ti)
-				c.sqlBuilt = c.sqlBuilt || slices.Contains(st.SQLVars, v)
-				carried = &c
-				break
+			ti, ok := tainted[v]
+			if !ok {
+				continue
 			}
+			c := cloneTaintInfo(ti)
+			if st.FieldBinding {
+				c.whole = itemsOfWhole(lang, st.Expr, tainted)
+			} else {
+				c.whole = c.whole && keepsWhole(st.Expr, v)
+			}
+			c.sqlBuilt = c.sqlBuilt || slices.Contains(st.SQLVars, v)
+			carried = &c
+			break
 		}
 		if carried == nil {
 			// LHS reassigned from untainted data: it becomes clean.
@@ -648,14 +676,20 @@ func (e *StructuralEngine) forwardPass(
 		for k, v := range carried.cleared {
 			cleared[k] = v
 		}
+		// An HTML decoder in the statement undoes an escaper beside it
+		// (decodeForHTML(encodeForHTML(p))): XSS stays.
+		decodes := len(htmlDecoded(st)) > 0
 		for _, rawCall := range st.Calls {
 			for _, class := range e.sanitizerClasses(lang, rawCall) {
+				if class == taint.VulnXSS && decodes {
+					continue
+				}
 				cleared[class] = true
 			}
 		}
 		checked.admit(cleared, st.Assigns, st.Line, e.partialClasses(lang, st.Calls))
 		setTaint(taintInfo{src: carried.src, srcLine: carried.srcLine, srcFile: carried.srcFile, cleared: cleared, via: carried.via,
-			sqlBuilt: carried.sqlBuilt, throughCall: carried.throughCall || !handsOn(st.Calls)})
+			sqlBuilt: carried.sqlBuilt, throughCall: carried.throughCall || !handsOn(st.Calls), whole: carried.whole})
 	}
 
 	return passResult{flows: flows, suppressed: suppressed, state: tainted, returned: returned}
@@ -683,7 +717,19 @@ func (e *StructuralEngine) interprocSinkFlows(lang string, unit *taint.Unit, st 
 				continue
 			}
 			for _, op := range e.argOperands(lang, info, argIdx, tainted, st.Line) {
+				// One flow per sink the parameter reaches: a helper that
+				// logs its argument and then runs it in a shell is two
+				// defects, and stopping at the first sink in the summary
+				// hid the second.
+				reached := map[argSinkAt]bool{}
 				for _, as := range sinks {
+					at := argSinkAt{file: as.file, rule: as.sink.RuleID, line: as.line}
+					if reached[at] {
+						continue
+					}
+					if as.sink.VulnClass == taint.VulnMassAssignment && !op.ti.whole {
+						continue // the caller passes a field, not the whole request object
+					}
 					if op.ti.cleared[as.sink.VulnClass] || op.ti.src.Excludes(as.sink.VulnClass) {
 						continue // caller already sanitized for this class, or the source's value cannot reach it
 					}
@@ -725,12 +771,19 @@ func (e *StructuralEngine) interprocSinkFlows(lang string, unit *taint.Unit, st 
 						// caller's to report.
 						ThroughCall: op.ti.throughCall,
 					})
-					break // one flow per (arg, helper) is enough
+					reached[at] = true
 				}
 			}
 		}
 	}
 	return out
+}
+
+// argSinkAt is one sink a helper's parameter reaches: where it is and which
+// rule it is.
+type argSinkAt struct {
+	file, rule string
+	line       int
 }
 
 // slotSanitizes reports whether, in one argument's code, the variable v is
@@ -826,18 +879,19 @@ func (e *StructuralEngine) interprocReturnTaint(lang string, st *taint.Statement
 // authoritative for x's taint. It is used to treat a non-taint-returning helper
 // as a barrier. A compound RHS (multiple calls, or a bare variable read
 // alongside the call) returns false so conservative read-propagation still runs.
-func (e *StructuralEngine) rhsIsLoneLocalCall(st *taint.Statement, summaries map[string]*funcSummary) bool {
-	if len(st.Calls) != 1 {
+func (e *StructuralEngine) rhsIsLoneLocalCall(lang string, st *taint.Statement, summaries map[string]*funcSummary) bool {
+	call, ok := loneCall(lang, st)
+	if !ok || !jvmCallIsOwnMethod(lang, st, call) {
 		return false
 	}
-	sum := resolveLocalCallee(st.Calls[0], summaries)
+	sum := resolveLocalCallee(call, summaries)
 	if sum == nil {
 		return false
 	}
 	// Every variable the statement reads must be an argument of the sole call;
 	// any read outside the call means the RHS is compound and taint could enter
 	// by a path the helper's summary does not cover.
-	info, ok := lookupSinkArg(st, st.Calls[0])
+	info, ok := lookupSinkArg(st, call)
 	if !ok {
 		return false
 	}
@@ -848,7 +902,7 @@ func (e *StructuralEngine) rhsIsLoneLocalCall(st *taint.Statement, summaries map
 	for _, v := range info.TaintedArgVars {
 		permitted[v] = struct{}{}
 	}
-	for _, seg := range strings.Split(st.Calls[0], ".") {
+	for _, seg := range strings.Split(call, ".") {
 		permitted[seg] = struct{}{}
 	}
 	for _, r := range st.Reads {
@@ -857,6 +911,67 @@ func (e *StructuralEngine) rhsIsLoneLocalCall(st *taint.Statement, summaries map
 		}
 	}
 	return true
+}
+
+// loneCall returns the one call on st's right-hand side. In Java and Kotlin
+// that includes a method called on an object constructed in place with no
+// arguments, `new Helper().run(a, b)` (Kotlin `Helper().run(a, b)`): the
+// statement's calls are the constructor and the method, and an object built
+// from nothing carries no request data, so the method's summary decides the
+// result as it does for `run(a, b)` or `this.run(a, b)`. A constructor that
+// takes arguments could carry taint into the object, and is not a lone call.
+func loneCall(lang string, st *taint.Statement) (string, bool) {
+	if len(st.Calls) == 1 {
+		return st.Calls[0], true
+	}
+	if len(st.Calls) != 2 || (lang != "java" && lang != "kotlin") {
+		return "", false
+	}
+	for i, ctor := range st.Calls {
+		method := st.Calls[1-i]
+		name, isMethod := strings.CutPrefix(method, ctor+".")
+		if !isMethod || strings.Contains(name, ".") || strings.Contains(ctor, ".") {
+			continue
+		}
+		if ctor == "" || ctor[0] < 'A' || ctor[0] > 'Z' {
+			continue
+		}
+		if info, found := lookupSinkArg(st, ctor); found {
+			for _, slot := range info.PositionalVars {
+				if len(slot) > 0 {
+					return "", false
+				}
+			}
+		}
+		return method, true
+	}
+	return "", false
+}
+
+// jvmCallIsOwnMethod reports, for Java and Kotlin, whether call names a method
+// of this file's own classes: called bare, on `this` or `super`, or on an
+// object constructed in place (loneCall). A call on any other receiver --
+// `thing.doSomething(p)` on an interface declared elsewhere -- is that type's
+// method, and only shares a name with a local one; its summary cannot make the
+// call a barrier. Other languages are unchanged.
+func jvmCallIsOwnMethod(lang string, st *taint.Statement, call string) bool {
+	if lang != "java" && lang != "kotlin" {
+		return true
+	}
+	recv, _, hasRecv := strings.Cut(call, ".")
+	if !hasRecv {
+		return true
+	}
+	if strings.Count(call, ".") != 1 {
+		return false
+	}
+	switch recv {
+	case "this", "super":
+		return true
+	}
+	// The constructed-in-place form: the constructor is the statement's other
+	// call (loneCall has checked it takes no arguments).
+	return len(st.Calls) == 2 && slices.Contains(st.Calls, recv)
 }
 
 // resolveLocalCallee resolves a raw call chain to a locally-defined function's
@@ -886,7 +1001,7 @@ func cloneTaintInfo(ti taintInfo) taintInfo {
 	for k, v := range ti.cleared {
 		cleared[k] = v
 	}
-	return taintInfo{src: ti.src, srcLine: ti.srcLine, srcFile: ti.srcFile, cleared: cleared, via: append([]string(nil), ti.via...), sqlBuilt: ti.sqlBuilt, throughCall: ti.throughCall}
+	return taintInfo{src: ti.src, srcLine: ti.srcLine, srcFile: ti.srcFile, cleared: cleared, via: append([]string(nil), ti.via...), sqlBuilt: ti.sqlBuilt, throughCall: ti.throughCall, whole: ti.whole}
 }
 
 // otherFile is file when it is not the reporting file, else empty: a flow
@@ -914,6 +1029,7 @@ func sortedReads(reads []string) []string {
 // sanitizer covers.
 func (e *StructuralEngine) inlineSanitized(lang string, st *taint.Statement) map[string]map[taint.VulnClass]bool {
 	out := map[string]map[taint.VulnClass]bool{}
+	decoded := htmlDecoded(st)
 	for _, rawCall := range st.Calls {
 		classes := e.sanitizerClasses(lang, rawCall)
 		if len(classes) == 0 {
@@ -928,7 +1044,36 @@ func (e *StructuralEngine) inlineSanitized(lang string, st *taint.Statement) map
 				out[v] = map[taint.VulnClass]bool{}
 			}
 			for _, c := range classes {
+				if c == taint.VulnXSS && decoded[v] {
+					continue
+				}
 				out[v][c] = true
+			}
+		}
+	}
+	return out
+}
+
+// htmlDecoders undo HTML escaping: ESAPI's decodeForHTML, Commons'
+// unescapeHtml/3/4, Spring's HtmlUtils.htmlUnescape. Keyed by method name.
+var htmlDecoders = map[string]bool{
+	"decodeForHTML": true, "unescapeHtml": true, "unescapeHtml3": true,
+	"unescapeHtml4": true, "htmlUnescape": true,
+}
+
+// htmlDecoded returns the variables an HTML decoder in st reads. An escaper
+// inside a decoder in the same statement -- decodeForHTML(encodeForHTML(p)) --
+// is undone, so it does not clear XSS for them.
+func htmlDecoded(st *taint.Statement) map[string]bool {
+	out := map[string]bool{}
+	for _, rawCall := range st.Calls {
+		name := rawCall[strings.LastIndex(rawCall, ".")+1:]
+		if !htmlDecoders[name] {
+			continue
+		}
+		if info, ok := lookupSinkArg(st, rawCall); ok {
+			for _, v := range info.TaintedArgVars {
+				out[v] = true
 			}
 		}
 	}
@@ -1153,7 +1298,7 @@ func (e *StructuralEngine) inlineSourceOperands(lang string, info taint.SinkArgI
 			name:   name,
 			slot:   slot,
 			vector: strings.HasPrefix(strings.TrimSpace(argText), "["),
-			info:   taintInfo{src: src, srcLine: srcLine, cleared: cleared},
+			info:   taintInfo{src: src, srcLine: srcLine, cleared: cleared, whole: isWholeExpr(lang, argText)},
 		}
 	}
 	return out
@@ -1617,7 +1762,34 @@ func (e *StructuralEngine) sinkArgShapeDangerous(sink *taint.Sink, info taint.Si
 		// JPA's createNativeQuery(sql, resultClass) and JdbcTemplate.query(sql,
 		// mapper, args...): the SQL is the first argument and nothing after it
 		// is interpolated.
-		"createNativeQuery", "jdbcTemplate.query", "jdbc.query":
+		"createNativeQuery", "jdbcTemplate.query", "jdbc.query",
+		// Java HTTP clients (SSRF): the first argument is the request's
+		// target. What follows is a URI template variable (encoded into the
+		// URL, not the host), a request body or a response type, so a tainted
+		// value there does not choose where the request goes.
+		"get.uri", "post.uri", "put.uri", "patch.uri", "delete.uri", "head.uri",
+		"options.uri", "method.uri", "newBuilder.uri", "HttpRequest.newBuilder",
+		"getForEntity", "getForObject", "postForEntity", "postForObject", "postForLocation",
+		"patchForObject", "headForHeaders", "optionsForAllow", "restTemplate.exchange",
+		"client.target", "newClient.target", "HttpClient.create", "Jsoup.connect",
+		"HttpGet", "HttpPost", "HttpPut", "HttpPatch", "HttpDelete", "HttpHead",
+		// Java expression languages and Handlebars: the expression or template
+		// is the first argument. The context, root or variable map after it is
+		// data the expression reads, never parsed.
+		"spel_parser.parseExpression", "SpelExpressionParser.parseExpression", "spel_parser.parseRaw",
+		"Ognl.getValue", "Ognl.setValue", "Ognl.parseExpression",
+		"MVEL.eval", "MVEL.evalToString", "MVEL.executeExpression", "MVEL.compileExpression",
+		"handlebars.compileInline",
+		// Java XML parsers (XXE): the document is the first argument. A
+		// SAX handler or a system ID after it is not parsed as XML.
+		"xml_dom_builder.parse", "newDocumentBuilder.parse",
+		"xml_sax_parser.parse", "newSAXParser.parse", "getXMLReader.parse",
+		"xml_stax_factory.createXMLStreamReader", "xml_stax_factory.createXMLEventReader",
+		"newInstance.createXMLStreamReader", "newInstance.createXMLEventReader",
+		"newFactory.createXMLStreamReader", "newFactory.createXMLEventReader",
+		// libxmljs with noent (XXE): the document is the first argument; the
+		// second is the options object.
+		"xxe_noent_parser.parse":
 		// JDBC and Spring JdbcTemplate: the SQL string is the first argument;
 		// everything after it is bind parameters or a row mapper, which is
 		// the safe parameterized form. A zero-argument executeUpdate() runs a
@@ -1941,6 +2113,10 @@ var sinkValueSlot = map[string]int{
 	// Java NIO and java.io: the path is the first argument, the data after it.
 	"Files.write": 0, "Files.writeString": 0, "Files.newOutputStream": 0, "Files.newBufferedWriter": 0,
 	"FileOutputStream": 0, "FileWriter": 0,
+	// Java templates: Velocity's evaluate(context, writer, logTag, template)
+	// and FreeMarker's new Template(name, source, cfg). The context or model
+	// holds data; only the template source is parsed.
+	"Velocity.evaluate": 3, "velocity_engine.evaluate": 3, "freemarker.template.Template": 1,
 	// Swift: createFile(atPath:contents:) -- the data written is not the path.
 	"createFile.atPath": 0,
 	// Not a bare `open`: Python's takes the path first, Perl's third.

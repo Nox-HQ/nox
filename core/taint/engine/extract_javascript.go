@@ -86,6 +86,7 @@ func extractJavaScript(lines []logicalLine) []unitDraft {
 		} else if binds, ok := jsDestructuring(ll); ok && !isHeader {
 			for _, b := range binds {
 				if st, ok := recognizeStatement(langJavaScript, b); ok {
+					st.fieldBinding = true
 					stack[len(stack)-1].unit.stmts = append(stack[len(stack)-1].unit.stmts, st)
 				}
 			}
@@ -105,7 +106,7 @@ func extractJavaScript(lines []logicalLine) []unitDraft {
 		// openDepth) land in the new unit.
 		if isHeader {
 			u := &unitDraft{funcName: name, params: params, headerLine: ll.line,
-				requestBound: nestRequestBound(ll.code)}
+				requestBound: nestRequestBound(ll.code, ll.raw)}
 			if serverFile && len(stack) == 1 && strings.HasPrefix(trimmed, "export ") {
 				serverActionParams(u)
 			}

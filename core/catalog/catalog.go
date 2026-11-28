@@ -18,14 +18,18 @@ import (
 	"github.com/nox-hq/nox/core/analyzers/authz"
 	"github.com/nox-hq/nox/core/analyzers/data"
 	"github.com/nox-hq/nox/core/analyzers/deps"
+	"github.com/nox-hq/nox/core/analyzers/errleak"
 	"github.com/nox-hq/nox/core/analyzers/fileperms"
 	"github.com/nox-hq/nox/core/analyzers/hardening"
 	"github.com/nox-hq/nox/core/analyzers/iac"
+	"github.com/nox-hq/nox/core/analyzers/logleak"
 	"github.com/nox-hq/nox/core/analyzers/memsafe"
+	"github.com/nox-hq/nox/core/analyzers/protopollution"
 	"github.com/nox-hq/nox/core/analyzers/provenance"
 	"github.com/nox-hq/nox/core/analyzers/secrets"
 	"github.com/nox-hq/nox/core/analyzers/slop"
 	"github.com/nox-hq/nox/core/analyzers/taintflow"
+	"github.com/nox-hq/nox/core/analyzers/templates"
 	"github.com/nox-hq/nox/core/analyzers/variants"
 	"github.com/nox-hq/nox/core/analyzers/weakcrypto"
 	"github.com/nox-hq/nox/core/rules"
@@ -77,7 +81,11 @@ func allRuleSets() []*rules.RuleSet {
 		appconfig.NewAnalyzer().Rules(),
 		weakcrypto.NewAnalyzer().Rules(),
 		hardening.NewAnalyzer().Rules(),
+		templates.NewAnalyzer().Rules(),
 		memsafe.NewAnalyzer().Rules(),
+		protopollution.NewAnalyzer().Rules(),
+		errleak.NewAnalyzer().Rules(),
+		logleak.NewAnalyzer().Rules(),
 		fileperms.NewAnalyzer().Rules(),
 	}
 }

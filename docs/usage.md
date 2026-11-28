@@ -141,7 +141,7 @@ A full scan covers every concern in one pass. `--only` and `--skip` (or
 | Scope | What runs | Rule IDs |
 |-------|-----------|----------|
 | `secrets` | secret detection | `SEC-*` |
-| `code` | taint flow, agent flow, CVE variants, weak crypto, hardening, memory safety | `TAINT-*`, `AGENTFLOW-*`, `VARIANT-*`, `CRYPTO-*`, `HARDEN-*`, `MEMSAFE-*` |
+| `code` | taint flow, agent flow, CVE variants, weak crypto, hardening, template output, memory safety, prototype pollution, error disclosure, sensitive data in logs | `TAINT-*`, `AGENTFLOW-*`, `VARIANT-*`, `CRYPTO-*`, `HARDEN-*`, `XSS-*`, `MEMSAFE-*`, `PROTO-*`, `ERRLEAK-*`, `LOGLEAK-*` |
 | `deps` | lockfiles, vulnerability lookups (NOX Intelligence, verified against OSV.dev), licences, SBOM | `VULN-*`, `CONT-*`, `LIC-*` |
 | `iac` | infrastructure-as-code and file permissions | `IAC-*`, `PERM-*` |
 | `ai` | AI and MCP rules, the AI inventory | `AI-*`, `MCP-*` |
@@ -1132,7 +1132,15 @@ scan:
     # auth middleware, decorator, dependency or check on the caller): a lead
     # by default, a finding when named here (CWE-306). WEBHOOK-001, a Stripe,
     # GitHub or Slack webhook payload accepted without signature
-    # verification, is not opt-in: it reports by default. SEC-951, the generic "credential-named key with a
+    # verification, is not opt-in: it reports by default. Nor are AUTHN-002, a
+    # login, OTP or token-consuming reset route with no rate limit, throttle or
+    # lockout visible on the route, its router, the application or the handler
+    # (CWE-307; Spring Security formLogin/httpBasic count as login routes),
+    # AUTHN-003, a registration, forgot-password or code-issuing route with no
+    # throttle (CWE-770), and AUTHN-004, a POST authenticated by the session
+    # cookie in a Flask or Express application with no CSRF protection
+    # (CWE-352). A limit enforced in a gateway is not visible to
+    # either; waive with that reason. SEC-951, the generic "credential-named key with a
     # random-looking value" rule, runs by default at medium severity and low
     # confidence; `disable` above switches it off.
     enable: []   # e.g. [TAINT-011, AUTHZ-001, AUTHN-001]

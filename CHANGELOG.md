@@ -9,6 +9,336 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- AUTHN-005 (CWE-204, medium): account enumeration. A login, sign-in or
+  password-reset path (named so, or registered on such a route, or Spring's
+  `loadUserByUsername`) answers that the account does not exist: "No account
+  is registered with that address", "User [x] not found", "用户不存在",
+  `no_portal_account`. Not reported: one message for both cases ("Invalid
+  email or password", "If that account exists…"), Spring's
+  `UsernameNotFoundException` (hidden by default), log lines, lookups by an
+  id the caller already holds, and paths that are not authentication.
+- CRYPTO-003 (CWE-916, high severity, medium confidence): a password hashed
+  with too little work, in Java/Kotlin, JavaScript/TypeScript and Python.
+  - a fast digest (MD5, SHA-1, SHA-2: `hashlib`, `createHash`, CryptoJS,
+    Spring/Commons `DigestUtils`, `MessageDigest`, Guava `Hashing`, a bare
+    `md5()`/`sha256()` helper) of a value named as a password, passphrase,
+    passcode, PIN or credential, or stored into a name that says it holds
+    one's digest (`passwordHash = …`, `setPinHash(…)`);
+  - PBKDF2 below 10,000 iterations (`PBEKeySpec`, `pbkdf2_hmac`,
+    `pbkdf2Sync`) and bcrypt below cost 10, read from a literal, a
+    `x || 4` fallback, or a constant in the same file.
+  - Not reported: digests of tokens, nonces and reset tokens; HTTP Digest
+    and MONGODB-CR protocol hashes; the Pwned Passwords range API; calls
+    written in strings or comments.
+- APPCFG-009 (CWE-1021, medium): framing protection switched off. Spring
+  Security `frameOptions().disable()` and `headers().disable()` (all three
+  spellings, and the Kotlin DSL); X-Frame-Options set to `ALLOWALL` or `*`,
+  or removed from the response; `frame-ancestors *`; helmet
+  `frameguard: false` / `xFrameOptions: false`; Django
+  `@xframe_options_exempt` and `X_FRAME_OPTIONS = 'ALLOWALL'`. A header
+  removed and `frame-ancestors *` set on the next line are one finding.
+- APPCFG-010 (CWE-384, medium): Spring Security session fixation protection
+  set to `none`, so the pre-login session id survives authentication.
+- Tree-sitter front ends for C#, PHP, Ruby and Kotlin taint extraction,
+  on by default, behind the same A/B gate as Python, JavaScript/TypeScript
+  and Java (ADR 0006). The tree supplies which physical lines form one
+  statement, so SQL or a command built across several lines
+  (`$q = "SELECT ..." .` / `"WHERE id = " .` / `$id;`) reaches its sink
+  where the line segmenter read it as separate statements. The same binary
+  with and without the front ends, over 27 public repositories: C# +2 / -0
+  findings, PHP +5 / -0 (one false positive that a one-line version of the
+  statement also produces), Kotlin no change, Ruby +1 / -0. Ruby joins only a
+  multi-line operator expression, not a whole method chain: joining chains
+  was measured and added 20 false positives. A file the parser declines (a
+  grammar error, too large) is segmented as before. `NOX_TAINT_TREESITTER`
+  selects the languages, for an A/B.
+  - **Grammars:** `tree-sitter-c-sharp` v0.24.0, `tree-sitter-php` v0.25.2
+    (the `php` grammar, so a file with HTML around its `<?php` parses),
+    `tree-sitter-ruby` v0.23.1 and `tree-sitter-grammars/tree-sitter-kotlin`
+    v1.1.0, pinned by commit and rebuilt byte-for-byte by
+    `scripts/treesitter/build.sh --check`.
+  - **Binary size:** +14.4 MB (C# 7.4, Kotlin 3.6, Ruby 2.2, PHP 1.2).
+    Parse budgets and sizes are in
+    docs/benchmarks/2026-11-23-treesitter-budget.
+  - **A finding can move line.** A finding on a statement that
+    spans lines can be reported on the statement's first line, as it can be
+    for Java and JavaScript, so a baseline entry for such a finding in these
+    languages can need refreshing.
+- Tree-sitter front ends for Scala, Swift and Rust taint extraction,
+  on by default, behind the same A/B gate as the other languages (ADR 0006).
+  Each joins the physical lines of a multi-line operator expression, so SQL or
+  a command concatenated across lines (`val q = "SELECT ..." +` / `id`)
+  reaches its sink where the line segmenter read two statements. Like Ruby, and
+  unlike Java, they join only the binary expression and not the whole
+  statement: a probe showed a method chain read whole puts a constant-argument
+  sink and a tainted variable in one statement, a false positive. The same
+  binary with and without the front ends, over 22 public repositories: no
+  finding added or dropped in any language, so the gain is shown by unit tests
+  and probe files, not by the corpus. A file the parser declines is segmented
+  as before. `NOX_TAINT_TREESITTER` selects the languages, for an A/B.
+  - **Grammars:** `tree-sitter-scala` v0.26.14, `alex-pinkus/tree-sitter-swift`
+    0.7.4 and `tree-sitter-rust` v0.24.2, pinned by commit and rebuilt byte-for-byte by
+    `scripts/treesitter/build.sh --check`.
+  - **Binary size:** +10.3 MB (Scala 4.7, Swift 4.3, Rust 1.2). On
+    Signal-iOS, a Swift-heavy repository, a code-only scan used 85% more CPU
+    time with the Swift front end on (151 s to 279 s user). Parse budgets
+    and sizes are in docs/benchmarks/2026-11-23-treesitter-budget.
+  - **Error trees:** the share of files that fall back to the line segmenter
+    is 0.1% for Scala, 8.1% for Swift and 9.1% for Rust.
+  - **C/C++ not included:** `tree-sitter-cpp` gave an error tree for 47.6% of
+    C/C++ files (56% of `.c`), so half the files would pay for the parse and
+    fall back anyway; `tree-sitter-c` for `.c` files is to be tried first.
+  - **Go stays on go/ast.**
+- Tree-sitter front end for C (`.c` files) taint extraction, on by default
+  (ADR 0006). It joins a statement across lines: a declaration whose
+  initializer starts on the next line (`char *cmd =` / `getenv("CMD");`), an
+  assignment, cast or ternary continued, and a `return` whose value is on the
+  next line. The line segmenter read each as two statements, so `cmd` was
+  assigned from nothing, and a helper returning `getenv(...)` that way did not
+  count as returning taint. C has no method chains, so it joins whole
+  statements; a declaration is joined per declarator. C++ and headers keep the
+  line segmenter.
+  - **Error trees are used locally.** Parsed without its preprocessor, 53% of
+    `.c` files have an error somewhere (unknown macros, conditionals inside a
+    statement; busybox 94%). A join is taken only from a statement that holds
+    no error and lies inside none, and the rest of the file is segmented as
+    before, so an error costs its own statements, not the file. ADR 0006,
+    rule 3, is amended for front ends that only add joins.
+  - **Grammar:** `tree-sitter-c` v0.24.2, pinned by commit, +0.7 MB.
+  - **A/B** over eight C repositories (the same binary with and without the
+    front end): 211 to 212 findings, the one added an environment-to-path
+    flow in git whose stated path runs through field-insensitive struct
+    taint, the same class as the environment-to-path finding git already
+    had. RealVuln's three `.c` files report the same. On redis a code-only
+    scan used 77% more CPU time (14.5 s to 25.5 s user), the cost of the
+    parse. The gain is shown by unit tests and a probe file, not the corpus.
+- Taint extraction for Perl, PowerShell, Objective-C, Lua, Elixir, Dart and
+  Groovy continues a statement split after an operator or an assignment
+  (`local cmd = "ls " ..` / `os.getenv("DIR")`, `my $c =` / `$ENV{X};`,
+  PowerShell's backtick). The line segmenter continued a line only inside
+  brackets, so each of these lost its flow. Each language lists only operators
+  that cannot end a statement in it (a Perl line may end in a regex's `/`, a
+  Dart one in a nullable type's `?`); comments are ignored and a string counts
+  as an operand. These languages stay on the line segmenter: a probe found no
+  other gap a parse tree would close, so no grammar is added for them.
+- Tree-sitter front end for C++ (`.cpp`, `.cc`, `.cxx`) taint extraction, on
+  by default. It joins what the C front end joins, and a multi-line operator
+  expression (`std::string("ls ") +` / `getenv("CMD")`), reading error trees
+  per statement as C does (16.7% of C++ files have an error somewhere). A
+  statement holding a chained call (`db.exec("x").bind(id)`, `p->f()->g()`)
+  is not joined: read whole it would call the sink with a constant and read
+  the tainted argument in one statement. Headers keep the line segmenter.
+  - **Grammar:** `tree-sitter-cpp` v0.23.4, pinned by commit, +3.6 MB.
+  - **A/B** over seven C++ repositories and three C repositories with C++
+    sources: 141 to 141 findings, none added or dropped. On poco a code-only
+    scan used 38% more CPU time (63 s to 87 s user).
+
+- APPCFG-001 debug mode (CWE-215) extended.
+  - **Django:** `DEBUG` read from the environment with a default that turns
+    it on, as in `os.environ.get("DJANGO_DEBUG", "1") == "1"`,
+    `env_bool("DEBUG", True)` and `config("DEBUG", default=True)`. Only a
+    non-development settings module counts.
+  - **Tornado:** `Application(..., debug=True)` and a `"debug": True`
+    settings dict.
+  - **Spring and JSF configuration outside dev/local/test profiles:**
+    - stack traces in error responses: `include-stacktrace` set to
+      `always` or `on-param`;
+    - every actuator endpoint exposed over HTTP: `exposure.include=*`;
+    - the H2 web console enabled;
+    - JSF `PROJECT_STAGE` set to Development.
+
+- LOGLEAK-001 sensitive data written to a log (CWE-532), new analyzer
+  covering JavaScript/TypeScript, Python and Java.
+  - **Log calls read:** `console.*`, a logger's level methods
+    (pino/winston/NestJS, Python `logging`, SLF4J/Log4j/JUL/JBoss),
+    `print`, `System.out`.
+  - **Reported when given:** a credential's value (password, token, secret,
+    API key, cookie, card, national id or account number, by name); an
+    Authorization, Cookie or API-key header; a request's whole body or
+    header set, directly or through a local name assigned from it; a
+    sign-in, sign-up or reset form object.
+  - **Configuration:** a Django settings module that is not a development
+    one with the console or file e-mail backend (every password-reset link
+    goes to the log); a sqlite `set_trace_callback(print)` or logger.
+  - **Not reported:** a credential's name in the message text; names about
+    the credential (`tokenType`, `passwordLength`, `tokenId`); a value only
+    measured, tested or passed through another call (`token.length`,
+    `isExpired(token)`, `mask(token)`); one field of a request body; browser
+    code.
+
+- ERRLEAK-001 exception detail in the HTTP response (CWE-209), new analyzer
+  covering JavaScript/TypeScript, Python and Java. Inside an exception
+  handler, the caught exception's detail is written into the response.
+  - **Handlers:** a catch block, promise `.catch`, a node-style callback,
+    Express error middleware, Python `except`, Flask/FastAPI error handlers,
+    Spring `@ExceptionHandler`.
+  - **Detail:** the stack trace, the whole object, a traceback, driver detail,
+    or the message of an exception of a generic type (`Exception`, database
+    and IO errors, an untyped JavaScript catch).
+  - **Responses:** Express/Fastify/Koa/Next.js, Flask/Django/FastAPI response
+    builders, Spring `ResponseEntity`, the servlet writer, model and flash
+    attributes, Struts action errors, `sendError`. A `return` counts in a view,
+    an error handler or a controller.
+  - **Aliases:** `msg = e.getMessage()`, `const err = error as Error`, and a
+    Flask `error = f"...{e}"` rendered after the block.
+  - **Not reported:** the message of a specific exception type; a message in
+    a JavaScript catch that tells error kinds apart; a message sent as a 4xx
+    from an untyped JavaScript catch (the application's own validation
+    errors); log calls.
+
+- AUTHN-002 credential check without attempt limiting (CWE-307): an
+  unauthenticated login, OTP/second-factor or token-consuming password-reset
+  route -- named so by the end of its path, or by a password comparison in
+  its handler -- with no rate limiter, throttle, lockout or CAPTCHA on the
+  route, its router, the application or the handler. Spring Security
+  `formLogin()` and `httpBasic()` are reported where configured unless the
+  repository counts attempts. A Django finding is reported at the view, where
+  the limiting decorator goes. Over every route reader nox has.
+
+- AUTHN-004 CSRF on session routes (CWE-352), Flask and Express: a POST
+  authenticated by the session cookie -- Flask-Login, Flask's session,
+  express-session, cookie-session -- in an application with no CSRF library
+  or token check and a session cookie not set SameSite. Not reported:
+  - a handler that reads only a JSON body;
+  - PUT, PATCH and DELETE, which need a CORS preflight;
+  - token-authenticated routes;
+  - login and sign-up routes, which write the session rather than use it.
+
+- AUTHN-003 account creation or message issuance without throttling
+  (CWE-770): the same proposition over registration, forgot-password,
+  reset-request and one-time-code issuing routes.
+
+- PROTO-001 prototype pollution (CWE-1321), JavaScript and TypeScript: a
+  recursive merge that loops over an object's keys and recurses into
+  `target[key]` (or assigns its own recursion there) with no
+  `__proto__`/`constructor`/`prototype` check. Reported at the recursive
+  call; a shallow copy, a recursion not keyed by the loop, or a body that
+  names the unsafe keys is not. `hasOwnProperty` is not a guard: a parsed
+  `"__proto__"` key is an own property.
+
+- TAINT-014 mass assignment for Java: a request-bound object (`@RequestBody`,
+  `@ModelAttribute`, `@BeanParam`, `@Body` of an object or map type) copied
+  onto a bean with `BeanUtils.copyProperties` -- Spring's source slot, or
+  Apache Commons' `orig` slot, chosen by the file's import -- and
+  `BeanWrapper.setPropertyValue` with a property name from the request.
+
+- TAINT-014 mass assignment for Python: the whole request mapping --
+  `request.get_json()`, `request.json`, `request.form`, `request.POST`,
+  `request.data`, `json.loads(request.body...)` -- merged with `.update()` or
+  `__dict__.update()`, or passed as `**kwargs` (`User(**data)`,
+  `objects.create(**data)`); and `setattr(obj, name, value)` with an attribute
+  name the client chose.
+
+- TAINT-014: mass assignment (CWE-915) in JavaScript and TypeScript. The whole
+  request object -- `req.body`, a NestJS `@Body()` DTO, or a copy or spread of
+  either -- written onto a record: `Object.assign(record, body)` (the source,
+  not the target), Mongoose/Sequelize/TypeORM/Prisma `create`, `update`,
+  `updateOne`, `findByIdAndUpdate`, `save`, `merge`, `upsert`. A field read
+  from the request and written by name, `@Body('name')`, or a body narrowed
+  by a helper (`pick(body, [...])`) is not reported. The taint engine marks
+  values that are the whole request object for this.
+
+- APPCFG-008: Spring Security configuration switches CSRF protection off
+  (`csrf().disable()`, `csrf(c -> c.disable())`,
+  `csrf(AbstractHttpConfigurer::disable)`, `CsrfSpec::disable`) or exempts
+  routes from it (`ignoringRequestMatchers`, `ignoringAntMatchers`), and
+  the Kotlin DSL `csrf { disable() }`. Django and Flask too:
+  - a settings module whose `MIDDLEWARE` keeps sessions but not
+    `CsrfViewMiddleware` (commented out or never listed);
+  - `csrf_exempt(view)` in a URL pattern;
+  - a Django REST framework `enforce_csrf` that does nothing;
+  - Flask-WTF `@csrf.exempt` and `WTF_CSRF_ENABLED = False`;
+  - `@csrf_exempt` on a view that changes state on a submitted request.
+  An exempt view is not reported when it serves only safe methods, only
+  reads, or authenticates by a header, an API key or a signature; there the
+  exemption is the fix. CWE-352, medium severity, medium confidence: an API
+  authenticated only by bearer tokens is not exposed, and the finding says
+  so.
+
+- Java path traversal (TAINT-004): an uploaded file's name -- Spring
+  `MultipartFile.getOriginalFilename()`, Servlet `Part.getSubmittedFileName()`
+  -- is a request source, and `Files.readAttributes`, `getAttribute`, `list`,
+  `walk`, `find`, `newByteChannel`, `move`, `deleteIfExists`,
+  `createDirectories`, `createDirectory`, `createFile`, `size` and
+  `getLastModifiedTime` are sinks.
+
+- Open redirect sinks for Java (TAINT-007): a Spring MVC view name built as
+  `"redirect:" + value` (returned, assigned, or passed to `ModelAndView`),
+  `new RedirectView(url)`, JAX-RS `Response.seeOther`/`temporaryRedirect`,
+  Micronaut `HttpResponse.redirect`/`seeOther`/`temporaryRedirect`/
+  `permanentRedirect`. A fixed target, or a value after a fixed path on the
+  same site (`"redirect:/items/" + id`, `URI.create("/cohorts/" + id)`,
+  `sendRedirect("/items?id=" + id)`), is not reported; a protocol-relative
+  `"//"` prefix is.
+
+- APPCFG-007: a secret setting in Spring `application*`/`bootstrap*`
+  configuration or a Compose file falls back to a literal when its
+  environment variable is unset (`password: ${DB_PASSWORD:...}`,
+  `JWT_SECRET: ${JWT_SECRET:-...}`; CWE-798, medium). Not reported without a
+  default, with an empty one, with Compose's `:?`, with a default that is
+  another placeholder, or for a setting about a secret (a TTL, a header, a
+  key-store type). The value is never put in the finding. Mapped to ISO 27001
+  A.5.17.
+
+- TAINT-013: log injection (CWE-117, low severity, low confidence). A request
+  value reaches a call on an application logger -- a Java `Logger`/`Log` local
+  or field (SLF4J, Log4j, JUL, JBoss, Commons Logging) or the `log` a Lombok
+  logging annotation injects; NestJS `Logger`, winston, pino, bunyan, log4js
+  or `console.*`; Python `logging.*` or a `logging.getLogger` logger.
+  Placeholder arguments count: SLF4J and `logging` do not strip CR/LF. Not
+  reported after `Encode.forJava`, `StringEscapeUtils.escapeJava`,
+  `JSON.stringify`, `repr` or `json.dumps`, nor from environment variables,
+  system properties or command-line arguments, which an operator sets. A call
+  through `this.` now resolves to the field it names, for every taint sink.
+- XSS-001: a template prints a value without HTML escaping (CWE-79, low
+  confidence). Jinja, Django and Nunjucks `{{ x | safe }}` and outputs inside
+  `{% autoescape false %}`; EJS `<%- x %>`; JSF, Facelets and Struts
+  `escape="false"`; a JSP expression printing a request parameter. The taint
+  engine reads code and never saw where escaping is switched off, and most
+  such labels are stored XSS, which no taint source reaches. Framework-built
+  HTML is left out: EJS `<%- body %>` and `include`, Django `form|safe`,
+  `field.help_text|safe` and `csrf_token|safe`. Thymeleaf `th:utext` and Vue
+  `v-html` are not reported. A `.html` file is read as Jinja only under a
+  `templates/` directory or when it contains `{%`.
+- Java XXE sinks (TAINT-010, CWE-611). The JDK's DOM, SAX and StAX parsers
+  resolve external entities unless their factory is hardened, so a parse is
+  reported when its document is untrusted and its parser comes from a
+  `DocumentBuilderFactory`, `SAXParserFactory`, `XMLInputFactory` or
+  `XMLReaderFactory` made in the same file with no hardening switch named:
+  `disallow-doctype-decl`, the external-entity features,
+  `FEATURE_SECURE_PROCESSING`, `ACCESS_EXTERNAL_DTD`, `SUPPORT_DTD` or
+  `IS_SUPPORTING_EXTERNAL_ENTITIES`. A switch set to its vulnerable value does
+  not count as hardening. A parser passed in from elsewhere is not reported.
+  A SAX handler or system ID after the document is not judged.
+- Node XXE through libxmljs (TAINT-010, CWE-611). libxmljs and libxmljs2
+  substitute entities, and so read external ones, only when given
+  `noent: true`. `parseXmlString` and `parseXml` are reported when that option
+  is passed, in the call or through an options object assigned in the same
+  file, and the document is untrusted. A parse without the option is not.
+- Java template and expression injection sinks. Templates (TAINT-003,
+  CWE-1336): FreeMarker `new Template(name, source, cfg)`, Velocity
+  `Velocity.evaluate` and `VelocityEngine.evaluate`, Handlebars.java
+  `compileInline`. Expression languages (TAINT-005, CWE-94): Spring SpEL
+  `parseExpression`, OGNL `Ognl.getValue`/`setValue`/`parseExpression`, MVEL
+  `eval`/`executeExpression`/`compileExpression`. Each is a sink on the
+  template or expression only: a context, model or variable map holds data
+  and is never parsed. Generic names are bound by declared type -- a SpEL
+  parser (an `ExpressionParser` only in a file importing
+  org.springframework.expression), a `VelocityEngine`, a `Handlebars` -- and
+  an unqualified `Template` is FreeMarker's only in a file importing it.
+  RealVuln development split: +40 labelled findings, none lost; Java F3
+  9.5 -> 11.4, overall 17.3 -> 18.1.
+- Java SSRF sinks for the HTTP clients services actually use: Spring
+  RestClient and WebClient (`.get().uri(url)` and the other methods), Spring
+  RestTemplate (`getForEntity`, `postForObject`, ... and
+  `restTemplate.exchange`), java.net.http `HttpRequest.newBuilder(uri)` and
+  `.uri(uri)`, JAX-RS `client.target(url)`, Micronaut `HttpClient.create`,
+  jsoup `Jsoup.connect` and Apache HttpClient's `new HttpGet(url)` and its
+  siblings. Before, Java had only `openStream` and `openConnection`. Each is
+  a sink on its first argument only: a URI template variable
+  (`.uri("https://api/{id}", id)`), a request body or a response type does not
+  choose where the request goes. RealVuln development split: +15 labelled
+  SSRF findings, none lost; Java F3 8.8 -> 9.5, overall 17.0 -> 17.3.
 - Taint follows a source across files (ADR 0007). A call the call graph
   binds to exactly one function in another file of the same language is
   analysed through that function's summary -- the parameters it hands to a
@@ -160,6 +490,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Java XSS (TAINT-003): `append`, `printf` and `format` on a response
+  writer are sinks, inline (`response.getWriter().format(...)`) or on a local
+  assigned from `getWriter()`. Alone the names are `StringBuilder.append`
+  and `String.format`, which stay silent. HTML escapers added as sanitizers:
+  ESAPI `encodeForHTML`/`encodeForHTMLAttribute`, Commons Lang 2
+  `StringEscapeUtils.escapeHtml` and `escapeHtml3`, OWASP Encoder
+  `Encode.forHtmlContent`/`forHtmlAttribute`, and `Jsoup.clean`.
+- CRYPTO-001 on Java and Kotlin reads an algorithm held in a name: a class
+  constant or a local assigned once, or `props.getProperty(key[, fallback])`
+  resolved from the project's `.properties` files (the fallback only when the
+  scan saw the project's properties and none defines the key; a key defined
+  two ways is unknown). New weak forms: MD2/MD4, the bare `"SHA"` alias of
+  SHA-1, `Cipher.getInstance("AES")` (ECB by default), Blowfish, DES-family
+  `KeyGenerator`/`SecretKeyFactory` and PBE-with-MD5, and Commons Codec /
+  Guava MD5 and SHA-1 one-shot calls. Lines the literal pattern already
+  reported keep their message and fingerprint.
 - A query built from a function's parameter is raised from low to medium
   confidence when the call graph finds that function on a path from an HTTP
   route handler: a request does arrive there, though the file does not show
@@ -243,6 +589,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Java/Kotlin taint: a helper called on an object constructed in place with
+  no arguments, `new Helper().run(a, b)`, is resolved to the file's own
+  `run`, as `run(a, b)` and `this.run(a, b)` already were. A helper that
+  returns a constant was not a barrier there, so its caller reported a flow
+  the helper had stopped. The reverse case is fixed too: a call on any other
+  receiver, `thing.run(p)` on an interface declared elsewhere, was taken for
+  the local `run` of the same name and could clear the value; it is now an
+  unknown call, which carries its argument.
+- An HTML decoder around an escaper in the same statement,
+  `decodeForHTML(encodeForHTML(p))`, `unescapeHtml4(escapeHtml4(p))`,
+  `HtmlUtils.htmlUnescape(htmlEscape(p))`, undoes it: XSS is no longer
+  cleared.
+
+- `github.com/gorilla/websocket` (indirect, through `go.klarlabs.de/mcp`)
+  moved from v1.5.3 to the commit that fixes GO-2026-6278 / GHSA-w67g-5rqw-f597
+  (a weak random source for the WebSocket mask key). No tagged release carries
+  the fix yet. govulncheck found nox's code does not call the affected
+  function; the upgrade clears the dependency audit.
+
+- DATA-001 is dropped in Flyway migration scripts named by Flyway's
+  convention (`V3.9.2_2__add_jimuchatbi.sql`, `U3__…`, `R__…`) wherever the
+  project keeps them, as it already was under `migrations/`. A SQL dump that
+  is not a migration is still reported: it may be a real export. RealVuln:
+  25 findings on one repository, none matching a label.
+- SLOP-001 no longer reports Vaadin's own frontend as undeclared imports. A
+  project whose pom.xml or Gradle build depends on com.vaadin gets its
+  `frontend/generated/` tree (written by Vaadin on every build) skipped, and
+  the `@vaadin/*` scope and the `Frontend/` alias Vaadin provides treated as
+  declared. RealVuln: 373 SLOP-001 findings on two Vaadin repositories, none
+  matching a label, and no other change.
+- Route table: front-end code no longer registers routes. A file that
+  imports a UI framework or browser HTTP client (React, Vue, Angular, axios)
+  and no server framework, a client held by an object (`this.api.post`), and
+  an `axios.create()` instance are requests to a server, not routes; they
+  were entering the route table, AUTHN-001 and `nox model`. A route whose
+  only argument is an inline handler is an endpoint, not a guard registered
+  for a route served elsewhere: its 401 answer was read as authentication.
+
+- Taint, Python: a `for` loop bound nothing, so a request value iterated
+  into a sink (`for f in request.args.getlist("f"): os.system(...)`) was
+  never tainted. Each target name is now bound from the iterated value.
+
+- Taint, JavaScript: a spread operand (`...x`) was skipped as the attribute
+  after a dot, so a tainted value spread into an object literal or an
+  argument list reached no sink in any class.
+
+- Taint, Java: a try-with-resources header (`try (ObjectInputStream in =
+  new ObjectInputStream(...)) {`) was skipped as a control keyword, so its
+  resources were never bound and a request value read through one reached
+  no sink -- deserialization, file and stream reads, connections. Each
+  resource declaration is now an assignment.
+
+- Taint: a local helper whose parameter reaches more than one sink reported
+  only the first one in its summary to each caller. A helper that logged its
+  argument and then passed it to a shell or an HTTP client hid the command
+  injection or SSRF behind the log line. Every distinct sink is now reported.
+
+- A Python `match` statement indented with tabs lost its case bodies' branch
+  structure. The grammar starts a match statement's block on the header's
+  row, and the tree reader took that for a one-line body (`if x: y`),
+  indenting each `case` by the header's indentation plus four spaces: under
+  tabs, deeper than the case bodies themselves. Every body then read as an
+  unconditional assignment, and the last case overwrote a tainted value. A
+  body is now one-line only when its first statement is on the header's
+  row. OWASP BenchmarkPython 52.8 -> 56.1, its score before the tree reader;
+  no RealVuln development-split finding changes.
 - A scan's findings no longer depend on how busy the machine is. A
   tree-sitter parse was bounded by a 5-second deadline; under a load average
   above 100 a normal file missed it, fell back silently to the line reader,

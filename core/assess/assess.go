@@ -541,6 +541,8 @@ var classPhrases = map[string]string{
 	"xxe":                    "Untrusted XML is parsed with external entities enabled (XXE)",
 	"trust_boundary":         "Untrusted input crosses a trust boundary unchecked",
 	"argument_injection":     "Untrusted input is passed as an argument to a program (argument injection)",
+	"log_injection":          "Untrusted input is written to an application log (log injection)",
+	"mass_assignment":        "The whole request object is written onto a stored record (mass assignment)",
 }
 
 const maxTitle = 90

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"regexp"
 	"strings"
 )
@@ -29,6 +30,10 @@ var (
 )
 
 var pyReceiverKind = map[string]string{"cursor": "cursor", "connect": "connection"}
+
+// pyLoggerMade binds a module or local logger: `logger = logging.getLogger(...)`,
+// structlog's `get_logger()`, loguru's `logger` imported by name is the module.
+var pyLoggerMade = regexp.MustCompile(`^\s*([A-Za-z_]\w*)\s*=\s*(?:logging\s*\.\s*getLogger|structlog\s*\.\s*get_logger|getLogger)\s*\(`)
 
 // An LDAP connection is bound the same way, from what made it. ldap3's
 // `Connection.search(base, filter)` is the injection sink, but `search` is
@@ -61,6 +66,10 @@ func pythonReceiverBindings(content []byte) map[string]string {
 	out := map[string]string{}
 	imports := pythonAliases(content)
 	for _, line := range strings.Split(string(content), "\n") {
+		if m := pyLoggerMade.FindStringSubmatch(line); m != nil {
+			out[m[1]] = "app_logger"
+			continue
+		}
 		if m := pyAssignFromCall.FindStringSubmatch(line); m != nil {
 			out[m[1]] = pyReceiverKind[m[2]]
 			continue
@@ -93,6 +102,40 @@ var (
 	// and `command` alone names far too many methods to be a sink.
 	javaProcessBuilderDecl = regexp.MustCompile(`(?:^|[^\w.])(?:java\s*\.\s*lang\s*\.\s*)?ProcessBuilder\s+([A-Za-z_]\w*)\s*=`)
 	javaProcessBuilderVar  = regexp.MustCompile(`(?:^|[^\w.])(?:var|final\s+var)\s+([A-Za-z_]\w*)\s*=\s*new\s+(?:java\s*\.\s*lang\s*\.\s*)?ProcessBuilder\s*\(`)
+
+	// Expression and template engines. `parseExpression`, `evaluate` and
+	// `compileInline` are names many APIs use, so only a call on a local of
+	// the engine's type is a sink. A Spring parser is declared as its
+	// interface (`ExpressionParser parser = new SpelExpressionParser()`), a
+	// name any expression library could use, so that declaration counts only
+	// in a file that imports Spring's expression package.
+	javaSpelDecl           = regexp.MustCompile(`(?:^|[^\w.])(?:org\s*\.\s*springframework\s*\.\s*expression\s*\.\s*(?:spel\s*\.\s*standard\s*\.\s*)?)?(Spel)?ExpressionParser\s+([A-Za-z_]\w*)\s*=`)
+	javaSpelVar            = regexp.MustCompile(`(?:^|[^\w.])(?:var|final\s+var)\s+([A-Za-z_]\w*)\s*=\s*new\s+(?:org\s*\.\s*springframework\s*\.\s*expression\s*\.\s*spel\s*\.\s*standard\s*\.\s*)?SpelExpressionParser\s*\(`)
+	javaVelocityEngineDecl = regexp.MustCompile(`(?:^|[^\w.])(?:org\s*\.\s*apache\s*\.\s*velocity\s*\.\s*app\s*\.\s*)?VelocityEngine\s+([A-Za-z_]\w*)\s*=`)
+	javaHandlebarsDecl     = regexp.MustCompile(`(?:^|[^\w.])(?:com\s*\.\s*github\s*\.\s*jknack\s*\.\s*handlebars\s*\.\s*)?Handlebars\s+([A-Za-z_]\w*)\s*=`)
+	// FreeMarker's template class is `Template`, which is also what a mail,
+	// report or CMS model calls its own class. Written unqualified it is
+	// FreeMarker's only in a file that imports it.
+	javaFreemarkerImport = regexp.MustCompile(`(?m)^\s*import\s+freemarker\s*\.\s*template\s*\.\s*(?:Template|\*)\s*;`)
+)
+
+// A response writer. print, println and write are sinks by method name, but
+// append, printf and format are not: alone they name StringBuilder.append and
+// String.format. They are sinks on a writer the response hands out -- a local
+// assigned from `<anything>.getWriter()`, which is what `PrintWriter out =
+// response.getWriter();` and `var out = resp.getWriter();` both are -- and on
+// the inline `response.getWriter().format(...)` chain (catalog key
+// getWriter.format).
+var javaWriterFromResponse = regexp.MustCompile(`(?:^|[^\w.])([A-Za-z_]\w*)\s*=\s*[A-Za-z_][\w.]*\s*\.\s*getWriter\s*\(\s*\)`)
+
+// Application loggers (CWE-117). `info`, `warn` and `log` are names half of
+// every API uses, so a call is a log sink only on a receiver this file declares
+// or makes as a logger: a `Logger`/`Log` local or field (SLF4J, Log4j, JUL,
+// JBoss, Commons Logging), or the `log` field a Lombok logging annotation
+// injects.
+var (
+	javaLoggerDecl   = regexp.MustCompile(`(?:^|[^\w.])(?:[a-z]\w*\s*\.\s*)*(?:Logger|Log|XLogger|FluentLogger)\s+([A-Za-z_]\w*)\s*[=;]`)
+	javaLombokLogger = regexp.MustCompile(`(?m)^\s*@(?:lombok\s*\.\s*(?:extern\s*\.\s*\w+\s*\.\s*)?)?(?:Slf4j|XSlf4j|Log4j2?|Log|CommonsLog|JBossLog|Flogger|CustomLog)\b`)
 )
 
 // javaReceiverBindings maps each local declared as an XPath or an LDAP
@@ -109,6 +152,39 @@ func javaReceiverBindings(content []byte) map[string]string {
 		for _, m := range re.FindAllSubmatch(content, -1) {
 			out[string(m[1])] = "process_builder"
 		}
+	}
+	springExpr := bytes.Contains(content, []byte("org.springframework.expression"))
+	for _, m := range javaSpelDecl.FindAllSubmatch(content, -1) {
+		if len(m[1]) > 0 || springExpr {
+			out[string(m[2])] = "spel_parser"
+		}
+	}
+	for _, m := range javaSpelVar.FindAllSubmatch(content, -1) {
+		out[string(m[1])] = "spel_parser"
+	}
+	for _, m := range javaWriterFromResponse.FindAllSubmatch(content, -1) {
+		out[string(m[1])] = "response_writer"
+	}
+	for _, m := range javaVelocityEngineDecl.FindAllSubmatch(content, -1) {
+		out[string(m[1])] = "velocity_engine"
+	}
+	for _, m := range javaHandlebarsDecl.FindAllSubmatch(content, -1) {
+		out[string(m[1])] = "handlebars"
+	}
+	if javaFreemarkerImport.Match(content) {
+		out["Template"] = "freemarker.template.Template"
+	}
+	for _, m := range javaLoggerDecl.FindAllSubmatch(content, -1) {
+		out[string(m[1])] = "app_logger"
+	}
+	if javaLombokLogger.Match(content) {
+		if _, declared := out["log"]; !declared {
+			out["log"] = "app_logger"
+		}
+	}
+	// XML parsers from a factory nobody hardened: see xxe_java.go.
+	for name, kind := range javaXMLParserBindings(content) {
+		out[name] = kind
 	}
 	return out
 }
@@ -189,8 +265,21 @@ var jsReceiverMakers = regexp.MustCompile(`(?:^|[\s;(,])(?:const|let|var)?\s*([A
 	`)`)
 
 // javascriptReceiverBindings maps each local made by a SQL driver to `db`.
+// jsLoggerMakers binds a local or class field made as a logger: NestJS's
+// `new Logger(...)`, winston, pino, bunyan, log4js, or a `createLogger` helper.
+var jsLoggerMakers = regexp.MustCompile(`(?:^|[\s;(,])(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s*(?::\s*[\w.<>]+\s*)?=\s*(?:` +
+	`new\s+(?:[A-Za-z_$][\w$]*\.)?(?:Logger|ConsoleLogger)\s*\(` +
+	`|(?:winston|bunyan)\s*\.\s*createLogger\s*\(` +
+	`|createLogger\s*\(` +
+	`|pino\s*\(` +
+	`|log4js\s*\.\s*getLogger\s*\(` +
+	`)`)
+
 func javascriptReceiverBindings(content []byte) map[string]string {
 	out := map[string]string{}
+	for _, m := range jsLoggerMakers.FindAllSubmatch(content, -1) {
+		out[string(m[1])] = "app_logger"
+	}
 	for _, m := range jsReceiverMakers.FindAllSubmatch(content, -1) {
 		if name := string(m[1]); name != "db" {
 			out[name] = "db"

@@ -140,8 +140,29 @@ func TestCatalogContainsAllRules(t *testing.T) {
 	// JWT read without its signature verified).
 	// 1513 -> 1515 adds APPCFG-004/005 (cookie HttpOnly and Secure).
 	// 1515 -> 1516 adds APPCFG-006 (a signing key written in the source).
-	if got := len(cat); got != 1516 {
-		t.Errorf("Catalog() returned %d rules, want 1516", got)
+	// 1516 -> 1517 adds XSS-001 (a template printing a value unescaped).
+	// 1517 -> 1518 adds TAINT-013 (log injection, CWE-117).
+	// 1518 -> 1519 adds APPCFG-007 (a secret setting with a literal default).
+	// 1519 -> 1520 adds APPCFG-008 (Spring Security CSRF protection switched off).
+	// 1520 -> 1521 adds TAINT-014 (mass assignment, CWE-915).
+	// 1521 -> 1522 adds PROTO-001 (an unguarded recursive merge, CWE-1321).
+	// 1522 -> 1524 adds AUTHN-002 (a credential check with no attempt
+	// limiting, CWE-307) and AUTHN-003 (account creation or a reset message
+	// with no throttling, CWE-770).
+	// 1524 -> 1525 adds AUTHN-004 (a session-authenticated POST in a Flask or
+	// Express application with no CSRF protection, CWE-352).
+	// 1525 -> 1526 adds ERRLEAK-001 (exception detail written into the HTTP
+	// response, CWE-209).
+	// 1526 -> 1527 adds LOGLEAK-001 (sensitive data written to a log,
+	// CWE-532).
+	// 1527 -> 1529 adds APPCFG-009 (framing protection switched off,
+	// CWE-1021) and APPCFG-010 (session fixation protection off, CWE-384).
+	// 1529 -> 1530 adds CRYPTO-003 (a password hashed with a fast digest or a
+	// KDF below its work-factor floor, CWE-916).
+	// 1530 -> 1531 adds AUTHN-005 (an authentication path that answers that
+	// the account does not exist, CWE-204).
+	if got := len(cat); got != 1531 {
+		t.Errorf("Catalog() returned %d rules, want 1531", got)
 	}
 }
 

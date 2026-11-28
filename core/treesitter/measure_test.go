@@ -14,7 +14,7 @@ import (
 
 // TestMeasureCorpus is the harness behind DefaultBudget's figures and
 // docs/benchmarks/2026-11-23-treesitter-budget: it parses every Python,
-// JavaScript, TypeScript, TSX and Java file under NOX_TS_MEASURE and writes
+// JavaScript, TypeScript, TSX, Java, C#, PHP, Ruby, Kotlin, Scala, Swift, Rust, C and C++ file under NOX_TS_MEASURE and writes
 // one tab-separated line per file to NOX_TS_MEASURE_OUT:
 //
 //	language  bytes  checks  µs  error-tree  path  stopped-at-error  µs-with-stop
@@ -38,7 +38,10 @@ func TestMeasureCorpus(t *testing.T) {
 	p := newParser(t)
 	ctx := context.Background()
 	ext := map[string]string{".py": "python", ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript",
-		".ts": "typescript", ".tsx": "tsx", ".java": "java"}
+		".ts": "typescript", ".tsx": "tsx", ".java": "java",
+		".cs": "csharp", ".php": "php", ".rb": "ruby", ".kt": "kotlin", ".kts": "kotlin",
+		".scala": "scala", ".sc": "scala", ".swift": "swift", ".rs": "rust", ".c": "c",
+		".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp"}
 	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || d.Type()&fs.ModeSymlink != 0 {
 			return nil

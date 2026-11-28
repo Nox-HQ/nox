@@ -120,14 +120,50 @@ func declaredRouters(f *jsFile) map[string]bool {
 	return out
 }
 
+// browserImportRe: an import of a UI framework or a browser HTTP client.
+// serverImportRe: an import of a server framework.
+var (
+	browserImportRe = regexp.MustCompile(`(?:\bfrom\s*|\brequire\s*\(\s*|\bimport\s*)['"](?:react|react-dom(?:/[\w-]+)?|vue|pinia|vue-router|svelte(?:/[\w-]+)?|solid-js|preact|@angular/[\w-]+|next/(?:navigation|router|link)|axios|ky|ofetch|swr|@tanstack/[\w-]+|@reduxjs/toolkit)['"]`)
+	serverImportRe  = regexp.MustCompile(`(?:\bfrom\s*|\brequire\s*\(\s*)['"](?:express|fastify|koa|@koa/router|koa-router|@nestjs/[\w-]+|hono|restify|@hapi/hapi|polka|h3)['"]`)
+	// httpClientBindRe: a binding made by an HTTP client factory, which is
+	// called with paths but serves none (`const api = axios.create(...)`).
+	httpClientBindRe = regexp.MustCompile(`\b([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*(?:axios|ky|ofetch|\$fetch|wretch)\s*\.\s*(?:create|extend)\s*\(`)
+)
+
+// browserFile reports whether f is front-end code: it imports a UI framework
+// or a browser HTTP client and no server framework. Its
+// `api.post('/login', { email, password })` is a request to a server, not a
+// route.
+func browserFile(f *jsFile) bool {
+	return browserImportRe.Match(f.raw) && !serverImportRe.Match(f.raw)
+}
+
+// memberReceiver reports whether the receiver starting at off is a property
+// of something else (`this.api.post`, `ctx.http.get`): a client an object
+// holds, not a router the file declares.
+func memberReceiver(code string, off int) bool {
+	i := off - 1
+	for i >= 0 && isSpace(code[i]) {
+		i--
+	}
+	return i >= 0 && code[i] == '.'
+}
+
 // parseRoutes finds `R.method('/path', ...mw, handler)` and
 // `R.route('/path').method(...mw, handler)` registrations.
 func parseRoutes(f *jsFile) []route {
+	if browserFile(f) {
+		return nil
+	}
 	declared := declaredRouters(f)
+	clients := map[string]bool{}
+	for _, m := range httpClientBindRe.FindAllStringSubmatch(f.code, -1) {
+		clients[m[1]] = true
+	}
 	var out []route
 	for _, m := range routeMethodRe.FindAllStringSubmatchIndex(f.code, -1) {
 		recv := f.code[m[2]:m[3]]
-		if !routerReceiver(recv, declared) {
+		if clients[recv] && !declared[recv] || memberReceiver(f.code, m[2]) || !routerReceiver(recv, declared) {
 			continue
 		}
 		open := m[1] - 1
