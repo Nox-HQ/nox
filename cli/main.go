@@ -888,6 +888,9 @@ func runScan(args []string, formatFlag, outputDir, rulesPath string, quiet, verb
 		if note := contributionNetworkNotice(result.Contributed); note != "" {
 			fmt.Println(note)
 		}
+		for _, note := range pluginEgressNotices(result.PluginEgress) {
+			fmt.Println(note)
+		}
 	}
 
 	// Report incomplete checks even under --quiet, and on stderr. A scan that

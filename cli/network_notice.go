@@ -147,3 +147,17 @@ func contributionNetworkNotice(c nox.Contribution) string {
 		"Opt out: remove scan.intelligence.contribute, or run `nox intel consent withdraw`.",
 		strings.Join(sent, " and "), c.Endpoint)
 }
+
+// pluginEgressNotices names each plugin tool this scan ran that declares
+// network hosts. It reads the declaration, not the traffic: the host does not
+// sandbox plugin sockets, so the line says what the tool may contact. Under
+// --offline such tools are refused, so there is nothing to name.
+func pluginEgressNotices(egress []nox.PluginEgress) []string {
+	notes := make([]string, 0, len(egress))
+	for _, e := range egress {
+		notes = append(notes, fmt.Sprintf("[network] plugin %s: tool %q ran and declares network hosts %s; "+
+			"it may send scan data (findings, and source code if the plugin says so) there. "+
+			"--offline refuses it.", e.Plugin, e.Tool, strings.Join(e.Hosts, ", ")))
+	}
+	return notes
+}
