@@ -589,6 +589,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `--offline` now reaches plugins. A plugin tool that declares network hosts
+  other than loopback (its own safety block, or the plugin's) is refused under
+  an offline scan instead of running, and the refusal is a degradation, so
+  `--fail-on-degraded` sees it. Before, the plugin host never heard of the
+  flag: a post-scan tool such as triage-agent's LLM pass could call a hosted
+  model from a scan that printed "zero-network guarantee". The host reads the
+  declaration; plugin processes are still not sandboxed.
+- An online scan prints a `[network] plugin …` line for each plugin tool it
+  ran that declares network hosts, naming them.
+- A post-scan plugin that was refused or failed to run is now a degradation.
+  The hook recorded it, but only the plugin's enrichments were read back, so
+  it printed one stderr line and reached neither `[degraded]`, findings.json
+  nor `--fail-on-degraded`.
 - Java/Kotlin taint: a helper called on an object constructed in place with
   no arguments, `new Helper().run(a, b)`, is resolved to the file's own
   `run`, as `run(a, b)` and `this.run(a, b)` already were. A helper that

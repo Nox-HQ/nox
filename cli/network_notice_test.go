@@ -166,3 +166,18 @@ func TestNetworkNoticeSpeaksForTheLookupOnly(t *testing.T) {
 		t.Errorf("lookup notice must speak for its own request:\n%s", got)
 	}
 }
+
+func TestPluginEgressNotices(t *testing.T) {
+	if got := pluginEgressNotices(nil); len(got) != 0 {
+		t.Errorf("no egress produced notices: %v", got)
+	}
+	got := pluginEgressNotices([]nox.PluginEgress{{Plugin: "nox/triage-agent", Tool: "triage", Hosts: []string{"api.anthropic.com", "api.openai.com"}}})
+	if len(got) != 1 {
+		t.Fatalf("got %d notices, want 1", len(got))
+	}
+	for _, want := range []string{"[network]", "nox/triage-agent", `"triage"`, "api.anthropic.com, api.openai.com", "--offline"} {
+		if !strings.Contains(got[0], want) {
+			t.Errorf("notice %q lacks %q", got[0], want)
+		}
+	}
+}

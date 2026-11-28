@@ -131,6 +131,12 @@ type ScanResult struct {
 	// is, because it still left the machine. Nil when no request was made.
 	FeedsRequested []string
 
+	// PluginEgress names every plugin tool this scan ran that declares network
+	// hosts, with the hosts it declares. A declaration is what the tool may
+	// contact, not a record of what it did: the host does not sandbox a plugin's
+	// sockets. Under Offline no such tool runs, so this is nil.
+	PluginEgress []PluginEgress
+
 	// Contributed is what this scan sent to NOX Intelligence because the
 	// installation opted in: observations and the outcome report. A request
 	// the service refused is counted, because it still left the machine. Zero
@@ -412,8 +418,9 @@ type ScanOptions struct {
 	RecordReasoning bool
 
 	// Offline is the umbrella zero-network guarantee. When true, every
-	// feature that could make an outbound connection is disabled (currently
-	// OSV.dev lookups — the only network path in the core scan). Use this to
+	// feature that could make an outbound connection is disabled, including
+	// plugin tools that declare network hosts, which the plugin host refuses
+	// (WithOfflineScan reaches the plugin hooks through the context). Use this to
 	// assert that a scan never sees the network: no API, no token, no
 	// telemetry. New network-capable features must honor this flag.
 	Offline bool
@@ -1133,11 +1140,18 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// cycle). Plugin failures are non-fatal — the built-in scan still completes.
 	var pluginEnrichments []findings.Enrichment
 	var pluginGraphs []graph.Graph
+	var pluginEgress []PluginEgress
+	// The hooks read the offline guarantee from the context: a plugin tool that
+	// declares network hosts must not run under it.
+	hookCtx := ctx
+	if opts.Offline {
+		hookCtx = WithOfflineScan(ctx)
+	}
 	// Plugins declare no scope, so a scoped scan cannot tell which of its
 	// scopes a plugin serves; they run in full scans only, and the result
 	// records that they did not run (ScanResult.Scope).
 	if ScanPluginHook != nil && opts.Scopes.Full() {
-		out, hookErr := ScanPluginHook(ctx, target, cfg.Plugins.Required)
+		out, hookErr := ScanPluginHook(hookCtx, target, cfg.Plugins.Required)
 		if hookErr != nil {
 			slog.WarnContext(ctx, "analysis plugins failed; continuing with built-in findings only", "error", hookErr)
 			// A required detector that fails silently is the worst outcome for
@@ -1160,6 +1174,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 			}
 			pluginEnrichments = out.Enrichments
 			pluginGraphs = out.Graphs
+			pluginEgress = append(pluginEgress, out.Egress...)
 			for _, d := range out.Degradations {
 				// Re-adding through the collector drops any field the three
 				// positional arguments do not carry — which is how Advisory
@@ -1182,7 +1197,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	// enrichments are deduped, suppressed, and policy-gated like any other.
 	if PostScanPluginHook != nil && opts.Scopes.Full() {
 		postResult := &ScanResult{Findings: allFindings, Inventory: inventory, AIInventory: aiInventory}
-		if hookErr := PostScanPluginHook(ctx, postResult, target, cfg.Plugins.Required); hookErr != nil {
+		if hookErr := PostScanPluginHook(hookCtx, postResult, target, cfg.Plugins.Required); hookErr != nil {
 			slog.WarnContext(ctx, "post-scan plugins failed; continuing with findings so far", "error", hookErr)
 			// Post-scan plugins annotate rather than detect — reachability
 			// classification, most importantly. Their failure leaves findings
@@ -1193,6 +1208,18 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 				"findings are missing enrichment such as reachability classification; triage priority is unreliable")
 		}
 		pluginEnrichments = append(pluginEnrichments, postResult.Enrichments...)
+		pluginEgress = append(pluginEgress, postResult.PluginEgress...)
+		// The hook records a post-scan tool that was refused or failed in
+		// postResult.Degradations. Only the enrichments used to be read back,
+		// so such a failure printed one stderr line and never reached
+		// [degraded], findings.json or --fail-on-degraded.
+		for _, d := range postResult.Degradations {
+			if d.Advisory {
+				degradations.AddAdvisory(d.Kind, d.Detail, d.Impact)
+				continue
+			}
+			degradations.Add(d.Kind, d.Detail, d.Impact)
+		}
 	}
 
 	// Relational MCP pass: server/tool shadowing (MCP-023/024) and rug-pull
@@ -1294,6 +1321,7 @@ func RunScanContext(ctx context.Context, target string, opts ScanOptions) (*Scan
 	}
 	res.AdvisoryLookupSkipped = !vulnLookupEnabled
 	res.FeedsRequested = feedsRequested.list()
+	res.PluginEgress = pluginEgress
 	if contributed.Observations > 0 || contributed.OutcomeReport {
 		res.Contributed = contributed
 	}
